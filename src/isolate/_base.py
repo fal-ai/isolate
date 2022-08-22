@@ -35,7 +35,7 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
         does not exist."""
         raise NotImplementedError
 
-    def open_connection(self, conn_info: T) -> EnvironmentConnection:
+    def open_connection(self, conn_info: ConnectionKeyType) -> EnvironmentConnection:
         """Return a new connection to the environment residing inside
         given path."""
         raise NotImplementedError
