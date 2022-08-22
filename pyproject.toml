@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "isolate"
 version = "0.1.0"
-description = ""
-authors = ["Batuhan Taskaya <isidentical@gmail.com>"]
+description = "Managed isolated environments for Python"
+authors = ["Features & Labels <hello@fal.ai>"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
@@ -13,3 +13,10 @@ pytest = "^5.2"
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.isort]
+atomic=true
+force_grid_wrap=0
+include_trailing_comma=true
+multi_line_output=3
+use_parentheses=true
