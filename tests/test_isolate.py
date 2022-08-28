@@ -1,5 +1,8 @@
-from isolate import __version__
+import pytest
+
+from isolate import prepare_environment
 
 
-def test_version():
-    assert __version__ == "0.1.0"
+def test_unknown_environment():
+    with pytest.raises(ValueError):
+        prepare_environment("$unknown_env")
