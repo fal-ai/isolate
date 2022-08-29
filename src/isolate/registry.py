@@ -9,15 +9,20 @@ from isolate._base import BaseEnvironment
 _ENTRY_POINT = "isolate.backends"
 
 
-def _initialize_registry() -> Dict[str, Type[BaseEnvironment]]:
+_ENVIRONMENT_REGISTRY: Dict[str, Type[BaseEnvironment]] = {}
+
+
+def _reload_registry() -> Dict[str, Type[BaseEnvironment]]:
     entry_points = importlib_metadata.entry_points()
-    return {
-        entry_point.name: entry_point.load()
-        for entry_point in entry_points.select(group=_ENTRY_POINT)
-    }
+    _ENVIRONMENT_REGISTRY.update(
+        {
+            entry_point.name: entry_point.load()
+            for entry_point in entry_points.select(group=_ENTRY_POINT)
+        }
+    )
 
 
-_ENVIRONMENT_REGISTRY: Dict[str, Type[BaseEnvironment]] = _initialize_registry()
+_reload_registry()
 
 
 def prepare_environment(
