@@ -58,19 +58,3 @@ class EnvironmentConnection:
 
     def __exit__(self, *exc_info):
         return None
-
-
-_ENVIRONMENT_REGISTRY: Dict[str, Type[BaseEnvironment]] = {}
-
-
-def prepare_environment(
-    kind: str,
-    config: Optional[Dict[str, Any]] = None,
-) -> BaseEnvironment:
-    """Get the environment for the given `kind` with the given `config`."""
-
-    registered_env_cls = _ENVIRONMENT_REGISTRY.get(kind)
-    if not registered_env_cls:
-        raise ValueError(f"Unknown environment: '{kind}'")
-
-    return registered_env_cls.from_config(config or {})
