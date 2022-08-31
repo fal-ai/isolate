@@ -2,10 +2,21 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, Generic, Iterator, Optional, Type, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Iterator,
+    Optional,
+    Type,
+    TypeVar,
+)
 
 ConnectionKeyType = TypeVar("ConnectionKeyType")
 SupportedEnvironmentType = TypeVar("SupportedEnvironmentType", bound="BaseEnvironment")
+CallResultType = TypeVar("CallResultType")
+BasicCallable = Callable[[], CallResultType]
 
 
 class BaseEnvironment(Generic[ConnectionKeyType]):
@@ -58,3 +69,12 @@ class EnvironmentConnection:
 
     def __exit__(self, *exc_info):
         return None
+
+    def run(
+        self, executable: BasicCallable, *args: Any, **kwargs: Any
+    ) -> CallResultType:
+        """Run the given executable inside the environment, and return the result."""
+        raise NotImplementedError
+
+    def log(self, message: str, *args: Any, kind: str = "trace", **kwargs: Any) -> None:
+        print(f"[{kind}] [{self.environment.key}] {message.format(*args, **kwargs)}")
