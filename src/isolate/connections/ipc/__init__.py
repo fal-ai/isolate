@@ -1,1 +1,1 @@
-from isolate.connections.ipc._base import IsolatedProcessConnection
+from isolate.connections.ipc._base import IsolatedProcessConnection, PythonIPC

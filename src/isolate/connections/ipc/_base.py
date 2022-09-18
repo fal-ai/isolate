@@ -1,16 +1,21 @@
 import subprocess
 from contextlib import ExitStack
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, ContextManager
 
 from isolate._base import BasicCallable, CallResultType, EnvironmentConnection
+from isolate.common import get_executable_path
 from isolate.connections.ipc import agent, bridge
 
 
 @dataclass
 class IsolatedProcessConnection(EnvironmentConnection):
     def start_process(
-        self, connection: bridge.ConnectionWrapper, *args: Any, **kwargs: Any
+        self,
+        connection: bridge.ConnectionWrapper,
+        *args: Any,
+        **kwargs: Any,
     ) -> ContextManager[subprocess.Popen]:
         """Start the agent process."""
         raise NotImplementedError
@@ -85,3 +90,26 @@ class IsolatedProcessConnection(EnvironmentConnection):
                 raise exception
 
         raise OSError("The isolated process has exited unexpectedly with code '{}'.")
+
+
+@dataclass
+class PythonIPC(IsolatedProcessConnection):
+    environment_path: Path
+
+    def start_process(
+        self,
+        connection: bridge.ConnectionWrapper,
+        *args: Any,
+        **kwargs: Any,
+    ) -> ContextManager[subprocess.Popen]:
+        """Start the Python agent process with using the Python interpreter from
+        the given environment_path."""
+
+        python_executable = get_executable_path(self.environment_path, "python")
+        return subprocess.Popen(
+            [
+                python_executable,
+                agent.__file__,
+                bridge.encode_service_address(connection.address),
+            ],
+        )
