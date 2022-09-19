@@ -1,5 +1,21 @@
 import shutil
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
+
+from platformdirs import user_cache_dir
+
+BASE_CACHE_DIR = Path(user_cache_dir("isolate", "isolate"))
+
+
+@contextmanager
+def rmdir_on_fail(path: Path) -> Iterator[None]:
+    try:
+        yield
+    except Exception:
+        if path.exists():
+            shutil.rmtree(path)
+        raise
 
 
 def get_executable_path(search_path: Path, executable_name: str) -> Path:

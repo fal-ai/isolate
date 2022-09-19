@@ -59,6 +59,10 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
         with self.open_connection(connection_key) as connection:
             yield connection
 
+    def log(self, message: str, *args: Any, kind: str = "trace", **kwargs: Any) -> None:
+        """Log a message."""
+        print(f"[{kind}] [{self.key}] {message.format(*args, **kwargs)}")
+
 
 @dataclass
 class EnvironmentConnection:
@@ -77,4 +81,5 @@ class EnvironmentConnection:
         raise NotImplementedError
 
     def log(self, message: str, *args: Any, kind: str = "trace", **kwargs: Any) -> None:
-        print(f"[{kind}] [{self.environment.key}] {message.format(*args, **kwargs)}")
+        """Log a message through the bound environment."""
+        self.environment.log("[connection]" + message, *args, **kwargs)
