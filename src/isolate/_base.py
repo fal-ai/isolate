@@ -41,7 +41,7 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
         raise an exception unless `exist_ok` is True."""
         raise NotImplementedError
 
-    def destroy(self) -> None:
+    def destroy(self, conn_info: ConnectionKeyType) -> None:
         """Dismantle this environment. Raises an exception if the environment
         does not exist."""
         raise NotImplementedError

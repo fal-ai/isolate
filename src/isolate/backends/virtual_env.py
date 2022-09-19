@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -50,6 +51,9 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                 subprocess.check_call([str(pip_path), "install"] + self.requirements)
 
         return path
+
+    def destroy(self, conn_info: Path) -> None:
+        shutil.rmtree(conn_info)
 
     def open_connection(self, conn_info: Path) -> PythonIPC:
         return PythonIPC(self, conn_info)
