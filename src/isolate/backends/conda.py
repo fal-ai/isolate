@@ -70,11 +70,11 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
         return path
 
-    def destroy(self, conn_info: Path) -> None:
-        shutil.rmtree(conn_info)
+    def destroy(self, connection_key: Path) -> None:
+        shutil.rmtree(connection_key)
 
-    def open_connection(self, conn_info: Path) -> PythonIPC:
-        return PythonIPC(self, conn_info)
+    def open_connection(self, connection_key: Path) -> PythonIPC:
+        return PythonIPC(self, connection_key)
 
 
 @cache_static

@@ -52,14 +52,15 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
         raise an exception unless `exist_ok` is True."""
         raise NotImplementedError
 
-    def destroy(self, conn_info: ConnectionKeyType) -> None:
-        """Dismantle this environment. Raises an exception if the environment
+    def destroy(self, connection_key: ConnectionKeyType) -> None:
+        """Dismantle this environment. Might raise an exception if the environment
         does not exist."""
         raise NotImplementedError
 
-    def open_connection(self, conn_info: ConnectionKeyType) -> EnvironmentConnection:
-        """Return a new connection to the environment residing inside
-        given path."""
+    def open_connection(
+        self, connection_key: ConnectionKeyType
+    ) -> EnvironmentConnection:
+        """Return a new connection to the environment with using the `connection_key`."""
         raise NotImplementedError
 
     @contextmanager
