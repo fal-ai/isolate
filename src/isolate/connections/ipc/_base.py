@@ -1,3 +1,4 @@
+import importlib
 import base64
 import pickle
 import subprocess
@@ -13,10 +14,8 @@ from isolate.connections.ipc import agent
 
 
 class _MultiFormatListener(Listener):
-    def __init__(
-        self, *args: Any, serialization_backend: Any = pickle, **kwargs: Any
-    ) -> None:
-        self.serialization_backend = serialization_backend
+    def __init__(self, backend_name: str, *args: Any, **kwargs: Any) -> None:
+        self.serialization_backend = load_serialization_backend(backend_name)
         super().__init__(*args, **kwargs)
 
     def accept(self) -> ConnectionWrapper:
@@ -27,6 +26,12 @@ class _MultiFormatListener(Listener):
                 loads=self.serialization_backend.loads,
             )
         )
+
+
+def load_serialization_backend(backend_name: str) -> Any:
+    # TODO(feat): This should probably throw a better error if the
+    # given backend does not exist.
+    return importlib.import_module(backend_name)
 
 
 def encode_service_address(address: Union[bytes, str]) -> str:
@@ -68,7 +73,11 @@ class IsolatedProcessConnection(EnvironmentConnection):
             #
 
             self.log("Starting the controller bridge.")
-            controller_service = stack.enter_context(_MultiFormatListener())
+            controller_service = stack.enter_context(
+                _MultiFormatListener(
+                    self.environment.context.serialization_backend_name
+                )
+            )
 
             self.log(
                 "Controller server is listening at {}. Attempting to start the agent process.",
@@ -143,5 +152,10 @@ class PythonIPC(IsolatedProcessConnection):
                 python_executable,
                 agent.__file__,
                 encode_service_address(connection.address),
+                # TODO(feat): we probably should check if the given backend is installed
+                # on the remote interpreter, otherwise it will fail without establishing
+                # the connection with the bridge.
+                "--serialization-backend",
+                self.environment.context.serialization_backend_name,
             ],
         )
