@@ -112,7 +112,10 @@ class IsolatedProcessConnection(EnvironmentConnection):
             if not connection.poll():
                 continue
 
+            # TODO(fix): handle EOFError that might happen here (e.g. problematic
+            # serialization might cause it).
             result, did_it_raise = connection.recv()
+
             if did_it_raise:
                 raise result
             else:

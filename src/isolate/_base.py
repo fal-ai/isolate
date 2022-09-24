@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
+    ClassVar,
     Dict,
     Generic,
     Iterator,
@@ -12,6 +13,8 @@ from typing import (
     Type,
     TypeVar,
 )
+
+from isolate.context import GLOBAL_CONTEXT, ContextType
 
 ConnectionKeyType = TypeVar("ConnectionKeyType")
 SupportedEnvironmentType = TypeVar("SupportedEnvironmentType", bound="BaseEnvironment")
@@ -22,6 +25,14 @@ BasicCallable = Callable[[], CallResultType]
 class BaseEnvironment(Generic[ConnectionKeyType]):
     """Represents a managed environment definition for an isolatation backend
     that can be used to run Python code with different set of dependencies."""
+
+    BACKEND_NAME: ClassVar[Optional[str]] = None
+
+    # Context is currently a special object that is not exposed to the users.
+    # In the future there might be many contexts with different abilities (e.g.
+    # a context object that changes cache location to /tmp, or a context that
+    # changes the serialization form)
+    context: ContextType = GLOBAL_CONTEXT
 
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> BaseEnvironment:
@@ -58,6 +69,10 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
         connection_key = self.create(exist_ok=True)
         with self.open_connection(connection_key) as connection:
             yield connection
+
+    def set_context(self, context: ContextType) -> None:
+        """Replace the existing context with the given `context`."""
+        self.context = context
 
     def log(self, message: str, *args: Any, kind: str = "trace", **kwargs: Any) -> None:
         """Log a message."""

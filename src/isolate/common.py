@@ -1,3 +1,4 @@
+import functools
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
@@ -28,3 +29,20 @@ def get_executable_path(search_path: Path, executable_name: str) -> Path:
         )
 
     return Path(executable_path)
+
+
+_NO_HIT = object()
+
+
+def cache_static(func):
+    """Cache the result of an parameter-less function."""
+    _function_cache = _NO_HIT
+
+    @functools.wraps(func)
+    def wrapper():
+        nonlocal _function_cache
+        if _function_cache is _NO_HIT:
+            _function_cache = func()
+        return _function_cache
+
+    return wrapper

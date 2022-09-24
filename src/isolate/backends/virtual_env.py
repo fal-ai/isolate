@@ -5,7 +5,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, ClassVar, Dict, List
 
 from isolate import BaseEnvironment
 from isolate.common import BASE_CACHE_DIR, get_executable_path, rmdir_on_fail
@@ -17,6 +17,8 @@ _BASE_VENV_DIR.mkdir(parents=True, exist_ok=True)
 
 @dataclass
 class VirtualPythonEnvironment(BaseEnvironment[Path]):
+    BACKEND_NAME: ClassVar[str] = "virtualenv"
+
     requirements: List[str]
 
     @classmethod
@@ -31,7 +33,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
     def create(self, *, exist_ok: bool = False) -> Path:
         from virtualenv import cli_run
 
-        path = _BASE_VENV_DIR / self.key
+        path = self.context.get_cache_dir(self) / self.key
         if path.exists():
             if exist_ok:
                 return path
@@ -41,6 +43,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         with rmdir_on_fail(path):
             self.log("Creating the environment at '{}'", path, kind="info")
             cli_run([str(path)])
+
             if self.requirements:
                 self.log(
                     "Installing requirements: {}",
