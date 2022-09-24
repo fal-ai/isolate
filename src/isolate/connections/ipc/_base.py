@@ -1,19 +1,46 @@
+import base64
+import pickle
 import subprocess
-from contextlib import ExitStack
+from contextlib import ExitStack, closing
 from dataclasses import dataclass
+from multiprocessing.connection import ConnectionWrapper, Listener
 from pathlib import Path
-from typing import Any, ContextManager
+from typing import Any, ContextManager, Union
 
 from isolate._base import BasicCallable, CallResultType, EnvironmentConnection
 from isolate.common import get_executable_path
-from isolate.connections.ipc import agent, bridge
+from isolate.connections.ipc import agent
+
+
+class _MultiFormatListener(Listener):
+    def __init__(
+        self, *args: Any, serialization_backend: Any = pickle, **kwargs: Any
+    ) -> None:
+        self.serialization_backend = serialization_backend
+        super().__init__(*args, **kwargs)
+
+    def accept(self) -> ConnectionWrapper:
+        return closing(
+            ConnectionWrapper(
+                super().accept(),
+                dumps=self.serialization_backend.dumps,
+                loads=self.serialization_backend.loads,
+            )
+        )
+
+
+def encode_service_address(address: Union[bytes, str]) -> str:
+    if isinstance(address, bytes):
+        address = address.decode()
+
+    return base64.b64encode(address.encode()).decode("utf-8")
 
 
 @dataclass
 class IsolatedProcessConnection(EnvironmentConnection):
     def start_process(
         self,
-        connection: bridge.ConnectionWrapper,
+        connection: ConnectionWrapper,
         *args: Any,
         **kwargs: Any,
     ) -> ContextManager[subprocess.Popen]:
@@ -41,7 +68,7 @@ class IsolatedProcessConnection(EnvironmentConnection):
             #
 
             self.log("Starting the controller bridge.")
-            controller_service = stack.enter_context(bridge.controller_connection())
+            controller_service = stack.enter_context(_MultiFormatListener())
 
             self.log(
                 "Controller server is listening at {}. Attempting to start the agent process.",
@@ -51,6 +78,8 @@ class IsolatedProcessConnection(EnvironmentConnection):
                 self.start_process(controller_service, *args, **kwargs)
             )
 
+            # TODO(fix): this might hang if the agent process crashes before it can
+            # connect to the controller bridge.
             self.log(
                 "Awaiting agent process of {} to establish a connection.",
                 isolated_process.pid,
@@ -69,7 +98,7 @@ class IsolatedProcessConnection(EnvironmentConnection):
             return self.poll_until_result(isolated_process, established_connection)
 
     def poll_until_result(
-        self, process: subprocess.Popen, connection: bridge.ConnectionWrapper
+        self, process: subprocess.Popen, connection: ConnectionWrapper
     ) -> CallResultType:
         """Take the given process, and poll until either it exits or returns
         a result object."""
@@ -83,11 +112,11 @@ class IsolatedProcessConnection(EnvironmentConnection):
             if not connection.poll():
                 continue
 
-            result, exception = connection.recv()
-            if exception is None:
-                return result
+            result, did_it_raise = connection.recv()
+            if did_it_raise:
+                raise result
             else:
-                raise exception
+                return result
 
         raise OSError("The isolated process has exited unexpectedly with code '{}'.")
 
@@ -98,7 +127,7 @@ class PythonIPC(IsolatedProcessConnection):
 
     def start_process(
         self,
-        connection: bridge.ConnectionWrapper,
+        connection: ConnectionWrapper,
         *args: Any,
         **kwargs: Any,
     ) -> ContextManager[subprocess.Popen]:
@@ -110,6 +139,6 @@ class PythonIPC(IsolatedProcessConnection):
             [
                 python_executable,
                 agent.__file__,
-                bridge.encode_service_address(connection.address),
+                encode_service_address(connection.address),
             ],
         )

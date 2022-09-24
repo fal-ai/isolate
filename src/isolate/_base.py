@@ -82,4 +82,4 @@ class EnvironmentConnection:
 
     def log(self, message: str, *args: Any, kind: str = "trace", **kwargs: Any) -> None:
         """Log a message through the bound environment."""
-        self.environment.log("[connection]" + message, *args, **kwargs)
+        self.environment.log("[connection] " + message, *args, **kwargs)
