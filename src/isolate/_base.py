@@ -46,15 +46,18 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
         and identification purposes."""
         raise NotImplementedError
 
-    def create(self, *, exist_ok: bool = False) -> ConnectionKeyType:
+    def create(self) -> ConnectionKeyType:
         """Setup the given environment, and return all the information needed
-        for establishing a connection to it. If the environment already exists,
-        raise an exception unless `exist_ok` is True."""
+        for establishing a connection to it."""
         raise NotImplementedError
 
     def destroy(self, connection_key: ConnectionKeyType) -> None:
         """Dismantle this environment. Might raise an exception if the environment
         does not exist."""
+        raise NotImplementedError
+
+    def exists(self) -> bool:
+        """Return True if the environment already exists."""
         raise NotImplementedError
 
     def open_connection(
@@ -67,7 +70,7 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
     def connect(self) -> Iterator[EnvironmentConnection]:
         """Create the given environment (if it already doesn't exist) and establish a connection
         to it."""
-        connection_key = self.create(exist_ok=True)
+        connection_key = self.create()
         with self.open_connection(connection_key) as connection:
             yield connection
 

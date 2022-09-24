@@ -35,14 +35,18 @@ class GenericCreationTests:
         environment.set_context(test_context)
         return environment
 
-    def get_example_project_version(
+    def get_example_version(
         self, environment: BaseEnvironment, connection_key: Any
     ) -> str:
         with environment.open_connection(connection_key) as connection:
             return connection.run(partial(eval, "__import__('pyjokes').__version__"))
 
     @contextmanager
-    def disable_active_env_creation(self, monkeypatch):
+    def fail_active_creation(self, monkeypatch):
+        # This function patches the specified entry_point function
+        # in order to make non-cached (active) environment creations
+        # fail on tests.
+
         def _raise_error():
             raise NoNewEnvironments
 
@@ -55,13 +59,13 @@ class GenericCreationTests:
     def test_create_generic_env(self, tmp_path):
         environment = self.get_environment_for(tmp_path, "new-example-project")
         connection_key = environment.create()
-        assert self.get_example_project_version(environment, connection_key) == "0.6.0"
+        assert self.get_example_version(environment, connection_key) == "0.6.0"
 
     def test_create_generic_env_empty(self, tmp_path):
         environment = self.get_environment_for(tmp_path, "empty")
         connection_key = environment.create()
         with pytest.raises(ModuleNotFoundError):
-            self.get_example_project_version(environment, connection_key)
+            self.get_example_version(environment, connection_key)
 
     def test_create_generic_env_cached(self, tmp_path, monkeypatch):
         environment_1 = self.get_environment_for(tmp_path, "old-example-project")
@@ -75,53 +79,43 @@ class GenericCreationTests:
         connection_key_1 = environment_1.create()
         connection_key_2 = environment_2.create()
 
-        # This function should prevent the given environment to be "actively"
-        # created (e.g. it would break pip install or conda), so that we can
-        # verify environments are actually cached.
-        with self.disable_active_env_creation(monkeypatch):
-            # Can't create it an environment with the same set of dependencies
-            # unless explicitly flagged to do so.
-            with pytest.raises(FileExistsError):
-                dup_environment_1.create()
+        # Since the environments are identified by the set of unique properties
+        # they have (e.g. the installed dependencies), if two environments have
+        # the same set of properties, they should be considered the same by the
+        # implementation. Even though we didn't call create() on the following
+        # environment, it still exists due to the caching mechanism.
+        assert dup_environment_1.exists()
 
-            # Let's try it again on the first one, but this time with passing `exist_ok`
-            dup_connection_key_1 = dup_environment_1.create(exist_ok=True)
+        # We can also see that if we destroy it, both the original one and the duplicate
+        # one will be gone.
+        environment_1.destroy(connection_key_1)
 
-        # This time we'll destroy the original environment (env_2) and then
-        # try to create the duplicate one, which should fail since active environment
-        # creations are not allowed in this context.
-        environment_2.destroy(connection_key_2)
-        with self.disable_active_env_creation(monkeypatch):
-            with pytest.raises(NoNewEnvironments):
-                dup_environment_2.create()
+        assert not dup_environment_1.exists()
+        assert not environment_1.exists()
 
-        # But once we are out of the disabling context, we can create it again
+        connection_key_1 = environment_1.create()
+        dup_connection_key_1 = dup_environment_1.create()
         dup_connection_key_2 = dup_environment_2.create()
 
-        assert (
-            self.get_example_project_version(environment_1, connection_key_1) == "0.5.0"
-        )
-        assert (
-            self.get_example_project_version(dup_environment_1, dup_connection_key_1)
-            == "0.5.0"
-        )
-        assert (
-            self.get_example_project_version(dup_environment_2, dup_connection_key_2)
-            == "0.6.0"
-        )
+        for environment, connection_key, version in [
+            (environment_1, connection_key_1, "0.5.0"),
+            (environment_2, connection_key_2, "0.6.0"),
+            (dup_environment_1, dup_connection_key_1, "0.5.0"),
+            (dup_environment_2, dup_connection_key_2, "0.6.0"),
+        ]:
+            assert self.get_example_version(environment, connection_key) == version
 
     def test_failure_during_environment_creation_cache(self, tmp_path, monkeypatch):
-        # Let's try to create a faulty environment, and ensure
-        # that there are no artifacts left behind in the cache.
         environment = self.get_environment_for(tmp_path, "new-example-project")
-        with pytest.raises(Exception):
-            with self.disable_active_env_creation(monkeypatch):
+        with pytest.raises(NoNewEnvironments):
+            with self.fail_active_creation(monkeypatch):
                 environment.create()
 
-        # It should be able to create it without passing exist_ok
-        # since the initial attempt failed.
+        assert not environment.exists()
+
         connection_key = environment.create()
-        assert self.get_example_project_version(environment, connection_key) == "0.6.0"
+        assert environment.exists()
+        assert self.get_example_version(environment, connection_key) == "0.6.0"
 
 
 class TestVenv(GenericCreationTests):

@@ -30,15 +30,12 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
     def key(self) -> str:
         return hashlib.sha256(" ".join(self.requirements).encode()).hexdigest()
 
-    def create(self, *, exist_ok: bool = False) -> Path:
+    def create(self) -> Path:
         from virtualenv import cli_run
 
         path = self.context.get_cache_dir(self) / self.key
         if path.exists():
-            if exist_ok:
-                return path
-            else:
-                raise FileExistsError(f"Virtual environment already exists at '{path}'")
+            return path
 
         with rmdir_on_fail(path):
             self.log("Creating the environment at '{}'", path, kind="info")
@@ -57,6 +54,10 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
 
     def destroy(self, connection_key: Path) -> None:
         shutil.rmtree(connection_key)
+
+    def exists(self) -> bool:
+        path = self.context.get_cache_dir(self) / self.key
+        return path.exists()
 
     def open_connection(self, connection_key: Path) -> PythonIPC:
         return PythonIPC(self, connection_key)
