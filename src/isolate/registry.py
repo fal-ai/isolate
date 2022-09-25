@@ -33,9 +33,11 @@ def prepare_environment(
     **kwargs: Any,
 ) -> BaseEnvironment:
     """Get the environment for the given `kind` with the given `config`."""
+    from isolate.backends.context import GLOBAL_CONTEXT
 
     registered_env_cls = _ENVIRONMENT_REGISTRY.get(kind)
     if not registered_env_cls:
         raise ValueError(f"Unknown environment: '{kind}'")
 
-    return registered_env_cls.from_config(kwargs)
+    context = kwargs.pop("context", GLOBAL_CONTEXT)
+    return registered_env_cls.from_config(config=kwargs, context=context)
