@@ -13,10 +13,16 @@ from typing import (
     TypeVar,
 )
 
-from isolate.context import GLOBAL_CONTEXT, ContextType
+from isolate.backends.context import GLOBAL_CONTEXT, ContextType
+
+__all__ = [
+    "BasicCallable",
+    "CallResultType",
+    "EnvironmentConnection",
+    "BaseEnvironment",
+]
 
 ConnectionKeyType = TypeVar("ConnectionKeyType")
-SupportedEnvironmentType = TypeVar("SupportedEnvironmentType", bound="BaseEnvironment")
 CallResultType = TypeVar("CallResultType")
 BasicCallable = Callable[[], CallResultType]
 

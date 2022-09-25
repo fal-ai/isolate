@@ -7,9 +7,13 @@ from multiprocessing.connection import ConnectionWrapper, Listener
 from pathlib import Path
 from typing import Any, ContextManager, Union
 
-from isolate._base import BasicCallable, CallResultType, EnvironmentConnection
-from isolate.common import get_executable_path
-from isolate.connections.ipc import agent
+from isolate.backends import (
+    BasicCallable,
+    CallResultType,
+    EnvironmentConnection,
+)
+from isolate.backends.common import get_executable_path
+from isolate.backends.connections.ipc import agent
 
 
 class _MultiFormatListener(Listener):

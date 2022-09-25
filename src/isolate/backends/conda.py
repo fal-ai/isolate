@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
-from isolate._base import BaseEnvironment
-from isolate.common import cache_static, rmdir_on_fail
-from isolate.connections import PythonIPC
+from isolate.backends import BaseEnvironment
+from isolate.backends.common import cache_static, rmdir_on_fail
+from isolate.backends.connections import PythonIPC
 
 # Specify the path where the conda binary might reside in (or
 # mamba, if it is the preferred one).

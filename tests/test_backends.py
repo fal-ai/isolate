@@ -7,11 +7,11 @@ from typing import Any
 
 import pytest
 
-from isolate import BaseEnvironment
+from isolate.backends import BaseEnvironment
+from isolate.backends.common import get_executable_path
 from isolate.backends.conda import CondaEnvironment, _get_conda_executable
+from isolate.backends.context import _Context
 from isolate.backends.virtual_env import VirtualPythonEnvironment
-from isolate.common import get_executable_path
-from isolate.context import _Context
 
 
 class NoNewEnvironments(Exception):

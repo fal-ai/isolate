@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
-from isolate import BaseEnvironment
-from isolate.common import get_executable_path, rmdir_on_fail
-from isolate.connections import PythonIPC
+from isolate.backends import BaseEnvironment
+from isolate.backends.common import get_executable_path, rmdir_on_fail
+from isolate.backends.connections import PythonIPC
 
 
 @dataclass

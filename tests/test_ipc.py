@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from isolate import BaseEnvironment
-from isolate.connections import PythonIPC
+from isolate.backends import BaseEnvironment
+from isolate.backends.connections import PythonIPC
 
 
 class FakeEnvironment(BaseEnvironment):

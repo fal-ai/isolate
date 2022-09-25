@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, NewType
 from platformdirs import user_cache_dir
 
 if TYPE_CHECKING:
-    from isolate._base import BaseEnvironment
+    from isolate.backends import BaseEnvironment
 
 
 @dataclass(frozen=True)

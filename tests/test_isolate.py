@@ -2,7 +2,7 @@ from unittest.mock import create_autospec, patch
 
 import pytest
 
-from isolate import BaseEnvironment, prepare_environment
+from isolate import prepare_environment
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ def test_environment_discovery(fresh_registry):
         EntryPoint,
     )
     fake_ep.name = "fake"
-    fake_ep.value = "isolate._base.BaseEnvironment"
+    fake_ep.value = "isolate.backends._base.BaseEnvironment"
     fake_ep.group = "isolate.environments"
 
     with patch("importlib_metadata.entry_points", return_value=EntryPoints([fake_ep])):
