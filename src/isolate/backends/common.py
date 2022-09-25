@@ -4,10 +4,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from platformdirs import user_cache_dir
-
-BASE_CACHE_DIR = Path(user_cache_dir("isolate", "isolate"))
-
 
 @contextmanager
 def rmdir_on_fail(path: Path) -> Iterator[None]:
