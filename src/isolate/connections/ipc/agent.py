@@ -23,7 +23,7 @@ import time
 from argparse import ArgumentParser
 from contextlib import closing
 from multiprocessing.connection import Client, ConnectionWrapper
-from typing import Any, ContextManager
+from typing import ContextManager
 
 
 def decode_service_address(address: str) -> str:

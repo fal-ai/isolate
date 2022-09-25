@@ -4,14 +4,13 @@ import hashlib
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
 from isolate._base import BaseEnvironment
 from isolate.common import cache_static, rmdir_on_fail
 from isolate.connections import PythonIPC
-from isolate.context import GLOBAL_CONTEXT, ContextType
 
 # Specify the path where the conda binary might reside in (or
 # mamba, if it is the preferred one).
