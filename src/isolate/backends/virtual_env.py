@@ -8,11 +8,8 @@ from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
 from isolate import BaseEnvironment
-from isolate.common import BASE_CACHE_DIR, get_executable_path, rmdir_on_fail
+from isolate.common import get_executable_path, rmdir_on_fail
 from isolate.connections import PythonIPC
-
-_BASE_VENV_DIR = BASE_CACHE_DIR / "venvs"
-_BASE_VENV_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @dataclass

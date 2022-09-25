@@ -1,9 +1,10 @@
 import operator
 import sys
-import pytest
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
+
+import pytest
 
 from isolate import BaseEnvironment
 from isolate.connections import PythonIPC
@@ -37,7 +38,9 @@ def test_python_ipc_serialization():
 
     # But we can switch serialization backends, and use cloudpickle
     # which can serialize anonymous functions.
-    cloudpickle_context = replace(fake_env.context, _serialization_backend="cloudpickle")
+    cloudpickle_context = replace(
+        fake_env.context, _serialization_backend="cloudpickle"
+    )
     fake_env.set_context(cloudpickle_context)
 
     with PythonIPC(fake_env, environment_path=Path(sys.prefix)) as conn:
