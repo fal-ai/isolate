@@ -11,6 +11,7 @@ from typing import Any, ClassVar, Dict, List
 from isolate.backends import BaseEnvironment
 from isolate.backends.common import cache_static, rmdir_on_fail
 from isolate.backends.connections import PythonIPC
+from isolate.backends.context import GLOBAL_CONTEXT, ContextType
 
 # Specify the path where the conda binary might reside in (or
 # mamba, if it is the preferred one).
@@ -25,9 +26,15 @@ class CondaEnvironment(BaseEnvironment[Path]):
     packages: List[str]
 
     @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> CondaEnvironment:
+    def from_config(
+        cls,
+        config: Dict[str, Any],
+        context: ContextType = GLOBAL_CONTEXT,
+    ) -> BaseEnvironment:
         user_provided_packages = config.get("packages", [])
-        return cls(user_provided_packages)
+        environment = cls(user_provided_packages)
+        environment.set_context(context)
+        return environment
 
     @property
     def key(self) -> str:

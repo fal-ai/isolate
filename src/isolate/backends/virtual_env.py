@@ -10,6 +10,7 @@ from typing import Any, ClassVar, Dict, List
 from isolate.backends import BaseEnvironment
 from isolate.backends.common import get_executable_path, rmdir_on_fail
 from isolate.backends.connections import PythonIPC
+from isolate.backends.context import GLOBAL_CONTEXT, ContextType
 
 
 @dataclass
@@ -19,9 +20,15 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
     requirements: List[str]
 
     @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> VirtualPythonEnvironment:
+    def from_config(
+        cls,
+        config: Dict[str, Any],
+        context: ContextType = GLOBAL_CONTEXT,
+    ) -> BaseEnvironment:
         requirements = config.get("requirements", [])
-        return cls(requirements)
+        environment = cls(requirements)
+        environment.set_context(context)
+        return environment
 
     @property
     def key(self) -> str:

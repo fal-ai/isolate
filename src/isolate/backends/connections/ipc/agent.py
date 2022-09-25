@@ -75,6 +75,8 @@ def run_client(
         pdb.set_trace()
 
     print("Trying to create a connection to {}", address)
+    # TODO(feat): this should probably run in a loop instead of
+    # receiving a single function and then exitting immediately.
     with child_connection(serialization_backend_name, address) as connection:
         print("Created child connection to {}", address)
         callable = connection.recv()

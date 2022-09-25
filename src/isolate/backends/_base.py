@@ -40,7 +40,11 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
     context: ContextType = GLOBAL_CONTEXT
 
     @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> BaseEnvironment:
+    def from_config(
+        cls,
+        config: Dict[str, Any],
+        context: ContextType = GLOBAL_CONTEXT,
+    ) -> BaseEnvironment:
         """Create a new environment from the given configuration."""
         raise NotImplementedError
 

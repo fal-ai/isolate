@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, NewType
 
@@ -23,6 +23,8 @@ class _Context:
     @property
     def serialization_backend_name(self) -> str:
         return self._serialization_backend
+
+    _replace = replace
 
 
 # We don't want to expose the context API just yet, but still want people
