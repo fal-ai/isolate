@@ -27,7 +27,7 @@ _reload_registry()
 
 def prepare_environment(
     kind: str,
-    config: Optional[Dict[str, Any]] = None,
+    **kwargs: Any,
 ) -> BaseEnvironment:
     """Get the environment for the given `kind` with the given `config`."""
 
@@ -35,4 +35,4 @@ def prepare_environment(
     if not registered_env_cls:
         raise ValueError(f"Unknown environment: '{kind}'")
 
-    return registered_env_cls.from_config(config or {})
+    return registered_env_cls.from_config(kwargs)
