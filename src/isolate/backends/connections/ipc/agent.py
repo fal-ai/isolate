@@ -90,7 +90,22 @@ def run_client(
             result = exc
             did_it_raise = True
         finally:
-            connection.send((result, did_it_raise))
+            try:
+                connection.send((result, did_it_raise))
+            except BaseException:
+                if did_it_raise:
+                    # If we can't even send it through the connection
+                    # still try to dump it to the stderr as the last
+                    # resort.
+                    import traceback
+
+                    assert isinstance(result, BaseException)
+                    traceback.print_exception(
+                        type(result),
+                        result,
+                        result.__traceback__,
+                    )
+                raise
 
 
 def _get_shell_bootstrap() -> str:
