@@ -54,8 +54,8 @@ class Log:
     def serialize(self) -> Dict[str, str]:
         return {
             "message": self.message,
-            "source": str(self.source),
-            "level": str(self.level),
+            "source": format(self.source),
+            "level": format(self.level),
         }
 
     def __str__(self) -> str:
