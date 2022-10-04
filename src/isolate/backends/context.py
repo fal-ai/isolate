@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, NewType, Optional
+from typing import TYPE_CHECKING, Callable, Dict, NewType, Optional
 
 from platformdirs import user_cache_dir
 
@@ -50,6 +50,13 @@ class Log:
     source: LogSource
     level: LogLevel = LogLevel.INFO
     bound_env: Optional[BaseEnvironment] = field(default=None, repr=False)
+
+    def serialize(self) -> Dict[str, str]:
+        return {
+            "message": self.message,
+            "source": str(self.source),
+            "level": str(self.level),
+        }
 
     def __str__(self) -> str:
         parts = []

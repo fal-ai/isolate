@@ -14,6 +14,7 @@ from isolate.backends import (
     BasicCallable,
     CallResultType,
     EnvironmentConnection,
+    UserException,
 )
 from isolate.backends.common import (
     get_executable_path,
@@ -72,7 +73,11 @@ class IsolatedProcessConnection(EnvironmentConnection):
         raise NotImplementedError
 
     def run(
-        self, executable: BasicCallable, *args: Any, **kwargs: Any
+        self,
+        executable: BasicCallable,
+        ignore_exceptions: bool = False,
+        *args: Any,
+        **kwargs: Any,
     ) -> CallResultType:
         """Spawn an agent process using the given environment, run the given
         `executable` in that process, and return the result object back."""
@@ -120,10 +125,17 @@ class IsolatedProcessConnection(EnvironmentConnection):
             established_connection.send(executable)
 
             self.log("Executable has been sent, awaiting execution result.")
-            return self.poll_until_result(isolated_process, established_connection)
+            return self.poll_until_result(
+                isolated_process,
+                established_connection,
+                ignore_exceptions,
+            )
 
     def poll_until_result(
-        self, process: subprocess.Popen, connection: ConnectionWrapper
+        self,
+        process: subprocess.Popen,
+        connection: ConnectionWrapper,
+        ignore_exceptions: bool,
     ) -> CallResultType:
         """Take the given process, and poll until either it exits or returns
         a result object."""
@@ -155,7 +167,10 @@ class IsolatedProcessConnection(EnvironmentConnection):
         result, did_it_raise = connection.recv()
 
         if did_it_raise:
-            raise result
+            if ignore_exceptions:
+                return UserException(result)  # type: ignore
+            else:
+                raise result
         else:
             return result
 

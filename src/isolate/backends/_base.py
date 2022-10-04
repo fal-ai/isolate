@@ -26,6 +26,7 @@ __all__ = [
     "CallResultType",
     "EnvironmentConnection",
     "BaseEnvironment",
+    "UserException",
 ]
 
 ConnectionKeyType = TypeVar("ConnectionKeyType")
@@ -106,6 +107,14 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
 
 
 @dataclass
+class UserException:
+    """Represents an exception that was raised during
+    the user program."""
+
+    exception: BaseException
+
+
+@dataclass
 class EnvironmentConnection:
     environment: BaseEnvironment
 
@@ -116,9 +125,16 @@ class EnvironmentConnection:
         return None
 
     def run(
-        self, executable: BasicCallable, *args: Any, **kwargs: Any
+        self,
+        executable: BasicCallable,
+        ignore_exceptions: bool = False,
+        *args: Any,
+        **kwargs: Any,
     ) -> CallResultType:
-        """Run the given executable inside the environment, and return the result."""
+        """Run the given executable inside the environment, and return the result.
+        If the executable raises an exception, then it will be raised directly unless
+        'ignore_exceptions' is set. In that case, the exception will be wrapped by
+        a UserException box and returned."""
         raise NotImplementedError
 
     def log(

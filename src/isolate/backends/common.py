@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import functools
-import io
+import importlib
 import os
 import shutil
 import sysconfig
@@ -146,3 +146,12 @@ def logged_io(
             stderr_observer.join(timeout=_MESSAGE_STREAM_DELAY)
         except TimeoutError:
             raise RuntimeError("Log observers did not terminate in time.")
+
+
+def run_serialized(serialization_backend_name: str, data: bytes) -> Any:
+    """Deserialize the given 'data' into an parameter-less callable and
+    run it."""
+
+    serialization_backend = importlib.import_module(serialization_backend_name)
+    executable = serialization_backend.loads(data)
+    return executable()
