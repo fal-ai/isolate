@@ -23,15 +23,16 @@ import time
 from argparse import ArgumentParser
 from contextlib import closing
 from multiprocessing.connection import Client, ConnectionWrapper
-from typing import ContextManager
+from typing import ContextManager, Tuple
 
 
-def decode_service_address(address: str) -> str:
-    return base64.b64decode(address).decode("utf-8")
+def decode_service_address(address: str) -> Tuple[str, int]:
+    host, port = base64.b64decode(address).decode("utf-8").rsplit(":", 1)
+    return host, int(port)
 
 
 def child_connection(
-    serialization_backend_name: str, address: str
+    serialization_backend_name: str, address: Tuple[str, int]
 ) -> ContextManager[ConnectionWrapper]:
     serialization_backend = importlib.import_module(serialization_backend_name)
     return closing(
@@ -48,7 +49,7 @@ DEBUG_TIMEOUT = 60 * 15
 
 
 def run_client(
-    serialization_backend_name: str, address: str, *, with_pdb: bool = False
+    serialization_backend_name: str, address: Tuple[str, int], *, with_pdb: bool = False
 ) -> None:
     # Debug Mode
     # ==========

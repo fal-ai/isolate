@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
 from isolate.backends import BaseEnvironment
-from isolate.backends.common import get_executable_path, rmdir_on_fail
+from isolate.backends.common import (
+    get_executable_path,
+    logged_io,
+    rmdir_on_fail,
+)
 from isolate.backends.connections import PythonIPC
 from isolate.backends.context import GLOBAL_CONTEXT, ContextType
 
@@ -52,7 +56,12 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                     kind="info",
                 )
                 pip_path = get_executable_path(path, "pip")
-                subprocess.check_call([str(pip_path), "install"] + self.requirements)
+                with logged_io(self) as (stdout, stderr):
+                    subprocess.run(
+                        [str(pip_path), "install", *self.requirements],
+                        stdout=stdout,
+                        stderr=stderr,
+                    )
 
         return path
 

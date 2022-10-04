@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
 from isolate.backends import BaseEnvironment
-from isolate.backends.common import cache_static, rmdir_on_fail
+from isolate.backends.common import cache_static, logged_io, rmdir_on_fail
 from isolate.backends.connections import PythonIPC
 from isolate.backends.context import GLOBAL_CONTEXT, ContextType
 
@@ -55,18 +55,21 @@ class CondaEnvironment(BaseEnvironment[Path]):
                     kind="info",
                 )
 
-            subprocess.check_call(
-                [
-                    conda_executable,
-                    "create",
-                    "--yes",
-                    # The environment will be created under $BASE_CACHE_DIR/conda
-                    # so that in the future we can reuse it.
-                    "--prefix",
-                    path,
-                    *self.packages,
-                ]
-            )
+            with logged_io(self) as (stdout, stderr):
+                subprocess.check_call(
+                    [
+                        conda_executable,
+                        "create",
+                        "--yes",
+                        # The environment will be created under $BASE_CACHE_DIR/conda
+                        # so that in the future we can reuse it.
+                        "--prefix",
+                        path,
+                        *self.packages,
+                    ],
+                    stdout=stdout,
+                    stderr=stderr,
+                )
 
         return path
 

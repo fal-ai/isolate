@@ -6,7 +6,7 @@ from contextlib import ExitStack, closing
 from dataclasses import dataclass
 from multiprocessing.connection import ConnectionWrapper, Listener
 from pathlib import Path
-from typing import Any, ContextManager, List, Union
+from typing import Any, ContextManager, List, Tuple, Union
 
 from isolate.backends import (
     BasicCallable,
@@ -38,11 +38,9 @@ def load_serialization_backend(backend_name: str) -> Any:
     return importlib.import_module(backend_name)
 
 
-def encode_service_address(address: Union[bytes, str]) -> str:
-    if isinstance(address, bytes):
-        address = address.decode()
-
-    return base64.b64encode(address.encode()).decode("utf-8")
+def encode_service_address(address: Tuple[str, int]) -> str:
+    host, port = address
+    return base64.b64encode(f"{host}:{port}".encode()).decode("utf-8")
 
 
 @dataclass
@@ -85,7 +83,8 @@ class IsolatedProcessConnection(EnvironmentConnection):
             self.log("Starting the controller bridge.")
             controller_service = stack.enter_context(
                 _MultiFormatListener(
-                    self.environment.context.serialization_backend_name
+                    self.environment.context.serialization_backend_name,
+                    family="AF_INET",
                 )
             )
 
@@ -162,6 +161,7 @@ class PythonIPC(IsolatedProcessConnection):
         the given environment_path."""
 
         python_executable = get_executable_path(self.environment_path, "python")
+        print(python_executable)
         return subprocess.Popen(self._get_python_cmd(python_executable, connection))
 
     def _get_python_cmd(
