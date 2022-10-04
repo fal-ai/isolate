@@ -1,5 +1,7 @@
 import functools
+import os
 import shutil
+import sysconfig
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -13,6 +15,19 @@ def rmdir_on_fail(path: Path) -> Iterator[None]:
         if path.exists():
             shutil.rmtree(path)
         raise
+
+
+def python_path_for(*search_paths: Path) -> str:
+    assert len(search_paths) >= 1
+    return os.pathsep.join(
+        # sysconfig defines the schema of the directories under
+        # any comforming Python installation (like venv, conda, etc.).
+        #
+        # Be aware that Debian's system installation does not
+        # comform sysconfig.
+        sysconfig.get_path("purelib", vars={"base": search_path})
+        for search_path in search_paths
+    )
 
 
 def get_executable_path(search_path: Path, executable_name: str) -> Path:

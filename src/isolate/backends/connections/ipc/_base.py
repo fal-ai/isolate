@@ -1,18 +1,19 @@
 import base64
 import importlib
+import os
 import subprocess
 from contextlib import ExitStack, closing
 from dataclasses import dataclass
 from multiprocessing.connection import ConnectionWrapper, Listener
 from pathlib import Path
-from typing import Any, ContextManager, Union
+from typing import Any, ContextManager, List, Union
 
 from isolate.backends import (
     BasicCallable,
     CallResultType,
     EnvironmentConnection,
 )
-from isolate.backends.common import get_executable_path
+from isolate.backends.common import get_executable_path, python_path_for
 from isolate.backends.connections.ipc import agent
 
 
@@ -46,6 +47,12 @@ def encode_service_address(address: Union[bytes, str]) -> str:
 
 @dataclass
 class IsolatedProcessConnection(EnvironmentConnection):
+    """A generic IPC implementation for running the isolate backend
+    in a separated process.
+
+    Each implementation needs to define a start_process method to
+    spawn the agent."""
+
     def start_process(
         self,
         connection: ConnectionWrapper,
@@ -138,6 +145,10 @@ class IsolatedProcessConnection(EnvironmentConnection):
 
 @dataclass
 class PythonIPC(IsolatedProcessConnection):
+    """A simply Python IPC implementation that takes the base directory
+    of a new Python environment (structure that complies with sysconfig)
+    and runs the agent process in that environment."""
+
     environment_path: Path
 
     def start_process(
@@ -150,15 +161,54 @@ class PythonIPC(IsolatedProcessConnection):
         the given environment_path."""
 
         python_executable = get_executable_path(self.environment_path, "python")
+        return subprocess.Popen(self._get_python_cmd(python_executable, connection))
+
+    def _get_python_cmd(
+        self,
+        executable: Path,
+        connection: ConnectionWrapper,
+    ) -> List[Union[str, Path]]:
+        assert executable.exists(), f"Python executable {executable} does not exist."
+        return [
+            executable,
+            agent.__file__,
+            encode_service_address(connection.address),
+            # TODO(feat): we probably should check if the given backend is installed
+            # on the remote interpreter, otherwise it will fail without establishing
+            # the connection with the bridge.
+            "--serialization-backend",
+            self.environment.context.serialization_backend_name,
+        ]
+
+
+@dataclass
+class DualPythonIPC(PythonIPC):
+    """A dual-environment Python IPC implementation that
+    can run the agent process in an environment with its
+    Python and also load the shared libraries from a different
+    one."""
+
+    secondary_path: Path
+
+    def start_process(
+        self,
+        connection: ConnectionWrapper,
+        *args: Any,
+        **kwargs: Any,
+    ) -> ContextManager[subprocess.Popen]:
+        # We are going to use the primary environment to run the Python
+        # interpreter, but at the same time we are going to inherit all
+        # the packages from the secondary environment.
+
+        # The search order is important, we want the primary path to
+        # take precedence.
+        python_path = python_path_for(self.environment_path, self.secondary_path)
+
+        # The user of DualPythonIPC must ensure that the Python versions from
+        # both of these environments are the same. Using different versions is
+        # an undefined behavior.
+        python_executable = get_executable_path(self.environment_path, "python")
         return subprocess.Popen(
-            [
-                python_executable,
-                agent.__file__,
-                encode_service_address(connection.address),
-                # TODO(feat): we probably should check if the given backend is installed
-                # on the remote interpreter, otherwise it will fail without establishing
-                # the connection with the bridge.
-                "--serialization-backend",
-                self.environment.context.serialization_backend_name,
-            ],
+            self._get_python_cmd(python_executable, connection),
+            env={"PYTHONPATH": python_path, **os.environ},
         )
