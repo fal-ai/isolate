@@ -93,6 +93,7 @@ class IsolatedProcessConnection(EnvironmentConnection):
                 "Controller server is listening at {}. Attempting to start the agent process.",
                 controller_service.address,
             )
+            assert not (args or kwargs), "run() should not receive any arguments."
             isolated_process = stack.enter_context(
                 self.start_process(controller_service, *args, **kwargs)
             )
