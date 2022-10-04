@@ -9,7 +9,7 @@ import threading
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterator, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, Tuple
 
 if TYPE_CHECKING:
     from isolate.backends._base import BaseEnvironment
@@ -84,8 +84,6 @@ def _observe_reader(
     reading_fd: int,
     termination_event: threading.Event,
     hook: Callable[[str], None],
-    *,
-    _chunk_size: int = 1024,
 ) -> threading.Thread:
     """Starts a new thread that reads from the specified file descriptor
     ('reading_fd') and calls the 'hook' for each line until the EOF is
@@ -118,9 +116,12 @@ def _observe_reader(
 
 
 @contextmanager
-def logged_io(log_hook: Callable[[str, str], None]) -> Iterator[Tuple[int, int]]:
+def logged_io(
+    stdout_hook: Callable[[str], None],
+    stderr_hook: Optional[Callable[[str], None]] = None,
+) -> Iterator[Tuple[int, int]]:
     """Open two new streams (for stdout and stderr, respectively) and start relaying all
-    the output from them to the given log_hook."""
+    the output from them to the given hooks."""
 
     termination_event = threading.Event()
     stdout_reader_fd, stdout_writer_fd = os.pipe2(os.O_NONBLOCK)
@@ -129,12 +130,12 @@ def logged_io(log_hook: Callable[[str, str], None]) -> Iterator[Tuple[int, int]]
     stdout_observer = _observe_reader(
         stdout_reader_fd,
         termination_event,
-        hook=partial(log_hook, kind="stdout"),
+        hook=stdout_hook,
     )
     stderr_observer = _observe_reader(
         stderr_reader_fd,
         termination_event,
-        hook=partial(log_hook, kind="stderr"),
+        hook=stderr_hook or stdout_hook,
     )
     try:
         yield stdout_writer_fd, stderr_writer_fd

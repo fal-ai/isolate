@@ -13,7 +13,13 @@ from typing import (
     TypeVar,
 )
 
-from isolate.backends.context import GLOBAL_CONTEXT, ContextType
+from isolate.backends.context import (
+    GLOBAL_CONTEXT,
+    ContextType,
+    Log,
+    LogLevel,
+    LogSource,
+)
 
 __all__ = [
     "BasicCallable",
@@ -87,9 +93,16 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
         """Replace the existing context with the given `context`."""
         self.context = context
 
-    def log(self, message: str, *args: Any, kind: str = "trace", **kwargs: Any) -> None:
+    def log(
+        self,
+        message: str,
+        *,
+        level: LogLevel = LogLevel.DEBUG,
+        source: LogSource = LogSource.BUILDER,
+    ) -> None:
         """Log a message."""
-        print(f"[{kind}] [{self.key}] {message.format(*args, **kwargs)}")
+        log_msg = Log(message, level=level, source=source, bound_env=self)
+        self.context.log(log_msg)
 
 
 @dataclass
@@ -108,6 +121,12 @@ class EnvironmentConnection:
         """Run the given executable inside the environment, and return the result."""
         raise NotImplementedError
 
-    def log(self, message: str, *args: Any, kind: str = "trace", **kwargs: Any) -> None:
+    def log(
+        self,
+        message: str,
+        *,
+        level: LogLevel = LogLevel.TRACE,
+        source: LogSource = LogSource.BRIDGE,
+    ) -> None:
         """Log a message through the bound environment."""
-        self.environment.log("[connection] " + message, *args, **kwargs)
+        self.environment.log(message, level=level, source=source)

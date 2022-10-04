@@ -46,15 +46,11 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             return path
 
         with rmdir_on_fail(path):
-            self.log("Creating the environment at '{}'", path, kind="info")
+            self.log(f"Creating the environment at '{path}'")
             cli_run([str(path)])
 
             if self.requirements:
-                self.log(
-                    "Installing requirements: {}",
-                    ", ".join(self.requirements),
-                    kind="info",
-                )
+                self.log(f"Installing requirements: {', '.join(self.requirements)}")
                 pip_path = get_executable_path(path, "pip")
                 with logged_io(self.log) as (stdout, stderr):
                     subprocess.run(

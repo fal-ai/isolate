@@ -46,14 +46,10 @@ class CondaEnvironment(BaseEnvironment[Path]):
             return path
 
         with rmdir_on_fail(path):
-            self.log("Creating the environment at '{}'", path, kind="info")
+            self.log(f"Creating the environment at '{path}'")
             conda_executable = _get_conda_executable()
             if self.packages:
-                self.log(
-                    "Installing packages: {}",
-                    ", ".join(self.packages),
-                    kind="info",
-                )
+                self.log(f"Installing packages: {', '.join(self.packages)}")
 
             with logged_io(self.log) as (stdout, stderr):
                 subprocess.check_call(

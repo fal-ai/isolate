@@ -5,6 +5,7 @@ import subprocess
 import time
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass
+from functools import partial
 from multiprocessing.connection import ConnectionWrapper, Listener
 from pathlib import Path
 from typing import Any, ContextManager, Iterator, List, Tuple, Union
@@ -20,6 +21,7 @@ from isolate.backends.common import (
     python_path_for,
 )
 from isolate.backends.connections.ipc import agent
+from isolate.backends.context import LogLevel, LogSource
 
 
 class _MultiFormatListener(Listener):
@@ -98,8 +100,8 @@ class IsolatedProcessConnection(EnvironmentConnection):
             )
 
             self.log(
-                "Controller server is listening at {}. Attempting to start the agent process.",
-                controller_service.address,
+                f"Controller server is listening at {controller_service.address}."
+                " Attempting to start the agent process."
             )
             assert not (args or kwargs), "run() should not receive any arguments."
             isolated_process = stack.enter_context(
@@ -109,20 +111,15 @@ class IsolatedProcessConnection(EnvironmentConnection):
             # TODO(fix): this might hang if the agent process crashes before it can
             # connect to the controller bridge.
             self.log(
-                "Awaiting agent process of {} to establish a connection.",
-                isolated_process.pid,
+                f"Awaiting agent process of {isolated_process.pid}"
+                " to establish a connection."
             )
             established_connection = stack.enter_context(controller_service.accept())
 
-            self.log(
-                "Bridge between controller and the agent has been established.",
-                controller_service.address,
-            )
+            self.log("Bridge between controller and the agent has been established.")
             established_connection.send(executable)
 
-            self.log(
-                "Executable has been sent, awaiting execution result.",
-            )
+            self.log("Executable has been sent, awaiting execution result.")
             return self.poll_until_result(isolated_process, established_connection)
 
     def poll_until_result(
@@ -182,7 +179,10 @@ class PythonIPC(IsolatedProcessConnection):
         the given environment_path."""
 
         python_executable = get_executable_path(self.environment_path, "python")
-        with logged_io(self._parse_agent_and_log) as (stdout, stderr):
+        with logged_io(
+            partial(self._parse_agent_and_log, level=LogLevel.STDOUT),
+            partial(self._parse_agent_and_log, level=LogLevel.STDERR),
+        ) as (stdout, stderr):
             yield subprocess.Popen(
                 self._get_python_cmd(python_executable, connection),
                 env=self._get_python_env(),
@@ -214,14 +214,22 @@ class PythonIPC(IsolatedProcessConnection):
             self.environment.context.serialization_backend_name,
         ]
 
-    def _parse_agent_and_log(self, line: str, kind: str) -> None:
+    def _parse_agent_and_log(self, line: str, level: LogLevel) -> None:
+        # TODO: we probably should create a new fd and pass it as
+        # one of the the arguments to the child process. Then everything
+        # from that fd can be automatically logged as originating from the
+        # bridge.
+
         # Agent can produce [trace] messages, so change the log
         # level to it if this does not originate from the user.
         if line.startswith("[trace]"):
             line = line.replace("[trace]", "", 1)
-            kind = "trace"
+            level = LogLevel.TRACE
+            source = LogSource.BRIDGE
+        else:
+            source = LogSource.USER
 
-        self.log(line, kind=kind)
+        self.log(line, level=level, source=source)
 
 
 @dataclass
