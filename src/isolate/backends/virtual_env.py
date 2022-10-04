@@ -56,7 +56,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                     kind="info",
                 )
                 pip_path = get_executable_path(path, "pip")
-                with logged_io(self) as (stdout, stderr):
+                with logged_io(self.log) as (stdout, stderr):
                     subprocess.run(
                         [str(pip_path), "install", *self.requirements],
                         stdout=stdout,

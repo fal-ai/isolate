@@ -2,18 +2,23 @@ import base64
 import importlib
 import os
 import subprocess
-from contextlib import ExitStack, closing
+import time
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass
 from multiprocessing.connection import ConnectionWrapper, Listener
 from pathlib import Path
-from typing import Any, ContextManager, List, Tuple, Union
+from typing import Any, ContextManager, Iterator, List, Tuple, Union
 
 from isolate.backends import (
     BasicCallable,
     CallResultType,
     EnvironmentConnection,
 )
-from isolate.backends.common import get_executable_path, python_path_for
+from isolate.backends.common import (
+    get_executable_path,
+    logged_io,
+    python_path_for,
+)
 from isolate.backends.connections.ipc import agent
 
 
@@ -50,6 +55,10 @@ class IsolatedProcessConnection(EnvironmentConnection):
 
     Each implementation needs to define a start_process method to
     spawn the agent."""
+
+    # The amount of seconds to wait before checking whether the
+    # isolated process has exited or not.
+    _DEFER_THRESHOLD = 0.25
 
     def start_process(
         self,
@@ -122,25 +131,36 @@ class IsolatedProcessConnection(EnvironmentConnection):
         """Take the given process, and poll until either it exits or returns
         a result object."""
 
-        while process.poll() is None:
+        while not connection.poll():
             # Normally, if we do connection.read() without having this loop
             # it is going to block us indefinitely (even if the underlying
             # process has crashed). We can use a combination of process.poll
             # and connection.poll to check if the process is alive and has data
             # to move forward.
-            if not connection.poll():
-                continue
+            if process.poll():
+                break
 
-            # TODO(fix): handle EOFError that might happen here (e.g. problematic
-            # serialization might cause it).
-            result, did_it_raise = connection.recv()
+            # For preventing busy waiting, we can sleep for a bit
+            # and let other threads run.
+            time.sleep(self._DEFER_THRESHOLD)
+            continue
 
-            if did_it_raise:
-                raise result
-            else:
-                return result
+        if not connection.poll():
+            # If the process has exited but there is still no data, we
+            # can assume something terrible has happened.
+            raise OSError(
+                "The isolated process has exited unexpectedly with code "
+                f"'{process.poll()}' without sending any data back."
+            )
 
-        raise OSError("The isolated process has exited unexpectedly with code '{}'.")
+        # TODO(fix): handle EOFError that might happen here (e.g. problematic
+        # serialization might cause it).
+        result, did_it_raise = connection.recv()
+
+        if did_it_raise:
+            raise result
+        else:
+            return result
 
 
 @dataclass
@@ -151,18 +171,31 @@ class PythonIPC(IsolatedProcessConnection):
 
     environment_path: Path
 
+    @contextmanager
     def start_process(
         self,
         connection: ConnectionWrapper,
         *args: Any,
         **kwargs: Any,
-    ) -> ContextManager[subprocess.Popen]:
+    ) -> Iterator[subprocess.Popen]:
         """Start the Python agent process with using the Python interpreter from
         the given environment_path."""
 
         python_executable = get_executable_path(self.environment_path, "python")
-        print(python_executable)
-        return subprocess.Popen(self._get_python_cmd(python_executable, connection))
+        with logged_io(self._parse_agent_and_log) as (stdout, stderr):
+            yield subprocess.Popen(
+                self._get_python_cmd(python_executable, connection),
+                env=self._get_python_env(),
+                stdout=stdout,
+                stderr=stderr,
+                text=True,
+            )
+
+    def _get_python_env(self):
+        return {
+            "PYTHONUNBUFFERED": "1",  # We want to stream the logs as they come.
+            **os.environ,
+        }
 
     def _get_python_cmd(
         self,
@@ -181,22 +214,31 @@ class PythonIPC(IsolatedProcessConnection):
             self.environment.context.serialization_backend_name,
         ]
 
+    def _parse_agent_and_log(self, line: str, kind: str) -> None:
+        # Agent can produce [trace] messages, so change the log
+        # level to it if this does not originate from the user.
+        if line.startswith("[trace]"):
+            line = line.replace("[trace]", "", 1)
+            kind = "trace"
+
+        self.log(line, kind=kind)
+
 
 @dataclass
 class DualPythonIPC(PythonIPC):
     """A dual-environment Python IPC implementation that
     can run the agent process in an environment with its
     Python and also load the shared libraries from a different
-    one."""
+    one.
+
+    The user of DualPythonIPC must ensure that the Python versions from
+    both of these environments are the same. Using different versions is
+    an undefined behavior.
+    """
 
     secondary_path: Path
 
-    def start_process(
-        self,
-        connection: ConnectionWrapper,
-        *args: Any,
-        **kwargs: Any,
-    ) -> ContextManager[subprocess.Popen]:
+    def _get_python_env(self):
         # We are going to use the primary environment to run the Python
         # interpreter, but at the same time we are going to inherit all
         # the packages from the secondary environment.
@@ -204,12 +246,4 @@ class DualPythonIPC(PythonIPC):
         # The search order is important, we want the primary path to
         # take precedence.
         python_path = python_path_for(self.environment_path, self.secondary_path)
-
-        # The user of DualPythonIPC must ensure that the Python versions from
-        # both of these environments are the same. Using different versions is
-        # an undefined behavior.
-        python_executable = get_executable_path(self.environment_path, "python")
-        return subprocess.Popen(
-            self._get_python_cmd(python_executable, connection),
-            env={"PYTHONPATH": python_path, **os.environ},
-        )
+        return {"PYTHONPATH": python_path, **super()._get_python_env()}

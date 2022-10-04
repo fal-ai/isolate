@@ -107,15 +107,20 @@ def _observe_reader(
                 # do not strip anything at all.
                 hook(line.rstrip())
 
+            # Once the termination is requested, read everything
+            # that is left in the stream.
+            for line in stream.readlines():
+                hook(line.rstrip())
+
     observer_thread = threading.Thread(target=_reader)
     observer_thread.start()
     return observer_thread
 
 
 @contextmanager
-def logged_io(environment: BaseEnvironment) -> Iterator[Tuple[int, int]]:
+def logged_io(log_hook: Callable[[str, str], None]) -> Iterator[Tuple[int, int]]:
     """Open two new streams (for stdout and stderr, respectively) and start relaying all
-    the output from them to the given environment's logger."""
+    the output from them to the given log_hook."""
 
     termination_event = threading.Event()
     stdout_reader_fd, stdout_writer_fd = os.pipe2(os.O_NONBLOCK)
@@ -124,12 +129,12 @@ def logged_io(environment: BaseEnvironment) -> Iterator[Tuple[int, int]]:
     stdout_observer = _observe_reader(
         stdout_reader_fd,
         termination_event,
-        hook=partial(environment.log, kind="stdout"),
+        hook=partial(log_hook, kind="stdout"),
     )
     stderr_observer = _observe_reader(
         stderr_reader_fd,
         termination_event,
-        hook=partial(environment.log, kind="stderr"),
+        hook=partial(log_hook, kind="stderr"),
     )
     try:
         yield stdout_writer_fd, stderr_writer_fd

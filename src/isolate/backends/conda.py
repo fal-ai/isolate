@@ -55,7 +55,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
                     kind="info",
                 )
 
-            with logged_io(self) as (stdout, stderr):
+            with logged_io(self.log) as (stdout, stderr):
                 subprocess.check_call(
                     [
                         conda_executable,
