@@ -115,6 +115,17 @@ def _observe_reader(
     return observer_thread
 
 
+def _unblocked_pipe() -> Tuple[int, int]:
+    """Create a pair of unblocked pipes. This is actually
+    the same as os.pipe2(os.O_NONBLOCK), but that is not
+    available in MacOS so we have to do it manually."""
+
+    read_fd, write_fd = os.pipe()
+    os.set_blocking(read_fd, False)
+    os.set_blocking(write_fd, False)
+    return read_fd, write_fd
+
+
 @contextmanager
 def logged_io(
     stdout_hook: Callable[[str], None],
@@ -124,8 +135,9 @@ def logged_io(
     the output from them to the given hooks."""
 
     termination_event = threading.Event()
-    stdout_reader_fd, stdout_writer_fd = os.pipe2(os.O_NONBLOCK)
-    stderr_reader_fd, stderr_writer_fd = os.pipe2(os.O_NONBLOCK)
+
+    stdout_reader_fd, stdout_writer_fd = _unblocked_pipe()
+    stderr_reader_fd, stderr_writer_fd = _unblocked_pipe()
 
     stdout_observer = _observe_reader(
         stdout_reader_fd,
