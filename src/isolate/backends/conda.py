@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
-from isolate.backends import BaseEnvironment
+from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import cache_static, logged_io, rmdir_on_fail
 from isolate.backends.connections import PythonIPC
 from isolate.backends.context import GLOBAL_CONTEXT, ContextType
@@ -52,20 +52,25 @@ class CondaEnvironment(BaseEnvironment[Path]):
                 self.log(f"Installing packages: {', '.join(self.packages)}")
 
             with logged_io(self.log) as (stdout, stderr):
-                subprocess.check_call(
-                    [
-                        conda_executable,
-                        "create",
-                        "--yes",
-                        # The environment will be created under $BASE_CACHE_DIR/conda
-                        # so that in the future we can reuse it.
-                        "--prefix",
-                        path,
-                        *self.packages,
-                    ],
-                    stdout=stdout,
-                    stderr=stderr,
-                )
+                try:
+                    subprocess.check_call(
+                        [
+                            conda_executable,
+                            "create",
+                            "--yes",
+                            # The environment will be created under $BASE_CACHE_DIR/conda
+                            # so that in the future we can reuse it.
+                            "--prefix",
+                            path,
+                            *self.packages,
+                        ],
+                        stdout=stdout,
+                        stderr=stderr,
+                    )
+                except subprocess.SubprocessError as exc:
+                    raise EnvironmentCreationError(
+                        "Failure during 'conda create'"
+                    ) from exc
 
         return path
 

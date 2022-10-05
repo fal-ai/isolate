@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
-from isolate.backends import BaseEnvironment
+from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import (
     get_executable_path,
     logged_io,
@@ -47,17 +47,28 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
 
         with rmdir_on_fail(path):
             self.log(f"Creating the environment at '{path}'")
-            cli_run([str(path)])
+
+            try:
+                cli_run([str(path)])
+            except OSError as exc:
+                raise EnvironmentCreationError(
+                    f"Failed to create the environment at '{path}'"
+                ) from exc
 
             if self.requirements:
                 self.log(f"Installing requirements: {', '.join(self.requirements)}")
                 pip_path = get_executable_path(path, "pip")
                 with logged_io(self.log) as (stdout, stderr):
-                    subprocess.run(
-                        [str(pip_path), "install", *self.requirements],
-                        stdout=stdout,
-                        stderr=stderr,
-                    )
+                    try:
+                        subprocess.check_call(
+                            [str(pip_path), "install", *self.requirements],
+                            stdout=stdout,
+                            stderr=stderr,
+                        )
+                    except subprocess.SubprocessError as exc:
+                        raise EnvironmentCreationError(
+                            "Failure during 'pip install'."
+                        ) from exc
 
         return path
 

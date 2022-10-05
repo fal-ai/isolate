@@ -27,11 +27,16 @@ __all__ = [
     "EnvironmentConnection",
     "BaseEnvironment",
     "UserException",
+    "EnvironmentCreationError",
 ]
 
 ConnectionKeyType = TypeVar("ConnectionKeyType")
 CallResultType = TypeVar("CallResultType")
 BasicCallable = Callable[[], CallResultType]
+
+
+class EnvironmentCreationError(Exception):
+    """Raised when the environment cannot be created."""
 
 
 class BaseEnvironment(Generic[ConnectionKeyType]):
