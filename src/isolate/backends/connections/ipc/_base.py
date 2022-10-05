@@ -208,8 +208,8 @@ class PythonIPC(IsolatedProcessConnection):
 
     def _get_python_env(self):
         return {
-            "PYTHONUNBUFFERED": "1",  # We want to stream the logs as they come.
             **os.environ,
+            "PYTHONUNBUFFERED": "1",  # We want to stream the logs as they come.
         }
 
     def _get_python_cmd(
