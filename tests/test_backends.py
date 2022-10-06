@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from isolate.backends import BaseEnvironment
+from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import get_executable_path
 from isolate.backends.conda import CondaEnvironment, _get_conda_executable
 from isolate.backends.context import _Context
@@ -47,13 +47,13 @@ class GenericCreationTests:
         # in order to make non-cached (active) environment creations
         # fail on tests.
 
+        entry_point, exc_class = self.creation_entry_point
+
         def _raise_error():
-            raise NoNewEnvironments
+            raise exc_class
 
         with monkeypatch.context() as ctx:
-            ctx.setattr(
-                self.creation_entry_point, lambda *args, **kwargs: _raise_error()
-            )
+            ctx.setattr(entry_point, lambda *args, **kwargs: _raise_error())
             yield
 
     def test_create_generic_env(self, tmp_path):
@@ -107,7 +107,7 @@ class GenericCreationTests:
 
     def test_failure_during_environment_creation_cache(self, tmp_path, monkeypatch):
         environment = self.get_environment_for(tmp_path, "new-example-project")
-        with pytest.raises(NoNewEnvironments):
+        with pytest.raises(EnvironmentCreationError):
             with self.fail_active_creation(monkeypatch):
                 environment.create()
 
@@ -116,6 +116,13 @@ class GenericCreationTests:
         connection_key = environment.create()
         assert environment.exists()
         assert self.get_example_version(environment, connection_key) == "0.6.0"
+
+    def test_invalid_project_building(self, tmp_path, monkeypatch):
+        environment = self.get_environment_for(tmp_path, "invalid-project")
+        with pytest.raises(EnvironmentCreationError):
+            environment.create()
+
+        assert not environment.exists()
 
 
 class TestVenv(GenericCreationTests):
@@ -131,8 +138,11 @@ class TestVenv(GenericCreationTests):
         "new-example-project": {
             "requirements": ["pyjokes==0.6.0"],
         },
+        "invalid-project": {
+            "requirements": ["pyjokes==999.999.999"],
+        },
     }
-    creation_entry_point = "virtualenv.cli_run"
+    creation_entry_point = ("virtualenv.cli_run", PermissionError)
 
 
 # Since conda is an external dependency, we'll skip tests using it
@@ -161,5 +171,14 @@ class TestConda(GenericCreationTests):
         "new-example-project": {
             "packages": ["pyjokes=0.6.0"],
         },
+        "invalid-project": {
+            "requirements": ["pyjokes=999.999.999"],
+        },
     }
-    creation_entry_point = "subprocess.check_call"
+    creation_entry_point = ("subprocess.check_call", subprocess.SubprocessError)
+
+    def test_invalid_project_building(self):
+        pytest.xfail(
+            "For a weird reason, installing an invalid package on conda does "
+            "not make it exit with an error code."
+        )

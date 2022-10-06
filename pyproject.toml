@@ -6,12 +6,20 @@ authors = ["Features & Labels <hello@fal.ai>"]
 
 [tool.poetry.dependencies]
 python = ">=3.7"
-virtualenv = "^20"
-cloudpickle = "^2.2.0"
-importlib-metadata = "^5.0.0"
+virtualenv = ">=20.4"
+importlib-metadata = ">=4.4"
+flask = { version = "*", optional = true }
+marshmallow = { version = "*", optional = true }
+
+[tool.poetry.extras]
+server = ["flask", "marshmallow"]
+
+[tool.poetry.plugins."isolate.backends"]
+"virtualenv" = "isolate.backends.virtual_env:VirtualPythonEnvironment"
+"conda" = "isolate.backends.conda:CondaEnvironment"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core>=1.1.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.isort]
@@ -20,7 +28,3 @@ force_grid_wrap=0
 include_trailing_comma=true
 multi_line_output=3
 use_parentheses=true
-
-[tool.poetry.plugins."isolate.backends"]
-"virtualenv" = "isolate.backends.virtual_env:VirtualPythonEnvironment"
-"conda" = "isolate.backends.conda:CondaEnvironment"
