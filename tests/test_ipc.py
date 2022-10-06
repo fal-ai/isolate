@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from isolate.backends import BaseEnvironment
+from isolate.backends import BaseEnvironment, UserException
 from isolate.backends.connections import ExtendedPythonIPC, PythonIPC
 from isolate.backends.context import _Context
 from isolate.backends.virtual_env import VirtualPythonEnvironment
@@ -99,3 +99,16 @@ def test_extended_python_ipc(tmp_path):
         assert conn.run(partial(eval, "__import__('pyjokes').__version__")) == "0.5.0"
         # This comes from the third_env
         assert conn.run(partial(eval, "__import__('emoji').__version__")) == "2.0.0"
+
+
+def test_ignore_exceptions(tmp_path):
+    env = VirtualPythonEnvironment([])
+    env.set_context(_Context(Path(tmp_path)))
+
+    with PythonIPC(env, env.create()) as connection:
+        with pytest.raises(ZeroDivisionError):
+            assert connection.run(partial(eval, "1 / 0"))
+
+        user_exc = connection.run(partial(eval, "1 / 0"), ignore_exceptions=True)
+        assert isinstance(user_exc, UserException)
+        assert isinstance(user_exc.exception, ZeroDivisionError)

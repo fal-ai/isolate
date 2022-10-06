@@ -1,4 +1,5 @@
 import subprocess
+import sys
 import textwrap
 from contextlib import contextmanager
 from functools import partial
@@ -11,6 +12,7 @@ from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import get_executable_path, sha256_digest_of
 from isolate.backends.conda import CondaEnvironment, _get_conda_executable
 from isolate.backends.context import _Context
+from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.virtual_env import VirtualPythonEnvironment
 
 
@@ -244,3 +246,21 @@ class TestConda(GenericCreationTests):
             "For a weird reason, installing an invalid package on conda does "
             "not make it exit with an error code."
         )
+
+
+def test_local_python_environment():
+    """Since 'local' environment does not support installation of extra dependencies
+    unlike virtualenv/conda, we can't use the generic test suite for it."""
+
+    local_env = LocalPythonEnvironment()
+    assert local_env.exists()
+
+    connection_key = local_env.create()
+    with local_env.open_connection(connection_key) as connection:
+        assert (
+            connection.run(partial(eval, "__import__('sys').exec_prefix"))
+            == sys.exec_prefix
+        )
+
+    with pytest.raises(NotImplementedError):
+        local_env.destroy(connection_key)

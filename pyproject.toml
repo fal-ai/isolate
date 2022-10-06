@@ -17,6 +17,7 @@ server = ["flask", "marshmallow"]
 [tool.poetry.plugins."isolate.backends"]
 "virtualenv" = "isolate.backends.virtual_env:VirtualPythonEnvironment"
 "conda" = "isolate.backends.conda:CondaEnvironment"
+"local" = "isolate.backends.local:LocalPythonEnvironment"
 
 [build-system]
 requires = ["poetry-core>=1.1.0"]
