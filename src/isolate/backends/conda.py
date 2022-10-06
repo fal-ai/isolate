@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 import shutil
 import subprocess
@@ -9,7 +8,12 @@ from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
-from isolate.backends.common import cache_static, logged_io, rmdir_on_fail
+from isolate.backends.common import (
+    cache_static,
+    logged_io,
+    rmdir_on_fail,
+    sha256_digest_of,
+)
 from isolate.backends.connections import PythonIPC
 from isolate.backends.context import GLOBAL_CONTEXT, ContextType
 
@@ -38,7 +42,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     @property
     def key(self) -> str:
-        return hashlib.sha256(" ".join(self.packages).encode()).hexdigest()
+        return sha256_digest_of(*self.packages)
 
     def create(self) -> Path:
         path = self.context.get_cache_dir(self) / self.key

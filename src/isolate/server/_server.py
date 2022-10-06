@@ -1,9 +1,8 @@
 import secrets
 import threading
-from typing import Dict, Final
+from typing import Dict
 
 from flask import Flask, request
-from marshmallow import ValidationError
 
 from isolate import prepare_environment
 from isolate.backends import BaseEnvironment
@@ -27,7 +26,7 @@ app = Flask(__name__)
 
 ENV_STORE: Dict[str, BaseEnvironment] = {}
 RUN_STORE: Dict[str, RunInfo] = {}
-MAX_JOIN_WAIT: Final[float] = 1
+MAX_JOIN_WAIT = 1
 
 
 @app.route("/environments/create", methods=["POST"])
@@ -49,10 +48,10 @@ def create_environment():
 @app.route("/environments/runs", methods=["POST"])
 @wrap_validation_errors
 def run_environment():
-    """Run the function (serialized with the serialization method specified
+    """Run the function (serialized with the `serialization_backend` specified
     as a query parameter) from the POST'd data on the specified environment.
     It will return a new token that can be used to check the status of the run
-    periodically through /environment/status endpoint."""
+    periodically through `/environment/runs/<token>/status` endpoint."""
     data = with_schema(EnvironmentRun, request.args)
     env = load_token(ENV_STORE, data["environment_token"])
 
@@ -81,9 +80,11 @@ def run_environment():
 @app.route("/environments/runs/<token>/status", methods=["GET"])
 @wrap_validation_errors
 def get_run_status(token):
-    """Poll for the status of an environment. Returns the logs
-    collected up to that point and a boolean indicating whether
-    the run is complete is done."""
+    """Poll for the status of an environment. Returns all the logs
+    (unless the starting point is specified through `logs_start` query
+    parameter) and a boolean indicating whether the run is finished.
+
+    Can be accessed even after the run is finished."""
 
     data = with_schema(StatusRequest, request.args)
 
