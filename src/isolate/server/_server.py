@@ -60,7 +60,8 @@ def check_auth(f):
                 return error(code=401, message="Invalid token")
 
         if not token and app.config.get("USER_NAME", False):
-            return error(code=401, message="A valid token is missing")
+            return error(code=401, message="Isolate server is configured with the authentication mode, but no authentication token was passed")
+            ```
 
         return f(*args, **kwargs)
 
