@@ -1,4 +1,4 @@
-# This file defines an "isolate" agent for inter-process communication over
+# This file defines an "insulate" agent for inter-process communication over
 # sockets. It is spawned by the controller process with a single argument (a
 # base64 encoded server address) and expected to go through the following procedures:
 #   1. Decode the given address
@@ -72,7 +72,7 @@ def child_connection(
     )
 
 
-IS_DEBUG_MODE = os.getenv("ISOLATE_ENABLE_DEBUGGING") == "1"
+IS_DEBUG_MODE = os.getenv("INSULATE_ENABLE_DEBUGGING") == "1"
 DEBUG_TIMEOUT = 60 * 15
 
 
@@ -86,7 +86,7 @@ def run_client(
     # so we want to have a smooth way into the process and see
     # what is really going on in the case of errors.
     #
-    # For using the debug mode, you first need to set ISOLATE_ENABLE_DEBUGGING
+    # For using the debug mode, you first need to set INSULATE_ENABLE_DEBUGGING
     # environment variable to "1" from your controller process. This will
     # make the isolated process hang at the initialization, and make it print
     # the instructions to connect to the controller process.

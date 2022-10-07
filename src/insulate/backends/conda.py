@@ -7,20 +7,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
-from isolate.backends import BaseEnvironment, EnvironmentCreationError
-from isolate.backends.common import (
+from insulate.backends import BaseEnvironment, EnvironmentCreationError
+from insulate.backends.common import (
     cache_static,
     logged_io,
     rmdir_on_fail,
     sha256_digest_of,
 )
-from isolate.backends.connections import PythonIPC
-from isolate.backends.context import GLOBAL_CONTEXT, ContextType
+from insulate.backends.connections import PythonIPC
+from insulate.backends.context import GLOBAL_CONTEXT, ContextType
 
 # Specify the path where the conda binary might reside in (or
 # mamba, if it is the preferred one).
 _CONDA_COMMAND = os.environ.get("CONDA_EXE", "conda")
-_ISOLATE_CONDA_HOME = os.getenv("ISOLATE_CONDA_HOME")
+_INSULATE_CONDA_HOME = os.getenv("INSULATE_CONDA_HOME")
 
 
 @dataclass
@@ -91,7 +91,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
 @cache_static
 def _get_conda_executable() -> Path:
-    for path in [_ISOLATE_CONDA_HOME, None]:
+    for path in [_INSULATE_CONDA_HOME, None]:
         conda_path = shutil.which(_CONDA_COMMAND, path=path)
         if conda_path is not None:
             return Path(conda_path)
@@ -99,6 +99,6 @@ def _get_conda_executable() -> Path:
         # TODO: we should probably show some instructions on how you
         # can install conda here.
         raise FileNotFoundError(
-            "Could not find conda executable. If conda executable is not available by default, please point isolate "
-            " to the path where conda binary is available 'ISOLATE_CONDA_HOME'."
+            "Could not find conda executable. If conda executable is not available by default, "
+            "please point insulate to the path where conda binary is available 'INSULATE_CONDA_HOME'."
         )
