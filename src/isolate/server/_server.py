@@ -20,6 +20,7 @@ from isolate.server._utils import (
     success,
     wrap_validation_errors,
 )
+from isolate.server._auth import create_auth_token
 
 app = Flask(__name__)
 
@@ -27,6 +28,19 @@ app = Flask(__name__)
 ENV_STORE: Dict[str, BaseEnvironment] = {}
 RUN_STORE: Dict[str, RunInfo] = {}
 MAX_JOIN_WAIT = 1
+
+app.config.from_prefixed_env("FAL")
+
+if app.config.get('USER_NAME', False):
+    app.config['SECRET_KEY'] = secrets.token_urlsafe()
+    app.config['AUTH_TOKEN'] = create_auth_token(
+        app.config['USER_NAME'],
+        app.config['SECRET_KEY'])
+
+    print("++++")
+    print("The following line contains your authentication token. Put it in 'x-access-token' header.")
+    print(app.config['AUTH_TOKEN'])
+    print("++++")
 
 
 @app.route("/environments/create", methods=["POST"])
@@ -100,3 +114,4 @@ def get_run_status(token):
         is_done=run_info.is_done,
         logs=[log.serialize() for log in new_logs],
     )
+
