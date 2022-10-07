@@ -13,7 +13,7 @@ from isolate.server._models import (
     StatusRequest,
     with_schema,
 )
-from isolate.server._runs import RunInfo, dehydrated_dual_env_run
+from isolate.server._runs import RunInfo, run_serialized_function_in_env
 from isolate.server._utils import (
     error,
     load_token,
@@ -29,7 +29,7 @@ RUN_STORE: Dict[str, RunInfo] = {}
 MAX_JOIN_WAIT = 1
 
 
-@app.route("/environments/create", methods=["POST"])
+@app.route("/environments", methods=["POST"])
 @wrap_validation_errors
 def create_environment():
     """Create a new environment from the POST'd definition
@@ -68,7 +68,7 @@ def run_environment():
     # We start running the environment (both the build and the run, actually)
     # in a separate thread, since we don't want this request to block.
     run_info.bound_thread = threading.Thread(
-        target=dehydrated_dual_env_run,
+        target=run_serialized_function_in_env,
         args=(env, request.data, run_info.done_signal),
     )
     run_info.bound_thread.start()

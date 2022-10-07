@@ -36,7 +36,7 @@ class RunInfo:
         return self.done_signal.is_set()
 
 
-def dehydrated_dual_env_run(
+def run_serialized_function_in_env(
     environment: BaseEnvironment,
     data: bytes,
     done_event: threading.Event,

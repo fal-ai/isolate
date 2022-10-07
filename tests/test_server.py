@@ -24,7 +24,7 @@ class APIWrapper:
 
     def create(self, kind: str, **configuration: Any) -> str:
         response = self.client.post(
-            "/environments/create",
+            "/environments",
             json={
                 "kind": kind,
                 "configuration": configuration,
