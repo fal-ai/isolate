@@ -53,8 +53,8 @@ def check_auth(f):
             token = request.headers['x-access-token']
             if validate_auth_token(
                     token,
-                    app.config.get("USER_NAME", False),
-                    app.config.get("SECRET_KEY", False)):
+                    app.config["USER_NAME"],
+                    app.config["SECRET_KEY"]):
                 return f(*args, **kwargs)
             else:
                 return error(code=401, message="Invalid token")
