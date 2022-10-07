@@ -10,7 +10,7 @@ def validate_auth_token(token: str, user_key: str, secret_key: str) -> bool:
     # Decode user_key from JWT
     try:
         decoded = jwt.decode(token, secret_key, algorithms=[ALGORITHM])
-        decoded_key = decoded['user_key']
+        decoded_key = decoded['key']
         return user_key == decoded_key
-    except:
-        raise jwt.InvalidTokenError
+    except Exception:
+        return False

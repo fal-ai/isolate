@@ -1,8 +1,10 @@
+from functools import wraps
 import secrets
 import threading
 from typing import Dict
 
 from flask import Flask, request
+from marshmallow import validate
 
 from isolate import prepare_environment
 from isolate.backends import BaseEnvironment
@@ -20,7 +22,7 @@ from isolate.server._utils import (
     success,
     wrap_validation_errors,
 )
-from isolate.server._auth import create_auth_token
+from isolate.server._auth import create_auth_token, validate_auth_token
 
 app = Flask(__name__)
 
@@ -42,9 +44,32 @@ if app.config.get('USER_NAME', False):
     print(app.config['AUTH_TOKEN'])
     print("++++")
 
+# Authentication decorator
+def check_auth(f):
+    @wraps(f)
+    def decorator(*args, **kwargs):
+        token = None
+        if 'x-access-token' in request.headers:
+            token = request.headers['x-access-token']
+            if validate_auth_token(
+                    token,
+                    app.config.get("USER_NAME", False),
+                    app.config.get("SECRET_KEY", False)):
+                return f(*args, **kwargs)
+            else:
+                return error(code=401, message="Invalid token")
+
+        if not token and app.config.get("USER_NAME", False):
+            return error(code=401, message="A valid token is missing")
+
+        return f(*args, **kwargs)
+
+    return decorator
+
 
 @app.route("/environments/create", methods=["POST"])
 @wrap_validation_errors
+@check_auth
 def create_environment():
     """Create a new environment from the POST'd definition
     (as JSON). Returns the token that can be used for running
@@ -61,6 +86,7 @@ def create_environment():
 
 @app.route("/environments/runs", methods=["POST"])
 @wrap_validation_errors
+@check_auth
 def run_environment():
     """Run the function (serialized with the `serialization_backend` specified
     as a query parameter) from the POST'd data on the specified environment.
@@ -93,6 +119,7 @@ def run_environment():
 
 @app.route("/environments/runs/<token>/status", methods=["GET"])
 @wrap_validation_errors
+@check_auth
 def get_run_status(token):
     """Poll for the status of an environment. Returns all the logs
     (unless the starting point is specified through `logs_start` query
@@ -114,4 +141,3 @@ def get_run_status(token):
         is_done=run_info.is_done,
         logs=[log.serialize() for log in new_logs],
     )
-
