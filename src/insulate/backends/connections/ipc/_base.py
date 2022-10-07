@@ -10,19 +10,19 @@ from multiprocessing.connection import ConnectionWrapper, Listener
 from pathlib import Path
 from typing import Any, ContextManager, Dict, Iterator, List, Tuple, Union
 
-from isolate.backends import (
+from insulate.backends import (
     BasicCallable,
     CallResultType,
     EnvironmentConnection,
     UserException,
 )
-from isolate.backends.common import (
+from insulate.backends.common import (
     get_executable_path,
     logged_io,
     python_path_for,
 )
-from isolate.backends.connections.ipc import agent
-from isolate.backends.context import LogLevel, LogSource
+from insulate.backends.connections.ipc import agent
+from insulate.backends.context import LogLevel, LogSource
 
 
 class _MultiFormatListener(Listener):

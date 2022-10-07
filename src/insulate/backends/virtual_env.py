@@ -7,15 +7,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Union
 
-from isolate.backends import BaseEnvironment, EnvironmentCreationError
-from isolate.backends.common import (
+from insulate.backends import BaseEnvironment, EnvironmentCreationError
+from insulate.backends.common import (
     get_executable_path,
     logged_io,
     rmdir_on_fail,
     sha256_digest_of,
 )
-from isolate.backends.connections import PythonIPC
-from isolate.backends.context import GLOBAL_CONTEXT, ContextType
+from insulate.backends.connections import PythonIPC
+from insulate.backends.context import GLOBAL_CONTEXT, ContextType
 
 
 @dataclass

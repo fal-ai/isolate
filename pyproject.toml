@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "isolate"
+name = "insulate"
 version = "0.1.0"
 description = "Managed isolated environments for Python"
 authors = ["Features & Labels <hello@fal.ai>"]
@@ -14,10 +14,10 @@ marshmallow = { version = "*", optional = true }
 [tool.poetry.extras]
 server = ["flask", "marshmallow"]
 
-[tool.poetry.plugins."isolate.backends"]
-"virtualenv" = "isolate.backends.virtual_env:VirtualPythonEnvironment"
-"conda" = "isolate.backends.conda:CondaEnvironment"
-"local" = "isolate.backends.local:LocalPythonEnvironment"
+[tool.poetry.plugins."insulate.backends"]
+"virtualenv" = "insulate.backends.virtual_env:VirtualPythonEnvironment"
+"conda" = "insulate.backends.conda:CondaEnvironment"
+"local" = "insulate.backends.local:LocalPythonEnvironment"
 
 [build-system]
 requires = ["poetry-core>=1.1.0"]

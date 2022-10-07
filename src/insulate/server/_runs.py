@@ -8,19 +8,19 @@ from functools import partial
 from pathlib import Path
 from typing import Any, List, Optional
 
-from isolate.backends import (
+from insulate.backends import (
     BaseEnvironment,
     EnvironmentCreationError,
     UserException,
 )
-from isolate.backends.common import run_serialized
-from isolate.backends.connections import ExtendedPythonIPC
-from isolate.backends.context import Log, LogLevel, LogSource
+from insulate.backends.common import run_serialized
+from insulate.backends.connections import ExtendedPythonIPC
+from insulate.backends.context import Log, LogLevel, LogSource
 
 # TODO: This is currently a server-level setting, but if it makes sense
 # we can add it as a configuration variable to venv/conda etc (all the
 # environments that use Python IPC).
-INHERIT_FROM_LOCAL = os.getenv("ISOLATE_INHERIT_FROM_LOCAL") == "1"
+INHERIT_FROM_LOCAL = os.getenv("INSULATE_INHERIT_FROM_LOCAL") == "1"
 
 
 @dataclass
@@ -53,7 +53,7 @@ def run_serialized_function_in_env(
 
             # Probably something wrong with the environment definition (e.g
             # pip installing something that is not on PyPI), so we don't need
-            # to crash the whole application isolate server.
+            # to crash the whole application insulate server.
             return None
 
         inherit_from = []
@@ -62,7 +62,7 @@ def run_serialized_function_in_env(
             # sysconfig, but Debian is a notorious outlier so it should be noted
             # that this won't work with 'system Python' on debian based systems.
             #
-            # You can still inherit from a venv you activated to run the isolate
+            # You can still inherit from a venv you activated to run the insulate
             # server though (even on debian). Always use virtual environments.
             local_env = Path(sys.exec_prefix)
             inherit_from.append(local_env)

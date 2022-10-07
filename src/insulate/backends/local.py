@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Dict
 
-from isolate.backends import BaseEnvironment
-from isolate.backends.common import sha256_digest_of
-from isolate.backends.connections import PythonIPC
-from isolate.backends.context import GLOBAL_CONTEXT, ContextType
+from insulate.backends import BaseEnvironment
+from insulate.backends.common import sha256_digest_of
+from insulate.backends.connections import PythonIPC
+from insulate.backends.context import GLOBAL_CONTEXT, ContextType
 
 
 @dataclass
