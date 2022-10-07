@@ -1,5 +1,5 @@
 from isolate.backends.connections.ipc import (
-    DualPythonIPC,
+    ExtendedPythonIPC,
     IsolatedProcessConnection,
     PythonIPC,
 )

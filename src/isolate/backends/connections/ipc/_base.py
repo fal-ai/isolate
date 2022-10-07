@@ -4,11 +4,11 @@ import os
 import subprocess
 import time
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from multiprocessing.connection import ConnectionWrapper, Listener
 from pathlib import Path
-from typing import Any, ContextManager, Iterator, List, Tuple, Union
+from typing import Any, ContextManager, Dict, Iterator, List, Tuple, Union
 
 from isolate.backends import (
     BasicCallable,
@@ -208,8 +208,8 @@ class PythonIPC(IsolatedProcessConnection):
 
     def _get_python_env(self):
         return {
-            "PYTHONUNBUFFERED": "1",  # We want to stream the logs as they come.
             **os.environ,
+            "PYTHONUNBUFFERED": "1",  # We want to stream the logs as they come.
         }
 
     def _get_python_cmd(
@@ -247,26 +247,36 @@ class PythonIPC(IsolatedProcessConnection):
         self.log(line, level=level, source=source)
 
 
+# TODO: should we actually merge this with PythonIPC since it is
+# simple enough and interchangeable?
 @dataclass
-class DualPythonIPC(PythonIPC):
-    """A dual-environment Python IPC implementation that
-    can run the agent process in an environment with its
-    Python and also load the shared libraries from a different
-    one.
+class ExtendedPythonIPC(PythonIPC):
+    """A Python IPC implementation that can also inherit packages from
+    other environments (e.g. a virtual environment that has the core
+    requirements like `dill` can be inherited on a new environment).
 
-    The user of DualPythonIPC must ensure that the Python versions from
-    both of these environments are the same. Using different versions is
-    an undefined behavior.
+    The given extra_inheritance_paths should be a list of paths that
+    comply with the sysconfig, and it should be ordered in terms of
+    priority (e.g. the first path will be the most prioritized one,
+    right after the current environment). So if two environments have
+    conflicting versions of the same package, the first one present in
+    the inheritance chain will be used.
+
+    This works by including the `site-packages` directory of the
+    inherited environment in the `PYTHONPATH` when starting the
+    agent process.
     """
 
-    secondary_path: Path
+    extra_inheritance_paths: List[Path] = field(default_factory=list)
 
-    def _get_python_env(self):
-        # We are going to use the primary environment to run the Python
-        # interpreter, but at the same time we are going to inherit all
-        # the packages from the secondary environment.
+    def _get_python_env(self) -> Dict[str, str]:
+        env_variables = super()._get_python_env()
 
-        # The search order is important, we want the primary path to
-        # take precedence.
-        python_path = python_path_for(self.environment_path, self.secondary_path)
-        return {"PYTHONPATH": python_path, **super()._get_python_env()}
+        if self.extra_inheritance_paths:
+            # The order here should reflect the order of the inheritance
+            # where the actual environment already takes precedence.
+            python_path = python_path_for(
+                self.environment_path, *self.extra_inheritance_paths
+            )
+            env_variables["PYTHONPATH"] = python_path
+        return env_variables

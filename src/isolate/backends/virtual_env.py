@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-import hashlib
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional, Union
 
-from isolate.backends import BaseEnvironment
+from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import (
     get_executable_path,
     logged_io,
     rmdir_on_fail,
+    sha256_digest_of,
 )
 from isolate.backends.connections import PythonIPC
 from isolate.backends.context import GLOBAL_CONTEXT, ContextType
@@ -22,6 +23,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "virtualenv"
 
     requirements: List[str]
+    constraints_file: Optional[os.PathLike] = None
 
     @classmethod
     def from_config(
@@ -30,13 +32,53 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         context: ContextType = GLOBAL_CONTEXT,
     ) -> BaseEnvironment:
         requirements = config.get("requirements", [])
-        environment = cls(requirements)
+        # TODO: we probably should validate that this file actually exists
+        constraints_file = config.get("constraints_file", None)
+        environment = cls(
+            requirements=requirements,
+            constraints_file=constraints_file,
+        )
         environment.set_context(context)
         return environment
 
     @property
     def key(self) -> str:
-        return hashlib.sha256(" ".join(self.requirements).encode()).hexdigest()
+        if self.constraints_file is not None:
+            with open(self.constraints_file) as stream:
+                constraints = stream.read().splitlines()
+        else:
+            constraints = []
+        return sha256_digest_of(*self.requirements, *constraints)
+
+    def install_requirements(self, path: Path) -> None:
+        """Install the requirements of this environment using 'pip' to the
+        given virtualenv path.
+
+        If there are any constraint files specified, they will be also passed to
+        the package resolver.
+        """
+        if not self.requirements:
+            return None
+
+        self.log(f"Installing requirements: {', '.join(self.requirements)}")
+
+        pip_cmd: List[Union[str, os.PathLike]] = [
+            get_executable_path(path, "pip"),
+            "install",
+            *self.requirements,
+        ]
+        if self.constraints_file:
+            pip_cmd.extend(["-c", self.constraints_file])
+
+        with logged_io(self.log) as (stdout, stderr):
+            try:
+                subprocess.check_call(
+                    pip_cmd,
+                    stdout=stdout,
+                    stderr=stderr,
+                )
+            except subprocess.SubprocessError as exc:
+                raise EnvironmentCreationError("Failure during 'pip install'.") from exc
 
     def create(self) -> Path:
         from virtualenv import cli_run
@@ -47,17 +89,15 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
 
         with rmdir_on_fail(path):
             self.log(f"Creating the environment at '{path}'")
-            cli_run([str(path)])
 
-            if self.requirements:
-                self.log(f"Installing requirements: {', '.join(self.requirements)}")
-                pip_path = get_executable_path(path, "pip")
-                with logged_io(self.log) as (stdout, stderr):
-                    subprocess.run(
-                        [str(pip_path), "install", *self.requirements],
-                        stdout=stdout,
-                        stderr=stderr,
-                    )
+            try:
+                cli_run([str(path)])
+            except OSError as exc:
+                raise EnvironmentCreationError(
+                    f"Failed to create the environment at '{path}'"
+                ) from exc
+
+            self.install_requirements(path)
 
         return path
 

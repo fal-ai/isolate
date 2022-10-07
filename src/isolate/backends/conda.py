@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 import shutil
 import subprocess
@@ -8,8 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
-from isolate.backends import BaseEnvironment
-from isolate.backends.common import cache_static, logged_io, rmdir_on_fail
+from isolate.backends import BaseEnvironment, EnvironmentCreationError
+from isolate.backends.common import (
+    cache_static,
+    logged_io,
+    rmdir_on_fail,
+    sha256_digest_of,
+)
 from isolate.backends.connections import PythonIPC
 from isolate.backends.context import GLOBAL_CONTEXT, ContextType
 
@@ -38,7 +42,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     @property
     def key(self) -> str:
-        return hashlib.sha256(" ".join(self.packages).encode()).hexdigest()
+        return sha256_digest_of(*self.packages)
 
     def create(self) -> Path:
         path = self.context.get_cache_dir(self) / self.key
@@ -52,20 +56,25 @@ class CondaEnvironment(BaseEnvironment[Path]):
                 self.log(f"Installing packages: {', '.join(self.packages)}")
 
             with logged_io(self.log) as (stdout, stderr):
-                subprocess.check_call(
-                    [
-                        conda_executable,
-                        "create",
-                        "--yes",
-                        # The environment will be created under $BASE_CACHE_DIR/conda
-                        # so that in the future we can reuse it.
-                        "--prefix",
-                        path,
-                        *self.packages,
-                    ],
-                    stdout=stdout,
-                    stderr=stderr,
-                )
+                try:
+                    subprocess.check_call(
+                        [
+                            conda_executable,
+                            "create",
+                            "--yes",
+                            # The environment will be created under $BASE_CACHE_DIR/conda
+                            # so that in the future we can reuse it.
+                            "--prefix",
+                            path,
+                            *self.packages,
+                        ],
+                        stdout=stdout,
+                        stderr=stderr,
+                    )
+                except subprocess.SubprocessError as exc:
+                    raise EnvironmentCreationError(
+                        "Failure during 'conda create'"
+                    ) from exc
 
         return path
 

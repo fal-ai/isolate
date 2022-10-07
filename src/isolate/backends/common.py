@@ -1,18 +1,16 @@
 from __future__ import annotations
 
 import functools
+import hashlib
 import importlib
 import os
 import shutil
 import sysconfig
 import threading
 from contextlib import contextmanager
-from functools import partial
+from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, Tuple
-
-if TYPE_CHECKING:
-    from isolate.backends._base import BaseEnvironment
+from typing import Any, Callable, Iterator, Optional, Tuple
 
 
 @contextmanager
@@ -167,3 +165,12 @@ def run_serialized(serialization_backend_name: str, data: bytes) -> Any:
     serialization_backend = importlib.import_module(serialization_backend_name)
     executable = serialization_backend.loads(data)
     return executable()
+
+
+@lru_cache(maxsize=None)
+def sha256_digest_of(*unique_fields: str, _join_char: str = "\n") -> str:
+    """Return the SHA256 digest that corresponds to the combined version
+    of 'unique_fields. The order is preserved."""
+
+    inner_text = _join_char.join(unique_fields).encode()
+    return hashlib.sha256(inner_text).hexdigest()
