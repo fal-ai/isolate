@@ -1,8 +1,10 @@
+from functools import wraps
 import secrets
 import threading
 from typing import Dict
 
 from flask import Flask, request
+from marshmallow import validate
 
 from isolate import prepare_environment
 from isolate.backends import BaseEnvironment
@@ -20,6 +22,7 @@ from isolate.server._utils import (
     success,
     wrap_validation_errors,
 )
+from isolate.server._auth import create_auth_token, validate_auth_token
 
 app = Flask(__name__)
 
@@ -28,9 +31,47 @@ ENV_STORE: Dict[str, BaseEnvironment] = {}
 RUN_STORE: Dict[str, RunInfo] = {}
 MAX_JOIN_WAIT = 1
 
+app.config.from_prefixed_env("FAL")
+
+if app.config.get('USER_NAME', False):
+    app.config['SECRET_KEY'] = secrets.token_urlsafe()
+    app.config['AUTH_TOKEN'] = create_auth_token(
+        app.config['USER_NAME'],
+        app.config['SECRET_KEY'])
+
+    print("++++")
+    print("The following line contains your authentication token. Put it in 'x-access-token' header.")
+    print(app.config['AUTH_TOKEN'])
+    print("++++")
+
+# Authentication decorator
+def check_auth(f):
+    @wraps(f)
+    def decorator(*args, **kwargs):
+        token = None
+        if app.config.get('USER_NAME', False):
+            if 'x-access-token' in request.headers:
+                token = request.headers['x-access-token']
+                if validate_auth_token(
+                        token,
+                        app.config["USER_NAME"],
+                        app.config["SECRET_KEY"]):
+                    return f(*args, **kwargs)
+                else:
+                    return error(code=401, message="Invalid token")
+            else:
+                return error(
+                    code=401,
+                    message="Isolate server is configured with the authentication mode, but no authentication token was passed")
+
+        return f(*args, **kwargs)
+
+    return decorator
+
 
 @app.route("/environments", methods=["POST"])
 @wrap_validation_errors
+@check_auth
 def create_environment():
     """Create a new environment from the POST'd definition
     (as JSON). Returns the token that can be used for running
@@ -47,6 +88,7 @@ def create_environment():
 
 @app.route("/environments/runs", methods=["POST"])
 @wrap_validation_errors
+@check_auth
 def run_environment():
     """Run the function (serialized with the `serialization_backend` specified
     as a query parameter) from the POST'd data on the specified environment.
@@ -79,6 +121,7 @@ def run_environment():
 
 @app.route("/environments/runs/<token>/status", methods=["GET"])
 @wrap_validation_errors
+@check_auth
 def get_run_status(token):
     """Poll for the status of an environment. Returns all the logs
     (unless the starting point is specified through `logs_start` query

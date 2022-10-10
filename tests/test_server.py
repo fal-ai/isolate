@@ -186,3 +186,91 @@ def test_environment_building_error(api_wrapper: APIWrapper, monkeypatch: Any) -
         "Failed to create the environment. Aborting the run.",
     )
     assert not user_logs
+
+
+def test_isolate_server_auth_error(
+    api_wrapper: APIWrapper,
+    monkeypatch: Any,
+) -> None:
+    inherit_from_local(monkeypatch)
+
+    # Activates authentication requirement
+    monkeypatch.setitem(app.config, 'USER_NAME', 'testuser')
+
+    requirements = ["pyjokes==0.6.0"]
+
+    response = api_wrapper.client.post(
+        "/environments/create",
+        json={
+            "kind": "virtualenv",
+            "configuration": {'requirements': requirements}
+        },
+    )
+
+    assert response.status_code == 401
+
+    data = response.json
+
+    assert data["status"] == "error"
+    assert data["message"] == "Isolate server is configured with the authentication mode, but no authentication token was passed"
+
+
+def test_isolate_server_auth_invalid_token(
+    api_wrapper: APIWrapper,
+    monkeypatch: Any,
+) -> None:
+    inherit_from_local(monkeypatch)
+
+    # Activates authentication requirement
+    monkeypatch.setitem(app.config, 'USER_NAME', 'testuser')
+
+    requirements = ["pyjokes==0.6.0"]
+
+    response = api_wrapper.client.post(
+        "/environments/create",
+        headers={
+            "x-access-token": "invalid token"
+        },
+        json={
+            "kind": "virtualenv",
+            "configuration": {'requirements': requirements}
+        },
+    )
+
+    assert response.status_code == 401
+
+    data = response.json
+
+    assert data["status"] == "error"
+    assert data["message"] == "Invalid token"
+
+
+def test_isolate_server_auth(
+    api_wrapper: APIWrapper,
+    monkeypatch: Any,
+) -> None:
+    from isolate.server._auth import create_auth_token
+    inherit_from_local(monkeypatch)
+
+    # Activates authentication requirement
+    monkeypatch.setitem(app.config, 'USER_NAME', 'testuser')
+    monkeypatch.setitem(app.config, 'SECRET_KEY', 'testkey')
+
+    token = create_auth_token(app.config['USER_NAME'], app.config['SECRET_KEY'])
+
+    requirements = ["pyjokes==0.6.0"]
+
+    response = api_wrapper.client.post(
+        "/environments/create",
+        headers={
+            "x-access-token": token
+        },
+        json={
+            "kind": "virtualenv",
+            "configuration": {'requirements': requirements}
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json["status"] == 'success'
+
