@@ -13,7 +13,7 @@ from typing import (
     TypeVar,
 )
 
-from insulate.backends.context import (
+from isolate.backends.context import (
     GLOBAL_CONTEXT,
     ContextType,
     Log,

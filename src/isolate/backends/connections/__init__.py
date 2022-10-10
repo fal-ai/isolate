@@ -1,4 +1,4 @@
-from insulate.backends.connections.ipc import (
+from isolate.backends.connections.ipc import (
     ExtendedPythonIPC,
     IsolatedProcessConnection,
     PythonIPC,

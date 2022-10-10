@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from insulate.backends import BaseEnvironment, UserException
-from insulate.backends.connections import ExtendedPythonIPC, PythonIPC
-from insulate.backends.context import _Context
-from insulate.backends.virtual_env import VirtualPythonEnvironment
+from isolate.backends import BaseEnvironment, UserException
+from isolate.backends.connections import ExtendedPythonIPC, PythonIPC
+from isolate.backends.context import _Context
+from isolate.backends.virtual_env import VirtualPythonEnvironment
 
 
 class FakeEnvironment(BaseEnvironment):

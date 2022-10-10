@@ -1,8 +1,8 @@
-# Insulate
+# Isolate
 
-> :warning: **Insulate** is still very young, and none of the APIs should be considered stable.
+> :warning: **Isolate** is still very young, and none of the APIs should be considered stable.
 
-Run any Python function, with any dependencies, in any machine you want. Insulate offers a
+Run any Python function, with any dependencies, in any machine you want. Isolate offers a
 pluggable end-to-end solution for building, managing, and using isolated environments (virtualenv,
 conda, and possibly more).
 
@@ -30,6 +30,6 @@ rest of your code running in a different machine).
 However, unlike "virtual environment" concept, each of the projects that tried to tackle
 this problem lacked a universal interface which one can simply define a set of requirements
 (this might be dependencies, size of the machine that is needed to run it, or something completely
-different) and can change it without any loss. Insulate is working towards a future where this
+different) and can change it without any loss. Isolate is working towards a future where this
 transititon is as seamless as the transition from your local environment to the remote
 environment.

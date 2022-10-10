@@ -9,13 +9,13 @@ from typing import Any, Dict, Iterable, Iterator, List, Tuple
 import pytest
 from flask.testing import FlaskClient
 
-from insulate.server import app
-from insulate.server._server import ENV_STORE, RUN_STORE
+from isolate.server import app
+from isolate.server._server import ENV_STORE, RUN_STORE
 
 REPO_DIR = Path(__file__).parent.parent
 assert (
-    REPO_DIR.exists() and REPO_DIR.name == "insulate"
-), "This test should have access to insulate as an installable package."
+    REPO_DIR.exists() and REPO_DIR.name == "isolate"
+), "This test should have access to isolate as an installable package."
 
 
 @dataclass
@@ -113,8 +113,8 @@ def split_logs(logs: Iterable[Dict[str, str]]) -> Tuple[List[Tuple[str, str]], .
 
 
 def inherit_from_local(monkeypatch: Any, value: bool = True) -> None:
-    """Enables the inherit from local mode for the insulate server."""
-    monkeypatch.setattr("insulate.server._runs.INHERIT_FROM_LOCAL", value)
+    """Enables the inherit from local mode for the isolate server."""
+    monkeypatch.setattr("isolate.server._runs.INHERIT_FROM_LOCAL", value)
 
 
 @pytest.fixture
@@ -126,7 +126,7 @@ def api_wrapper():
 
 
 @pytest.mark.parametrize("inherit_local", [True, False])
-def test_insulate_server(
+def test_isolate_server(
     api_wrapper: APIWrapper,
     inherit_local: bool,
     monkeypatch: Any,
@@ -135,10 +135,13 @@ def test_insulate_server(
 
     requirements = ["pyjokes==0.6.0"]
     if not inherit_local:
-        # The agent process needs dill (and insulate) to actually
+        # The agent process needs dill (and isolate) to actually
         # deserialize the given function, so they need to be installed
         # when we are not inheriting the local environment.
         requirements.append("dill==0.3.5.1")
+
+        # TODO: this can probably install the local version of isolate
+        # you have when you are running the tests.
         requirements.append(str(REPO_DIR))
 
     environment_token = api_wrapper.create("virtualenv", requirements=requirements)

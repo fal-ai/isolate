@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING, Any, Dict, Type
 import importlib_metadata
 
 if TYPE_CHECKING:
-    from insulate.backends import BaseEnvironment
+    from isolate.backends import BaseEnvironment
 
 # Any new environments can register themselves during package installation
-# time by simply adding an entry point to the `insulate.environment` group.
-_ENTRY_POINT = "insulate.backends"
+# time by simply adding an entry point to the `isolate.environment` group.
+_ENTRY_POINT = "isolate.backends"
 
 
 _ENVIRONMENT_REGISTRY: Dict[str, Type["BaseEnvironment"]] = {}
@@ -33,7 +33,7 @@ def prepare_environment(
     **kwargs: Any,
 ) -> BaseEnvironment:
     """Get the environment for the given `kind` with the given `config`."""
-    from insulate.backends.context import GLOBAL_CONTEXT
+    from isolate.backends.context import GLOBAL_CONTEXT
 
     registered_env_cls = _ENVIRONMENT_REGISTRY.get(kind)
     if not registered_env_cls:
