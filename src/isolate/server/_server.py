@@ -49,19 +49,20 @@ def check_auth(f):
     @wraps(f)
     def decorator(*args, **kwargs):
         token = None
-        if 'x-access-token' in request.headers:
-            token = request.headers['x-access-token']
-            if validate_auth_token(
-                    token,
-                    app.config["USER_NAME"],
-                    app.config["SECRET_KEY"]):
-                return f(*args, **kwargs)
+        if app.config.get('USER_NAME', False):
+            if 'x-access-token' in request.headers:
+                token = request.headers['x-access-token']
+                if validate_auth_token(
+                        token,
+                        app.config["USER_NAME"],
+                        app.config["SECRET_KEY"]):
+                    return f(*args, **kwargs)
+                else:
+                    return error(code=401, message="Invalid token")
             else:
-                return error(code=401, message="Invalid token")
-
-        if not token and app.config.get("USER_NAME", False):
-            return error(code=401, message="Isolate server is configured with the authentication mode, but no authentication token was passed")
-            ```
+                return error(
+                    code=401,
+                    message="Isolate server is configured with the authentication mode, but no authentication token was passed")
 
         return f(*args, **kwargs)
 

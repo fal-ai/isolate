@@ -195,7 +195,7 @@ def test_isolate_server_auth_error(
     inherit_from_local(monkeypatch)
 
     # Activates authentication requirement
-    app.config['USER_NAME'] = "testuser"
+    monkeypatch.setitem(app.config, 'USER_NAME', 'testuser')
 
     requirements = ["pyjokes==0.6.0"]
 
@@ -212,7 +212,7 @@ def test_isolate_server_auth_error(
     data = response.json
 
     assert data["status"] == "error"
-    assert data["message"] == "A valid token is missing"
+    assert data["message"] == "Isolate server is configured with the authentication mode, but no authentication token was passed"
 
 
 def test_isolate_server_auth_invalid_token(
@@ -222,7 +222,7 @@ def test_isolate_server_auth_invalid_token(
     inherit_from_local(monkeypatch)
 
     # Activates authentication requirement
-    app.config['USER_NAME'] = "testuser"
+    monkeypatch.setitem(app.config, 'USER_NAME', 'testuser')
 
     requirements = ["pyjokes==0.6.0"]
 
@@ -253,8 +253,8 @@ def test_isolate_server_auth(
     inherit_from_local(monkeypatch)
 
     # Activates authentication requirement
-    app.config["USER_NAME"] = "testuser"
-    app.config["SECRET_KEY"] = "testkey"
+    monkeypatch.setitem(app.config, 'USER_NAME', 'testuser')
+    monkeypatch.setitem(app.config, 'SECRET_KEY', 'testkey')
 
     token = create_auth_token(app.config['USER_NAME'], app.config['SECRET_KEY'])
 
