@@ -63,7 +63,7 @@ jobs:
       - name: Publish GitHub
         uses: softprops/action-gh-release@v1
         with:
-          name: fal ${{ env.current_version }}
+          name: isolate ${{ env.current_version }}
           body: ${{ steps.release.outputs.RELEASE_BODY }}
           tag_name: v${{ env.current_version }}
           files: |
