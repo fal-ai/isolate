@@ -200,7 +200,7 @@ def test_isolate_server_auth_error(
     requirements = ["pyjokes==0.6.0"]
 
     response = api_wrapper.client.post(
-        "/environments/create",
+        "/environments",
         json={
             "kind": "virtualenv",
             "configuration": {'requirements': requirements}
@@ -227,7 +227,7 @@ def test_isolate_server_auth_invalid_token(
     requirements = ["pyjokes==0.6.0"]
 
     response = api_wrapper.client.post(
-        "/environments/create",
+        "/environments",
         headers={
             "x-access-token": "invalid token"
         },
@@ -261,7 +261,7 @@ def test_isolate_server_auth(
     requirements = ["pyjokes==0.6.0"]
 
     response = api_wrapper.client.post(
-        "/environments/create",
+        "/environments",
         headers={
             "x-access-token": token
         },
