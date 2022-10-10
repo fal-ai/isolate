@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "isolate"
-version = "0.1.0"
+version = "0.1.0-alpha.0"
 readme = "README.md"
 description = "Managed isolated environments for Python"
 authors = ["Features & Labels <hello@fal.ai>"]
