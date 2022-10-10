@@ -8,12 +8,12 @@ from typing import Any, Dict, List
 
 import pytest
 
-from insulate.backends import BaseEnvironment, EnvironmentCreationError
-from insulate.backends.common import get_executable_path, sha256_digest_of
-from insulate.backends.conda import CondaEnvironment, _get_conda_executable
-from insulate.backends.context import _Context
-from insulate.backends.local import LocalPythonEnvironment
-from insulate.backends.virtual_env import VirtualPythonEnvironment
+from isolate.backends import BaseEnvironment, EnvironmentCreationError
+from isolate.backends.common import get_executable_path, sha256_digest_of
+from isolate.backends.conda import CondaEnvironment, _get_conda_executable
+from isolate.backends.context import _Context
+from isolate.backends.local import LocalPythonEnvironment
+from isolate.backends.virtual_env import VirtualPythonEnvironment
 
 
 class GenericCreationTests:

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Callable, Dict, NewType, Optional
 from platformdirs import user_cache_dir
 
 if TYPE_CHECKING:
-    from insulate.backends import BaseEnvironment
+    from isolate.backends import BaseEnvironment
 
 
 class LogSource(str, Enum):
@@ -97,7 +97,7 @@ ContextType = NewType("ContextType", _Context)
 GLOBAL_CONTEXT = ContextType(
     _Context(
         _base_cache_dir=Path(
-            user_cache_dir("insulate", "insulate"),
+            user_cache_dir("isolate", "isolate"),
         )
     )
 )

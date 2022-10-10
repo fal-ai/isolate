@@ -4,17 +4,17 @@ from typing import Dict
 
 from flask import Flask, request
 
-from insulate import prepare_environment
-from insulate.backends import BaseEnvironment
-from insulate.backends.context import GLOBAL_CONTEXT
-from insulate.server._models import (
+from isolate import prepare_environment
+from isolate.backends import BaseEnvironment
+from isolate.backends.context import GLOBAL_CONTEXT
+from isolate.server._models import (
     Environment,
     EnvironmentRun,
     StatusRequest,
     with_schema,
 )
-from insulate.server._runs import RunInfo, run_serialized_function_in_env
-from insulate.server._utils import (
+from isolate.server._runs import RunInfo, run_serialized_function_in_env
+from isolate.server._utils import (
     error,
     load_token,
     success,
