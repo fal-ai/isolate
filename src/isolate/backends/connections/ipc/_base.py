@@ -26,12 +26,16 @@ from isolate.backends.context import LogLevel, LogSource
 
 
 class _MultiFormatListener(Listener):
+    def __init__(self, backend_name: str, *args: Any, **kwargs: Any) -> None:
+        self.serialization_backend = load_serialization_backend(backend_name)
+        super().__init__(*args, **kwargs)
+
     def accept(self) -> ConnectionWrapper:
         return closing(
             ConnectionWrapper(
                 super().accept(),
-                loads=agent.deserialize_message,
-                dumps=agent.serialize_message,
+                dumps=self.serialization_backend.dumps,
+                loads=self.serialization_backend.loads,
             )
         )
 

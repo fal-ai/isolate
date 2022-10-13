@@ -1,188 +1,4 @@
-# This module is split into two parts:
-#   1) A core serialization library that both the controller and the agent
-#      share (since the agent process can run in an environment that does
-#      not necessarily have 'isolate', we can't simply import it from a common
-#      module).
-#
-#   2) Implementation of the agent itself.
-#
-# Skip to the bottom of the file to see the agent implementation.
-
-
-# WARNING: Please do not import anything outside of standard library before
-# the call to load_pth_files(). After that point, imports to installed packages
-# are allowed.
-
-from __future__ import annotations
-
-import base64
-import importlib
-import json
-import os
-import site
-import sys
-import time
-import traceback
-from argparse import ArgumentParser
-from contextlib import closing, contextmanager
-from dataclasses import dataclass
-from functools import partial
-from multiprocessing.connection import Client, ConnectionWrapper
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    ContextManager,
-    Dict,
-    Iterator,
-    Tuple,
-    cast,
-)
-
-if TYPE_CHECKING:
-    from typing import Protocol
-
-    class SerializationBackend(Protocol):
-        def loads(self, data: bytes) -> Any:
-            ...
-
-        def dumps(self, obj: Any) -> bytes:
-            ...
-
-
-# Common IPC Protocol
-# ===================
-#
-# Isolate's IPC protocol is currently structured as a communication
-# of serialized objects (no log transfer is happening over the IPC,
-# but rather is is the responsibility of the controller process to
-# watch the stdout/stderr of the isolated process).
-#
-# Each serialized object is a JSON message with the following schema
-# {
-#   "serialization_method": [string],
-#   "raw_object": [string],
-#   "was_raised": [bool],
-# }
-#
-# The "raw_object" is basically a Python object serialized using the
-# given serialization method and encoded with base64 (since JSON does
-# not support binary data).
-#
-# The "was_raised" is a flag that indicates whether the given object
-# was raised or returned (return Exception() or raise Exception()).
-#
-
-
-@dataclass
-class SerializedObject:
-    """SerializedObject is a common form of data that can be passed
-    between the agent and the controller without requiring Python-native
-    serialization (pickle, dill, etc.). This is primarily useful for workloads
-    where the controller might not have packages installed to support deserialization
-    of the either the input callable or the resulting object (e.g. isolate server)."""
-
-    serialization_method: str
-    object: Any
-    was_raised: bool = False
-
-    def to_json_message(self) -> Dict[str, Any]:
-        raw_object = serialize_object(self.serialization_method, self.object)
-        return {
-            "serialization_method": self.serialization_method,
-            "raw_object": base64.b64encode(raw_object).decode(),
-            "was_raised": self.was_raised,
-        }
-
-    @classmethod
-    def from_json_message(cls, message: Dict[str, Any]) -> SerializedObject:
-        with _step("Unpacking the given JSON message"):
-            method = message["serialization_method"]
-            was_raised = message["was_raised"]
-            raw_object = base64.b64decode(message["raw_object"])
-
-        return cls(
-            method,
-            load_serialized_object(method, raw_object),
-            was_raised,
-        )
-
-
-class SerializationError(Exception):
-    """An error that happened during the serialization process."""
-
-
-@contextmanager
-def _step(message: str) -> Iterator[None]:
-    """A context manager to capture every expression
-    underneath it and if any of them fails for any reason
-    then it will raise a SerializationError with the
-    given message."""
-
-    try:
-        yield
-    except BaseException as exception:
-        raise SerializationError(message) from exception
-
-
-def as_serialization_backend(backend: Any) -> SerializationBackend:
-    """Ensures that the given backend has loads/dumps methods, and returns
-    it as is (also convinces type checkers that the given object satisfies
-    the serialization protocol)."""
-
-    if not hasattr(backend, "loads") or not hasattr(backend, "dumps"):
-        raise TypeError(
-            f"The given serialization backend ({backend.__name__}) does "
-            "not have one of the required methods (loads/dumps)."
-        )
-
-    return cast(SerializationBackend, backend)
-
-
-def load_serialized_object(serialization_method: str, raw_object: bytes) -> Any:
-    """Load the given serialized object using the given serialization method. If
-    anything fails, then a SerializationError will be raised."""
-
-    with _step(f"Preparing the serialization backend ({serialization_method})"):
-        serialization_backend = as_serialization_backend(
-            importlib.import_module(serialization_method)
-        )
-
-    with _step("Deserializing the given object"):
-        return serialization_backend.loads(raw_object)
-
-
-def serialize_object(serialization_method: str, object: Any) -> bytes:
-    """Serialize the given object using the given serialization method. If
-    anything fails, then a SerializationError will be raised."""
-
-    with _step(f"Preparing the serialization backend ({serialization_method})"):
-        serialization_backend = as_serialization_backend(
-            importlib.import_module(serialization_method)
-        )
-
-    with _step("Deserializing the given object"):
-        return serialization_backend.dumps(object)
-
-
-def serialize_message(object: Any) -> bytes:
-    """Serialize the given object (which should be a SerializedObject, otherwise
-    fails with a TypeError) in the message form."""
-    if not isinstance(object, SerializedObject):
-        raise TypeError(f"Expected a SerializedObject, but got {type(object).__name__}")
-
-    return json.dumps(object.to_json_message()).encode()
-
-
-def deserialize_message(message: bytes) -> SerializedObject:
-    """Deserialize the given message into a SerializedObject. The message must be
-    a JSON object with the proper schema."""
-    return SerializedObject.from_json_message(json.loads(message.decode()))
-
-
-# Agent Implementation
-# ====================
-#
-# This part defines an "isolate" agent for inter-process communication over
+# This file defines an "isolate" agent for inter-process communication over
 # sockets. It is spawned by the controller process with a single argument (a
 # base64 encoded server address) and expected to go through the following procedures:
 #   1. Decode the given address
@@ -199,94 +15,20 @@ def deserialize_message(message: bytes) -> SerializedObject:
 # one being the actual result of the given callable, and the other one is a boolean flag
 # indicating whether the callable has raised an exception or not.
 
-# Debug Mode
-# ==========
-#
-# Isolated processes are really tricky to debug properly
-# so we want to have a smooth way into the process and see
-# what is really going on in the case of errors.
-#
-# For using the debug mode, you first need to set ISOLATE_ENABLE_DEBUGGING
-# environment variable to "1" from your controller process. This will
-# make the isolated process hang at the initialization, and make it print
-# the instructions to connect to the controller process.
-#
-# On a separate shell (while letting the the controller process hang), you can
-# execute the given command to drop into the PDB (Python Debugger). With that
-# you can observe each step of the connection and run process.
-IS_DEBUG_MODE = os.getenv("ISOLATE_ENABLE_DEBUGGING") == "1"
-DEBUG_TIMEOUT = 60 * 15
+# WARNING: Please do not import anything outside of standard library before
+# the call to load_pth_files(). After that point, imports to installed packages
+# are allowed.
 
-
-def run_client(address: Tuple[str, int], *, with_pdb: bool = False) -> None:
-    if with_pdb:
-        # This condition will only be activated if we want to
-        # debug the isolated process by passing the --with-pdb
-        # flag when executing the binary.
-        import pdb
-
-        pdb.set_trace()
-
-    print(f"[trace] Trying to create a connection to {address}")
-    # TODO(feat): this should probably run in a loop instead of
-    # receiving a single function and then exitting immediately.
-    with child_connection(address) as connection:
-        print(f"[trace] Created child connection to {address}")
-        try:
-            incoming_msg: SerializedObject = connection.recv()
-        except SerializationError as exception:
-            traceback.print_exc()
-            print(
-                "[trace] Failed to receive the callable (due to a deserialization error). "
-                "Aborting the run now."
-            )
-            return 1
-
-        print(f"[trace] Received the callable at {address}")
-        was_raised = False
-        try:
-            result = incoming_msg.object()
-        except BaseException as exc:
-            result = exc
-            was_raised = True
-
-        outgoing_msg = SerializedObject(
-            serialization_method=incoming_msg.serialization_method,
-            object=result,
-            was_raised=was_raised,
-        )
-
-        try:
-            connection.send(outgoing_msg)
-        except SerializationError:
-            traceback.print_exc()
-            print(
-                "[trace] Error while serializing the result back to the controller. "
-                "Aborting the run now."
-            )
-            return 1
-        except BaseException:
-            traceback.print_exc()
-            print(
-                "[trace] Unknown error while sending the result back to the controller. "
-                "Aborting the run now."
-            )
-            return 1
-
-
-def decode_service_address(address: str) -> Tuple[str, int]:
-    host, port = base64.b64decode(address).decode("utf-8").rsplit(":", 1)
-    return host, int(port)
-
-
-def child_connection(address: Tuple[str, int]) -> ContextManager[ConnectionWrapper]:
-    return closing(
-        ConnectionWrapper(
-            Client(address),
-            loads=deserialize_message,
-            dumps=serialize_message,
-        )
-    )
+import base64
+import importlib
+import os
+import site
+import sys
+import time
+from argparse import ArgumentParser
+from contextlib import closing
+from multiprocessing.connection import Client, ConnectionWrapper
+from typing import ContextManager, Tuple
 
 
 def load_pth_files() -> None:
@@ -312,6 +54,89 @@ def load_pth_files() -> None:
         site.addsitedir(site_dir)
 
 
+def decode_service_address(address: str) -> Tuple[str, int]:
+    host, port = base64.b64decode(address).decode("utf-8").rsplit(":", 1)
+    return host, int(port)
+
+
+def child_connection(
+    serialization_backend_name: str, address: Tuple[str, int]
+) -> ContextManager[ConnectionWrapper]:
+    serialization_backend = importlib.import_module(serialization_backend_name)
+    return closing(
+        ConnectionWrapper(
+            Client(address),
+            loads=serialization_backend.loads,
+            dumps=serialization_backend.dumps,
+        )
+    )
+
+
+IS_DEBUG_MODE = os.getenv("ISOLATE_ENABLE_DEBUGGING") == "1"
+DEBUG_TIMEOUT = 60 * 15
+
+
+def run_client(
+    serialization_backend_name: str, address: Tuple[str, int], *, with_pdb: bool = False
+) -> None:
+    # Debug Mode
+    # ==========
+    #
+    # Isolated processes are really tricky to debug properly
+    # so we want to have a smooth way into the process and see
+    # what is really going on in the case of errors.
+    #
+    # For using the debug mode, you first need to set ISOLATE_ENABLE_DEBUGGING
+    # environment variable to "1" from your controller process. This will
+    # make the isolated process hang at the initialization, and make it print
+    # the instructions to connect to the controller process.
+    #
+    # On a separate shell (while letting the the controller process hang), you can
+    # execute the given command to drop into the PDB (Python Debugger). With that
+    # you can observe each step of the connection and run process.
+
+    if with_pdb:
+        # This condition will only be activated if we want to
+        # debug the isolated process by passing the --with-pdb
+        # flag when executing the binary.
+        import pdb
+
+        pdb.set_trace()
+
+    print(f"[trace] Trying to create a connection to {address}")
+    # TODO(feat): this should probably run in a loop instead of
+    # receiving a single function and then exitting immediately.
+    with child_connection(serialization_backend_name, address) as connection:
+        print(f"[trace] Created child connection to {address}")
+        callable = connection.recv()
+        print(f"[trace] Received the callable at {address}")
+
+        result = None
+        did_it_raise = False
+        try:
+            result = callable()
+        except BaseException as exc:
+            result = exc
+            did_it_raise = True
+        finally:
+            try:
+                connection.send((result, did_it_raise))
+            except BaseException:
+                if did_it_raise:
+                    # If we can't even send it through the connection
+                    # still try to dump it to the stderr as the last
+                    # resort.
+                    import traceback
+
+                    assert isinstance(result, BaseException)
+                    traceback.print_exception(
+                        type(result),
+                        result,
+                        result.__traceback__,
+                    )
+                raise
+
+
 def _get_shell_bootstrap() -> str:
     # Return a string that contains environment variables that
     # might be used during isolated hook's execution.
@@ -335,6 +160,7 @@ def main() -> int:
     parser = ArgumentParser()
     parser.add_argument("listen_at")
     parser.add_argument("--with-pdb", action="store_true", default=False)
+    parser.add_argument("--serialization-backend", default="pickle")
 
     options = parser.parse_args()
     if IS_DEBUG_MODE:
@@ -345,16 +171,17 @@ def main() -> int:
         message += (
             f"    $ {_get_shell_bootstrap()}\\\n     "
             f"{sys.executable} {os.path.abspath(__file__)} "
+            f"--serialization-backend {options.serialization_backend} "
             f"--with-pdb {options.listen_at}"
         )
         message += "\n" * 3
         message += "=" * 60
         print(message)
         time.sleep(DEBUG_TIMEOUT)
-        return 1
 
+    serialization_backend_name = options.serialization_backend
     address = decode_service_address(options.listen_at)
-    run_client(address, with_pdb=options.with_pdb)
+    run_client(serialization_backend_name, address, with_pdb=options.with_pdb)
     return 0
 
 
