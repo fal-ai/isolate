@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+import "google/protobuf/struct.proto";
+
+service Bridge {
+    rpc Run (BoundFunction) returns (stream PartialRunResult) {}
+}
+
+message BoundFunction {
+    EnvironmentDefinition environment = 1;
+    SerializedObject function = 2;
+}
+
+message EnvironmentDefinition {
+    string kind = 1;
+    google.protobuf.Struct configuration = 2;
+}
+
+message SerializedObject {
+    // The backend (e.g. pickle, dill, cloudpickle) used to the serialize the
+    // given definition.
+    string serialization_method = 1;
+    // Raw bytes of the serialized object.
+    bytes definition = 2;
+    // A flag indicating whether the given object was raised (e.g. an exception
+    // that was captured) or not.
+    bool is_exception = 3;
+}
+
+message PartialRunResult {
+    // A flag indicating whether the run has completed.
+    bool is_complete = 1;
+    // A list of logs collected during this partial execution. It does
+    // not include old logs.
+    repeated Log log = 2;
+    // The result of the run, if it is complete.
+    optional SerializedObject result = 3;
+}
+
+message Log {
+    string message = 1;
+    LogSource source = 2;
+    LogLevel level = 3;
+}
+
+enum LogSource {
+    BUILDER = 0;
+    BRIDGE = 1;
+    USER = 2;
+}
+
+enum LogLevel {
+    TRACE = 0;
+    DEBUG = 1;
+    INFO = 2;
+    WARNING = 3;
+    ERROR = 4;
+    STDOUT = 5;
+    STDERR = 6;
+}

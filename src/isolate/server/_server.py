@@ -1,145 +1,168 @@
-from functools import wraps
-import secrets
+import logging
+import os
+import queue
 import threading
-from typing import Dict
+import time
+import traceback
+from concurrent import futures
+from contextlib import suppress
+from dataclasses import dataclass, field
+from typing import Iterator, List
 
-from flask import Flask, request
-from marshmallow import validate
+import grpc
 
-from isolate import prepare_environment
-from isolate.backends import BaseEnvironment
-from isolate.backends.context import GLOBAL_CONTEXT
-from isolate.server._models import (
-    Environment,
-    EnvironmentRun,
-    StatusRequest,
-    with_schema,
+from isolate.backends import (
+    BaseEnvironment,
+    EnvironmentCreationError,
+    UserException,
 )
-from isolate.server._runs import RunInfo, run_serialized_function_in_env
-from isolate.server._utils import (
-    error,
-    load_token,
-    success,
-    wrap_validation_errors,
+from isolate.backends.context import GLOBAL_CONTEXT, Log, LogSource
+from isolate.registry import prepare_environment
+from isolate.server import definitions
+from isolate.server._runs import (
+    SECONDARY_SERIALIZATION_METHOD,
+    run_serialized_function_in_env,
 )
-from isolate.server._auth import create_auth_token, validate_auth_token
+from isolate.server._serialization import from_grpc, to_grpc
 
-app = Flask(__name__)
+ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
+GRPC_ADDRESS = os.getenv("GRPC_ACCESS", "[::]:50051")
 
+PER_ITERATION_DELAY = 0.1
+MAX_JOIN_TIMEOUT = 2.5
 
-ENV_STORE: Dict[str, BaseEnvironment] = {}
-RUN_STORE: Dict[str, RunInfo] = {}
-MAX_JOIN_WAIT = 1
-
-app.config.from_prefixed_env("FAL")
-
-if app.config.get('USER_NAME', False):
-    app.config['SECRET_KEY'] = secrets.token_urlsafe()
-    app.config['AUTH_TOKEN'] = create_auth_token(
-        app.config['USER_NAME'],
-        app.config['SECRET_KEY'])
-
-    print("++++")
-    print("The following line contains your authentication token. Put it in 'x-access-token' header.")
-    print(app.config['AUTH_TOKEN'])
-    print("++++")
-
-# Authentication decorator
-def check_auth(f):
-    @wraps(f)
-    def decorator(*args, **kwargs):
-        token = None
-        if app.config.get('USER_NAME', False):
-            if 'x-access-token' in request.headers:
-                token = request.headers['x-access-token']
-                if validate_auth_token(
-                        token,
-                        app.config["USER_NAME"],
-                        app.config["SECRET_KEY"]):
-                    return f(*args, **kwargs)
-                else:
-                    return error(code=401, message="Invalid token")
-            else:
-                return error(
-                    code=401,
-                    message="Isolate server is configured with the authentication mode, but no authentication token was passed")
-
-        return f(*args, **kwargs)
-
-    return decorator
+logger = logging.getLogger(__name__)
 
 
-@app.route("/environments", methods=["POST"])
-@wrap_validation_errors
-@check_auth
-def create_environment():
-    """Create a new environment from the POST'd definition
-    (as JSON). Returns the token that can be used for running
-    it in the future."""
+@dataclass
+class RuntimeManager:
+    environment: BaseEnvironment = field(repr=False)
+    serialization_method: str = field(repr=False)
+    done_signal: threading.Event = field(default_factory=threading.Event)
+    log_queue: queue.Queue[Log] = field(default_factory=queue.Queue)
 
-    data = with_schema(Environment, request.json)
-    token = secrets.token_urlsafe()
-    ENV_STORE[token] = prepare_environment(
-        data["kind"],
-        **data["configuration"],
-    )
-    return success(token=token)
+    def __post_init__(self) -> None:
+        run_ctx = GLOBAL_CONTEXT._replace(
+            _serialization_backend=self.serialization_method,
+            _log_handler=self.log_queue.put_nowait,
+        )
+        self.environment.set_context(run_ctx)
 
+    def relay_logs(self) -> Iterator[definitions.PartialRunResult]:
+        buffered_logs = []
+        with suppress(queue.Empty):
+            while not self.log_queue.empty():
+                buffered_logs.append(
+                    to_grpc(self.log_queue.get_nowait(), definitions.Log)
+                )
 
-@app.route("/environments/runs", methods=["POST"])
-@wrap_validation_errors
-@check_auth
-def run_environment():
-    """Run the function (serialized with the `serialization_backend` specified
-    as a query parameter) from the POST'd data on the specified environment.
-    It will return a new token that can be used to check the status of the run
-    periodically through `/environment/runs/<token>/status` endpoint."""
-    data = with_schema(EnvironmentRun, request.args)
-    env = load_token(ENV_STORE, data["environment_token"])
+        if buffered_logs:
+            yield definitions.PartialRunResult(
+                is_complete=False,
+                log=buffered_logs,
+            )
 
-    run_info = RunInfo()
+    def run(self, dehydrated_object: bytes) -> Iterator[definitions.PartialRunResult]:
+        """Run a dehydrated object in the specified environment."""
+        thread = threading.Thread(
+            target=run_serialized_function_in_env,
+            args=(self.environment, dehydrated_object, self.done_signal),
+        )
+        thread.start()
+        while not self.done_signal.is_set():
+            yield from self.relay_logs()
+            # Prevent busy looping by sleeping for a bit
+            # and releasing the GIL.
+            time.sleep(PER_ITERATION_DELAY)
 
-    # Context can allow us to change the serialization backend
-    # and the log processing.
-    run_context = GLOBAL_CONTEXT._replace(
-        _serialization_backend=data["serialization_backend"],
-        _log_handler=run_info.logs.append,
-    )
-    env.set_context(run_context)
+        thread.join(MAX_JOIN_TIMEOUT)
+        yield from self.relay_logs()
 
-    # We start running the environment (both the build and the run, actually)
-    # in a separate thread, since we don't want this request to block.
-    run_info.bound_thread = threading.Thread(
-        target=run_serialized_function_in_env,
-        args=(env, request.data, run_info.done_signal),
-    )
-    run_info.bound_thread.start()
-
-    RUN_STORE[run_info.token] = run_info
-    return success(token=run_info.token, code=202)
+        # TODO: return the actual result
+        return None
 
 
-@app.route("/environments/runs/<token>/status", methods=["GET"])
-@wrap_validation_errors
-@check_auth
-def get_run_status(token):
-    """Poll for the status of an environment. Returns all the logs
-    (unless the starting point is specified through `logs_start` query
-    parameter) and a boolean indicating whether the run is finished.
+class BridgeServicer(definitions.BridgeServicer):
+    def Run(
+        self, request: definitions.BoundFunction, context: grpc.ServicerContext
+    ) -> Iterator[definitions.PartialRunResult]:
+        if request.function.is_exception:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details("The bound function can not be an exception.")
+            return None
 
-    Can be accessed even after the run is finished."""
-
-    data = with_schema(StatusRequest, request.args)
-
-    run_info = load_token(RUN_STORE, token)
-    if run_info.is_done and run_info.bound_thread.is_alive():
         try:
-            run_info.bound_thread.join(timeout=MAX_JOIN_WAIT)
-        except TimeoutError:
-            return error(message="Runner thread is still running.")
+            environment = from_grpc(request.environment, BaseEnvironment)
+        except ValueError as exc:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(f"Environment creation error: {exc}.")
+            return None
 
-    new_logs = run_info.logs[data["logs_start"] :]
-    return success(
-        is_done=run_info.is_done,
-        logs=[log.serialize() for log in new_logs],
-    )
+        manager = RuntimeManager(
+            environment=environment,
+            serialization_method=request.function.serialization_method,
+        )
+
+        try:
+            result = yield from manager.run(request.function.definition)
+        except EnvironmentCreationError:
+            context.set_code(grpc.StatusCode.ABORTED)
+            context.set_details(f"Environment creation error: {exc}.")
+            return None
+        except BaseException as exc:
+            # This can only happen if something goes wrong with isolate's
+            # code (possibly due to a bug in us, no user fault).
+            logger.error("Unknown error in isolate server.")
+            context.set_code(grpc.StatusCode.UNKNOWN)
+            context.set_details(f"Isolate server error: {exc}.")
+            return None
+
+        logs = []
+        try:
+            serialized_result = to_grpc(
+                result,
+                definitions.SerializedObject,
+                serialization_method=SECONDARY_SERIALIZATION_METHOD,
+                is_exception=False,
+            )
+        except BaseException as exc:
+            # If we can't serialize the end result with the custom backend
+            # or if if the result has an unserializable object then just reply
+            # without any result.
+            serialized_result = None
+            logs.append(
+                to_grpc(
+                    Log(
+                        f"Failed to serialize the result object."
+                        f"\n{traceback.format_exc()}",
+                        LogSource.BRIDGE,
+                    ),
+                    definitions.Log,
+                )
+            )
+
+        yield definitions.PartialRunResult(
+            is_complete=True,
+            log=logs,
+            result=serialized_result,
+        )
+
+
+def serve():
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+    definitions.register_servicer(BridgeServicer(), server)
+
+    if ACCESS_TOKEN:
+        credentials = grpc.access_token_call_credentials(ACCESS_TOKEN)
+        server.add_secure_port(f"{GRPC_ADDRESS}", credentials)
+    else:
+        server.add_insecure_port(f"{GRPC_ADDRESS}")
+
+    logging.info("Starting isolate server on %s", GRPC_ADDRESS)
+    server.start()
+    server.wait_for_termination()
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    serve()
