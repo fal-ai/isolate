@@ -1,0 +1,1 @@
+# agent-requires: isolate[server]

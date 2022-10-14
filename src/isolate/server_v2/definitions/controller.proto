@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+import "common.proto";
+
+service ControllerBridge {
+    // A bi-directional RPC channel for controller and agent to communicate on.
+    // Every time there is a new task (e.g. a run() operation), the controller
+    // will send it through the already established channel and the agent will
+    // respond with the result.
+    rpc Connect (stream PartialRunResult) returns (stream Task) {}
+}
+
+message Task {
+    // The function to run on the agent.
+    SerializedObject function = 1;
+}

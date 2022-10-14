@@ -52,10 +52,11 @@ def regen_grpc(file: Path) -> None:
 
     # For fixing this we are going to manually correct the generated
     # source.
-    grpc_output_file = next(parent_dir.glob("*_pb2_grpc.py"), None)
-    session = Session(rules=[FixGRPCImports])
-    changes = session.run_file(grpc_output_file)
-    changes.apply_diff()
+    for grpc_output_file in parent_dir.glob("*_pb2_grpc.py*"):
+        session = Session(rules=[FixGRPCImports])
+        changes = session.run_file(grpc_output_file)
+        if changes:
+            changes.apply_diff()
 
 
 def main() -> None:
