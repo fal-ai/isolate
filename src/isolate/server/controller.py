@@ -13,8 +13,8 @@ from isolate.backends import (
 )
 from isolate.backends.connections import PythonExecutionBase
 from isolate.backends.context import Log, LogLevel, LogSource
-from isolate.server_v2 import definitions
-from isolate.server_v2.serialization import from_grpc, to_grpc
+from isolate.server import agent, definitions
+from isolate.server.serialization import from_grpc, to_grpc
 
 
 class AgentError(Exception):
@@ -137,8 +137,7 @@ class LocalPythonRPC(PythonExecutionBase[str], RemotePythonConnection):
         # on the agent side.
         return [
             executable,
-            "-m",
-            "isolate.server_v2.agent",
+            agent.__file__,
             connection,
         ]
 

@@ -12,7 +12,7 @@ from google.protobuf.internal import builder as _builder
 _sym_db = _symbol_database.Default()
 
 
-from isolate.server_v2.definitions import common_pb2 as common__pb2
+from isolate.server.definitions import common_pb2 as common__pb2
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
     b'\n\x0b\x61gent.proto\x1a\x0c\x63ommon.proto28\n\x05\x41gent\x12/\n\x03Run\x12\x11.SerializedObject\x1a\x11.PartialRunResult"\x00\x30\x01\x62\x06proto3'

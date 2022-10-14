@@ -1,12 +1,14 @@
 import functools
 from typing import Any, Type, TypeVar
 
+from isolate import prepare_environment
+from isolate.backends import BaseEnvironment
 from isolate.backends.connections.common import (
     load_serialized_object,
     serialize_object,
 )
 from isolate.backends.context import Log, LogLevel, LogSource
-from isolate.server_v2 import definitions
+from isolate.server import definitions
 
 T = TypeVar("T")
 
@@ -41,6 +43,19 @@ def _to_log(obj: Log, to: Type[definitions.Log], **kwargs) -> definitions.Log:
         message=obj.message,
         source=getattr(definitions, obj.source.name.upper()),
         level=getattr(definitions, obj.level.name.upper()),
+    )
+
+
+@from_grpc.register
+def _from_environment_definition(
+    message: definitions.EnvironmentDefinition,
+    to: Type[BaseEnvironment],
+) -> BaseEnvironment:
+    assert to is BaseEnvironment
+
+    return prepare_environment(
+        message.kind,
+        **definitions.struct_to_dict(message.configuration),
     )
 
 

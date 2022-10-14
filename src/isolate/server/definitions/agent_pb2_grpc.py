@@ -2,10 +2,10 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from . import bridge_pb2 as bridge__pb2
+from isolate.server.definitions import common_pb2 as common__pb2
 
 
-class BridgeStub(object):
+class AgentStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -15,38 +15,36 @@ class BridgeStub(object):
             channel: A grpc.Channel.
         """
         self.Run = channel.unary_stream(
-            "/Bridge/Run",
-            request_serializer=bridge__pb2.BoundFunction.SerializeToString,
-            response_deserializer=bridge__pb2.PartialRunResult.FromString,
+            "/Agent/Run",
+            request_serializer=common__pb2.SerializedObject.SerializeToString,
+            response_deserializer=common__pb2.PartialRunResult.FromString,
         )
 
 
-class BridgeServicer(object):
+class AgentServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def Run(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Start running the given function, and stream results back."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
 
-def add_BridgeServicer_to_server(servicer, server):
+def add_AgentServicer_to_server(servicer, server):
     rpc_method_handlers = {
         "Run": grpc.unary_stream_rpc_method_handler(
             servicer.Run,
-            request_deserializer=bridge__pb2.BoundFunction.FromString,
-            response_serializer=bridge__pb2.PartialRunResult.SerializeToString,
+            request_deserializer=common__pb2.SerializedObject.FromString,
+            response_serializer=common__pb2.PartialRunResult.SerializeToString,
         ),
     }
-    generic_handler = grpc.method_handlers_generic_handler(
-        "Bridge", rpc_method_handlers
-    )
+    generic_handler = grpc.method_handlers_generic_handler("Agent", rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
 
 
 # This class is part of an EXPERIMENTAL API.
-class Bridge(object):
+class Agent(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -65,9 +63,9 @@ class Bridge(object):
         return grpc.experimental.unary_stream(
             request,
             target,
-            "/Bridge/Run",
-            bridge__pb2.BoundFunction.SerializeToString,
-            bridge__pb2.PartialRunResult.FromString,
+            "/Agent/Run",
+            common__pb2.SerializedObject.SerializeToString,
+            common__pb2.PartialRunResult.FromString,
             options,
             channel_credentials,
             insecure,
