@@ -43,12 +43,19 @@ def as_serialization_backend(backend: Any) -> SerializationBackend:
             "not have one of the required methods (loads/dumps)."
         )
 
-    return cast(SerializationBackend, backend)
+    return cast("SerializationBackend", backend)
 
 
-def load_serialized_object(serialization_method: str, raw_object: bytes) -> Any:
+def load_serialized_object(
+    serialization_method: str,
+    raw_object: bytes,
+    *,
+    was_it_raised: bool = False,
+) -> Any:
     """Load the given serialized object using the given serialization method. If
-    anything fails, then a SerializationError will be raised."""
+    anything fails, then a SerializationError will be raised. If the was_it_raised
+    flag is set to true, then the given object will be raised as an exception (instead
+    of being returned)."""
 
     with _step(f"Preparing the serialization backend ({serialization_method})"):
         serialization_backend = as_serialization_backend(
@@ -56,7 +63,12 @@ def load_serialized_object(serialization_method: str, raw_object: bytes) -> Any:
         )
 
     with _step("Deserializing the given object"):
-        return serialization_backend.loads(raw_object)
+        result = serialization_backend.loads(raw_object)
+
+    if was_it_raised:
+        raise result
+    else:
+        return result
 
 
 def serialize_object(serialization_method: str, object: Any) -> bytes:

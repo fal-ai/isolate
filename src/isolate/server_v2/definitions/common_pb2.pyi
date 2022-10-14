@@ -38,17 +38,17 @@ class Log(_message.Message):
     ) -> None: ...
 
 class PartialRunResult(_message.Message):
-    __slots__ = ["is_complete", "log", "result"]
+    __slots__ = ["is_complete", "logs", "result"]
     IS_COMPLETE_FIELD_NUMBER: _ClassVar[int]
-    LOG_FIELD_NUMBER: _ClassVar[int]
+    LOGS_FIELD_NUMBER: _ClassVar[int]
     RESULT_FIELD_NUMBER: _ClassVar[int]
     is_complete: bool
-    log: _containers.RepeatedCompositeFieldContainer[Log]
+    logs: _containers.RepeatedCompositeFieldContainer[Log]
     result: SerializedObject
     def __init__(
         self,
         is_complete: bool = ...,
-        log: _Optional[_Iterable[_Union[Log, _Mapping]]] = ...,
+        logs: _Optional[_Iterable[_Union[Log, _Mapping]]] = ...,
         result: _Optional[_Union[SerializedObject, _Mapping]] = ...,
     ) -> None: ...
 

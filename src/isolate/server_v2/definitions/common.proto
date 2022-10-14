@@ -16,7 +16,7 @@ message PartialRunResult {
     bool is_complete = 1;
     // A list of logs collected during this partial execution. It does
     // not include old logs.
-    repeated Log log = 2;
+    repeated Log logs = 2;
     // The result of the run, if it is complete.
     optional SerializedObject result = 3;
 }
