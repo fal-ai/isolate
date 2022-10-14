@@ -34,6 +34,7 @@ from isolate.backends.common import (
     logged_io,
     python_path_for,
 )
+from isolate.backends.connections import agent_startup
 from isolate.backends.connections.ipc import agent
 from isolate.backends.context import LogLevel, LogSource
 
@@ -281,6 +282,7 @@ class PythonIPC(PythonExecutionBase[ConnectionWrapper], IsolatedProcessConnectio
     ) -> List[Union[str, Path]]:
         return [
             executable,
+            agent_startup.__file__,
             agent.__file__,
             encode_service_address(connection.address),
             # TODO(feat): we probably should check if the given backend is installed

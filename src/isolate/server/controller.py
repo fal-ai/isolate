@@ -11,7 +11,7 @@ from isolate.backends import (
     CallResultType,
     EnvironmentConnection,
 )
-from isolate.backends.connections import PythonExecutionBase
+from isolate.backends.connections import PythonExecutionBase, agent_startup
 from isolate.backends.context import Log, LogLevel, LogSource
 from isolate.server import agent, definitions
 from isolate.server.serialization import from_grpc, to_grpc
@@ -137,6 +137,7 @@ class LocalPythonRPC(PythonExecutionBase[str], RemotePythonConnection):
         # on the agent side.
         return [
             executable,
+            agent_startup.__file__,
             agent.__file__,
             connection,
         ]
