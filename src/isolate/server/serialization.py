@@ -91,7 +91,7 @@ def _from_log(obj: definitions.Log, to: Type[T]) -> T:
         T,
         Log(
             message=obj.message,
-            source=LogSource(obj.source),
-            level=LogLevel(obj.level),
+            source=LogSource(definitions.LogSource.Name(obj.source).lower()),
+            level=LogLevel(definitions.LogLevel.Name(obj.level).lower()),
         ),
     )

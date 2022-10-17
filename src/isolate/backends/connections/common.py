@@ -29,7 +29,7 @@ def _step(message: str) -> Iterator[None]:
     try:
         yield
     except BaseException as exception:
-        raise SerializationError(message) from exception
+        raise SerializationError("Error while " + message) from exception
 
 
 def as_serialization_backend(backend: Any) -> SerializationBackend:
@@ -57,12 +57,12 @@ def load_serialized_object(
     flag is set to true, then the given object will be raised as an exception (instead
     of being returned)."""
 
-    with _step(f"Preparing the serialization backend ({serialization_method})"):
+    with _step(f"preparing the serialization backend ({serialization_method})"):
         serialization_backend = as_serialization_backend(
             importlib.import_module(serialization_method)
         )
 
-    with _step("Deserializing the given object"):
+    with _step("deserializing the given object"):
         result = serialization_backend.loads(raw_object)
 
     if was_it_raised:
@@ -75,10 +75,10 @@ def serialize_object(serialization_method: str, object: Any) -> bytes:
     """Serialize the given object using the given serialization method. If
     anything fails, then a SerializationError will be raised."""
 
-    with _step(f"Preparing the serialization backend ({serialization_method})"):
+    with _step(f"preparing the serialization backend ({serialization_method})"):
         serialization_backend = as_serialization_backend(
             importlib.import_module(serialization_method)
         )
 
-    with _step("Deserializing the given object"):
+    with _step("serializing the given object"):
         return serialization_backend.dumps(object)

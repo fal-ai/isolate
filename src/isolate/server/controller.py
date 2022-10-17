@@ -92,20 +92,18 @@ class RemotePythonConnection(EnvironmentConnection):
             was_it_raised=False,
         )
 
-        results = []
         for partial_result in self.proxy_grpc(function):
             for raw_log in partial_result.logs:
                 log = from_grpc(raw_log, Log)
                 self.log(log.message, level=log.level, source=log.source)
 
-            if partial_result.result:
-                results.append(from_grpc(partial_result.result, object))
-
             if partial_result.is_complete:
-                assert len(results) == 1
-                return cast(CallResultType, results[0])
+                assert partial_result.result
+                return cast(CallResultType, from_grpc(partial_result.result, object))
 
-        raise RuntimeError("The agent didn't finish (no message with is_complete).")
+        raise AgentError(
+            "No result object was received from the agent (it never set is_complete to True)."
+        )
 
 
 class LocalPythonRPC(PythonExecutionBase[str], RemotePythonConnection):

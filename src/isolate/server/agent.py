@@ -25,7 +25,7 @@ class AgentServicer(definitions.AgentServicer):
         yield from self.log(f"A connection has been established: {context.peer()}!")
 
         if request.was_it_raised:
-            return self.invalid_arg(
+            return self.abort_with_msg(
                 "The input function must be callable, not a raised exception.", context
             )
 
@@ -33,13 +33,13 @@ class AgentServicer(definitions.AgentServicer):
             function = from_grpc(request, object)
         except SerializationError:
             yield from self.log(traceback.format_exc())
-            return self.invalid_arg(
+            return self.abort_with_msg(
                 "The input function could not be deserialized.",
                 context,
             )
 
         if not callable(function):
-            return self.invalid_arg(
+            return self.abort_with_msg(
                 f"The input function must be callable, not {type(function).__name__}.",
                 context,
             )
@@ -63,13 +63,20 @@ class AgentServicer(definitions.AgentServicer):
                 was_it_raised=was_it_raised,
             )
         except SerializationError:
-            yield from self.log(traceback.format_exc())
-            return self.invalid_arg(
+            yield from self.log(traceback.format_exc(), level=definitions.ERROR)
+            return self.abort_with_msg(
                 "The result of the input function could not be serialized.",
                 context,
             )
+        except BaseException:
+            yield from self.log(traceback.format_exc(), level=definitions.ERROR)
+            return self.abort_with_msg(
+                "An unexpected error occurred while serializing the result.", context
+            )
 
-        yield self.log("Serialization of the result is complete. Sending the result.")
+        yield from self.log(
+            "Serialization of the result is complete. Sending the result."
+        )
         yield definitions.PartialRunResult(
             result=serialized_result, is_complete=True, logs=[]
         )
@@ -83,8 +90,14 @@ class AgentServicer(definitions.AgentServicer):
         log = definitions.Log(message=message, level=level, source=source)
         yield definitions.PartialRunResult(result=None, is_complete=False, logs=[log])
 
-    def invalid_arg(self, message: str, context: ServicerContext) -> None:
-        context.set_code(StatusCode.INVALID_ARGUMENT)
+    def abort_with_msg(
+        self,
+        message: str,
+        context: ServicerContext,
+        *,
+        code: StatusCode = StatusCode.INVALID_ARGUMENT,
+    ) -> None:
+        context.set_code(code)
         context.set_details(message)
         return None
 
