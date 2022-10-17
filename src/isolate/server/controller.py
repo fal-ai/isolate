@@ -2,7 +2,7 @@ import socket
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ContextManager, Iterator, List, Tuple, Union
+from typing import Any, ContextManager, Iterator, List, Tuple, Union, cast
 
 import grpc
 
@@ -103,7 +103,7 @@ class RemotePythonConnection(EnvironmentConnection):
 
             if partial_result.is_complete:
                 assert len(results) == 1
-                return results[0]
+                return cast(CallResultType, results[0])
 
         raise RuntimeError("The agent didn't finish (no message with is_complete).")
 

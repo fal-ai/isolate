@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+import traceback
 from argparse import ArgumentParser
 from concurrent import futures
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Any, Iterator
 
 import grpc
-from grpc import ServicerContext
+from grpc import ServicerContext, StatusCode
 
 from isolate.server import definitions
-from isolate.server.serialization import from_grpc, to_grpc
+from isolate.server.serialization import SerializationError, from_grpc, to_grpc
 
 
 @dataclass
@@ -21,16 +22,30 @@ class AgentServicer(definitions.AgentServicer):
         request: definitions.SerializedObject,
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
-        print(f"A connection has been established: {context.peer()}!")
+        yield from self.log(f"A connection has been established: {context.peer()}!")
 
-        # validate: not request.was_it_raised
+        if request.was_it_raised:
+            return self.invalid_arg(
+                "The input function must be callable, not a raised exception.", context
+            )
 
-        function = from_grpc(request, object)
+        try:
+            function = from_grpc(request, object)
+        except SerializationError:
+            yield from self.log(traceback.format_exc())
+            return self.invalid_arg(
+                "The input function could not be deserialized.",
+                context,
+            )
 
-        # validate: no SerializationError
-        # validate: callable(function)
+        if not callable(function):
+            return self.invalid_arg(
+                f"The input function must be callable, not {type(function).__name__}.",
+                context,
+            )
 
-        print("Serialized the function.")
+        yield from self.log("Starting the execution of the input function.")
+
         was_it_raised = False
         try:
             result = function()
@@ -38,19 +53,40 @@ class AgentServicer(definitions.AgentServicer):
             result = exc
             was_it_raised = True
 
-        print("Executed the function, serializing the result.")
-        # validate: no SerializationError
-        serialized_result = to_grpc(
-            result,
-            definitions.SerializedObject,
-            method=request.method,
-            was_it_raised=was_it_raised,
-        )
+        yield from self.log("Completed the execution of the input function.")
 
-        print("Sending the result back.")
+        try:
+            serialized_result = to_grpc(
+                result,
+                definitions.SerializedObject,
+                method=request.method,
+                was_it_raised=was_it_raised,
+            )
+        except SerializationError:
+            yield from self.log(traceback.format_exc())
+            return self.invalid_arg(
+                "The result of the input function could not be serialized.",
+                context,
+            )
+
+        yield self.log("Serialization of the result is complete. Sending the result.")
         yield definitions.PartialRunResult(
             result=serialized_result, is_complete=True, logs=[]
         )
+
+    def log(
+        self,
+        message: str,
+        level: definitions.LogLevel = definitions.TRACE,
+        source: definitions.LogSource = definitions.BRIDGE,
+    ) -> Iterator[definitions.PartialRunResult]:
+        log = definitions.Log(message=message, level=level, source=source)
+        yield definitions.PartialRunResult(result=None, is_complete=False, logs=[log])
+
+    def invalid_arg(self, message: str, context: ServicerContext) -> None:
+        context.set_code(StatusCode.INVALID_ARGUMENT)
+        context.set_details(message)
+        return None
 
 
 def create_server(address: str) -> grpc.Server:

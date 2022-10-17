@@ -18,15 +18,18 @@ repos:
     rev: 'v0.971'
     hooks:
       -  id: mypy
-         pass_filenames: false
-         files: ^isolate/
-         entry: mypy isolate/
          args:
          -   --disallow-incomplete-defs
          -   --ignore-missing-imports
          -   --no-warn-no-return
          -   --disable-error-code
          -   attr-defined
+         -   --disable-error-code
+         -   misc
+         -   --disable-error-code
+         -   var-annotated
+         exclude: '^src/.*_pb2.py$'
+         additional_dependencies: [types-protobuf]
 -   repo: https://github.com/codespell-project/codespell
     rev: v2.1.0
     hooks:
