@@ -151,11 +151,10 @@ class IsolateServicer(definitions.IsolateServicer):
         return None
 
 
-def main():
+def main() -> None:
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
     definitions.register_isolate(IsolateServicer(), server)
 
-    grpc.alts_server_credentials()
     server.add_insecure_port(f"[::]:50001")
 
     server.start()
