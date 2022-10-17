@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import importlib
 import os
@@ -8,7 +10,18 @@ from dataclasses import dataclass, field
 from functools import partial
 from multiprocessing.connection import ConnectionWrapper, Listener
 from pathlib import Path
-from typing import Any, ContextManager, Dict, Iterator, List, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ContextManager,
+    Dict,
+    Generic,
+    Iterator,
+    List,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from isolate.backends import (
     BasicCallable,
@@ -21,8 +34,14 @@ from isolate.backends.common import (
     logged_io,
     python_path_for,
 )
+from isolate.backends.connections import agent_startup
 from isolate.backends.connections.ipc import agent
 from isolate.backends.context import LogLevel, LogSource
+
+if TYPE_CHECKING:
+    from isolate.backends import BaseEnvironment
+
+IPCConnectionType = TypeVar("IPCConnectionType")
 
 
 class _MultiFormatListener(Listener):
@@ -176,50 +195,94 @@ class IsolatedProcessConnection(EnvironmentConnection):
 
 
 @dataclass
-class PythonIPC(IsolatedProcessConnection):
-    """A simply Python IPC implementation that takes the base directory
-    of a new Python environment (structure that complies with sysconfig)
-    and runs the agent process in that environment."""
+class PythonExecutionBase(Generic[IPCConnectionType]):
+    """A generic Python execution implementation that can trigger a new process
+    and start watching stdout/stderr for the logs. The environment_path must be
+    the base directory of a new Python environment (structure that complies with
+    sysconfig). Python binary inside that environment will be used to run the
+    agent process.
 
+    If set, extra_inheritance_paths allows extending the custom package search
+    system with additional environments. As an example, the current environment_path
+    might point to an environment with numpy and the extra_inheritance_paths might
+    point to an environment with pandas. In this case, the agent process will have
+    access to both numpy and pandas. The order is important here, as the first
+    path in the list will be the first one to be looked up (so if there is multiple
+    versions of the same package in different environments, the one in the first
+    path will take precedence). Dependency resolution and compatibility must be
+    handled by the user."""
+
+    environment: BaseEnvironment
     environment_path: Path
+    extra_inheritance_paths: List[Path] = field(default_factory=list)
 
     @contextmanager
     def start_process(
         self,
-        connection: ConnectionWrapper,
+        connection: IPCConnectionType,
         *args: Any,
         **kwargs: Any,
     ) -> Iterator[subprocess.Popen]:
-        """Start the Python agent process with using the Python interpreter from
-        the given environment_path."""
+        """Start the agent process with the Python binary available inside the
+        bound environment."""
 
         python_executable = get_executable_path(self.environment_path, "python")
         with logged_io(
-            partial(self._parse_agent_and_log, level=LogLevel.STDOUT),
-            partial(self._parse_agent_and_log, level=LogLevel.STDERR),
+            partial(self.handle_agent_log, level=LogLevel.STDOUT),
+            partial(self.handle_agent_log, level=LogLevel.STDERR),
         ) as (stdout, stderr):
             yield subprocess.Popen(
-                self._get_python_cmd(python_executable, connection),
-                env=self._get_python_env(),
+                self.get_python_cmd(python_executable, connection),
+                env=self.get_env_vars(),
                 stdout=stdout,
                 stderr=stderr,
                 text=True,
             )
 
-    def _get_python_env(self):
+    def get_env_vars(self) -> Dict[str, str]:
+        """Return the environment variables to run the agent process with. By default
+        PYTHONUNBUFFERED is set to 1 to ensure the prints to stdout/stderr are reflect
+        immediately (so that we can seamlessly transfer logs)."""
+
+        custom_vars = {}
+        custom_vars["PYTHONUNBUFFERED"] = "1"
+        if self.extra_inheritance_paths:
+            # The order here should reflect the order of the inheritance
+            # where the actual environment already takes precedence.
+            python_path = python_path_for(
+                self.environment_path, *self.extra_inheritance_paths
+            )
+            custom_vars["PYTHONPATH"] = python_path
+
         return {
             **os.environ,
-            "PYTHONUNBUFFERED": "1",  # We want to stream the logs as they come.
+            **custom_vars,
         }
 
-    def _get_python_cmd(
+    def get_python_cmd(
+        self,
+        executable: Path,
+        connection: IPCConnectionType,
+    ) -> List[Union[str, Path]]:
+        """Return the command to run the agent process with."""
+        raise NotImplementedError
+
+    def handle_agent_log(self, line: str, level: LogLevel) -> None:
+        """Handle a log line emitted by the agent process. The level will be either
+        STDOUT or STDERR."""
+        raise NotImplementedError
+
+
+@dataclass
+class PythonIPC(PythonExecutionBase[ConnectionWrapper], IsolatedProcessConnection):
+    def get_python_cmd(
         self,
         executable: Path,
         connection: ConnectionWrapper,
     ) -> List[Union[str, Path]]:
-        assert executable.exists(), f"Python executable {executable} does not exist."
         return [
             executable,
+            agent_startup.__file__,
             agent.__file__,
             encode_service_address(connection.address),
             # TODO(feat): we probably should check if the given backend is installed
@@ -229,7 +292,7 @@ class PythonIPC(IsolatedProcessConnection):
             self.environment.context.serialization_backend_name,
         ]
 
-    def _parse_agent_and_log(self, line: str, level: LogLevel) -> None:
+    def handle_agent_log(self, line: str, level: LogLevel) -> None:
         # TODO: we probably should create a new fd and pass it as
         # one of the the arguments to the child process. Then everything
         # from that fd can be automatically logged as originating from the
@@ -245,38 +308,3 @@ class PythonIPC(IsolatedProcessConnection):
             source = LogSource.USER
 
         self.log(line, level=level, source=source)
-
-
-# TODO: should we actually merge this with PythonIPC since it is
-# simple enough and interchangeable?
-@dataclass
-class ExtendedPythonIPC(PythonIPC):
-    """A Python IPC implementation that can also inherit packages from
-    other environments (e.g. a virtual environment that has the core
-    requirements like `dill` can be inherited on a new environment).
-
-    The given extra_inheritance_paths should be a list of paths that
-    comply with the sysconfig, and it should be ordered in terms of
-    priority (e.g. the first path will be the most prioritized one,
-    right after the current environment). So if two environments have
-    conflicting versions of the same package, the first one present in
-    the inheritance chain will be used.
-
-    This works by including the `site-packages` directory of the
-    inherited environment in the `PYTHONPATH` when starting the
-    agent process.
-    """
-
-    extra_inheritance_paths: List[Path] = field(default_factory=list)
-
-    def _get_python_env(self) -> Dict[str, str]:
-        env_variables = super()._get_python_env()
-
-        if self.extra_inheritance_paths:
-            # The order here should reflect the order of the inheritance
-            # where the actual environment already takes precedence.
-            python_path = python_path_for(
-                self.environment_path, *self.extra_inheritance_paths
-            )
-            env_variables["PYTHONPATH"] = python_path
-        return env_variables
