@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+import "common.proto";
+
+service Agent {
+    // Start running the given function, and stream results back.
+    rpc Run (SerializedObject) returns (stream PartialRunResult) {}
+}

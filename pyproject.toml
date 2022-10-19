@@ -9,6 +9,8 @@ authors = ["Features & Labels <hello@fal.ai>"]
 python = ">=3.7"
 virtualenv = ">=20.4"
 importlib-metadata = ">=4.4"
+grpcio = { version = ">=1.49", optional = true }
+protobuf = { version = "*", optional = true }
 flask = { version = "*", optional = true }
 marshmallow = { version = "*", optional = true }
 pyjwt = { version = "*", optional = true }
