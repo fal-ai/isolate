@@ -13,7 +13,7 @@ grpcio = { version = ">=1.49", optional = true }
 protobuf = { version = "*", optional = true }
 
 [tool.poetry.extras]
-server = ["flask", "marshmallow", "pyjwt"]
+server = ["grpcio", "protobuf"]
 
 [tool.poetry.plugins."isolate.backends"]
 "virtualenv" = "isolate.backends.virtual_env:VirtualPythonEnvironment"
