@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from isolate.backends import BaseEnvironment, UserException
-from isolate.backends.connections import ExtendedPythonIPC, PythonIPC
+from isolate.backends.connections import PythonIPC
 from isolate.backends.context import _Context
 from isolate.backends.virtual_env import VirtualPythonEnvironment
 
@@ -50,14 +50,14 @@ def test_python_ipc_serialization():
         assert result == 3
 
 
-def test_extended_python_ipc(tmp_path):
+def test_extra_inheritance_paths(tmp_path):
     first_env = VirtualPythonEnvironment(["pyjokes==0.5.0"])
     first_env.set_context(_Context(Path(tmp_path)))
 
     second_env = VirtualPythonEnvironment(["emoji==0.5.4"])
     second_env.set_context(_Context(Path(tmp_path)))
 
-    with ExtendedPythonIPC(
+    with PythonIPC(
         first_env, first_env.create(), extra_inheritance_paths=[second_env.create()]
     ) as conn:
         assert conn.run(partial(eval, "__import__('pyjokes').__version__")) == "0.5.0"
@@ -66,7 +66,7 @@ def test_extended_python_ipc(tmp_path):
     third_env = VirtualPythonEnvironment(["pyjokes==0.6.0", "emoji==2.0.0"])
     third_env.set_context(_Context(Path(tmp_path)))
 
-    with ExtendedPythonIPC(
+    with PythonIPC(
         second_env, second_env.create(), extra_inheritance_paths=[third_env.create()]
     ) as conn:
         assert conn.run(partial(eval, "__import__('pyjokes').__version__")) == "0.6.0"
@@ -77,12 +77,12 @@ def test_extended_python_ipc(tmp_path):
 
     # Order matters, so if the first_env (with 0.5.0) is specified first then it
     # is going to take precedence.
-    with ExtendedPythonIPC(
+    with PythonIPC(
         first_env, first_env.create(), extra_inheritance_paths=[third_env.create()]
     ) as conn:
         assert conn.run(partial(eval, "__import__('pyjokes').__version__")) == "0.5.0"
 
-    with ExtendedPythonIPC(
+    with PythonIPC(
         third_env, third_env.create(), extra_inheritance_paths=[first_env.create()]
     ) as conn:
         assert conn.run(partial(eval, "__import__('pyjokes').__version__")) == "0.6.0"
@@ -90,7 +90,7 @@ def test_extended_python_ipc(tmp_path):
     fourth_env = VirtualPythonEnvironment(["pyjokes==0.4.1", "emoji==2.1.0"])
     fourth_env.set_context(_Context(Path(tmp_path)))
 
-    with ExtendedPythonIPC(
+    with PythonIPC(
         first_env,
         first_env.create(),
         extra_inheritance_paths=[third_env.create(), fourth_env.create()],
