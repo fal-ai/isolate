@@ -23,9 +23,13 @@ def temp_path_for(dest_path: Path) -> Iterator[Path]:
     If the given `dest_path` is not empty when exiting the context, the original
     contents will be removed."""
 
-    with tempfile.TemporaryDirectory() as temp_dir_name:
-        active_dir_path = Path(temp_dir_name)
-        yield active_dir_path
+    temp_dir = Path(tempfile.mkdtemp(prefix="isolate-environment"))
+    try:
+        yield temp_dir
+    except BaseException as exc:
+        shutil.rmtree(temp_dir)
+        raise exc
+    else:
         # This is technically not atomic and it is still possible to
         # trigger a race where between the branch below and the rename
         # call something else might happen.
@@ -37,7 +41,7 @@ def temp_path_for(dest_path: Path) -> Iterator[Path]:
         if dest_path.exists():
             shutil.rmtree(dest_path, ignore_errors=True)
 
-        os.rename(active_dir_path, dest_path)
+        os.rename(temp_dir, dest_path)
 
 
 def python_path_for(*search_paths: Path) -> str:
