@@ -14,7 +14,7 @@ from isolate.backends import (
     UserException,
 )
 from isolate.backends.common import run_serialized
-from isolate.backends.connections import ExtendedPythonIPC
+from isolate.backends.connections import PythonIPC
 from isolate.backends.context import Log, LogLevel, LogSource
 
 # TODO: This is currently a server-level setting, but if it makes sense
@@ -67,10 +67,10 @@ def run_serialized_function_in_env(
             local_env = Path(sys.exec_prefix)
             inherit_from.append(local_env)
 
-        with ExtendedPythonIPC(
+        with PythonIPC(
             environment,
             env_path,
-            inherit_from,
+            extra_inheritance_paths=inherit_from,
         ) as connection:
             # TODO: we currently discard the result, but maybe we should stream
             # it back somehow to the client if they ask and they can handle the
