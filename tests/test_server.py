@@ -84,7 +84,7 @@ def test_server_basic_communication(
 
         # TODO: this can probably install the local version of isolate
         # you have when you are running the tests.
-        requirements.append(str(REPO_DIR))
+        requirements.append(str(REPO_DIR) + "[server]")
 
     env_definition = define_environment("virtualenv", requirements=requirements)
     request = definitions.BoundFunction(
