@@ -6,6 +6,7 @@ import importlib
 import os
 import shutil
 import sysconfig
+import tempfile
 import threading
 from contextlib import contextmanager
 from functools import lru_cache
@@ -14,16 +15,29 @@ from typing import Any, Callable, Iterator, Optional, Tuple
 
 
 @contextmanager
-def rmdir_on_fail(path: Path) -> Iterator[None]:
-    """Recursively remove the 'path; directory if there
-    were any exceptions raised while this context is active."""
+def temp_path_for(dest_path: Path) -> Iterator[Path]:
+    """Return a new temporary directory that will be moved to the given `dest_path`
+    after exitting the context successfully (otherwise the temporary directory will
+    be removed completely, but the `dest_path` will stay the same).
 
-    try:
-        yield
-    except Exception:
-        if path.exists():
-            shutil.rmtree(path)
-        raise
+    If the given `dest_path` is not empty when exiting the context, the original
+    contents will be removed."""
+
+    with tempfile.TemporaryDirectory() as temp_dir_name:
+        active_dir_path = Path(temp_dir_name)
+        yield active_dir_path
+        # This is technically not atomic and it is still possible to
+        # trigger a race where between the branch below and the rename
+        # call something else might happen.
+        #
+        # Unfortunately there is currently no way of providing this
+        # atomicity in Python for both Linux and MacOS. But at the worst
+        # case, it will not corrupt the cache, rather just raise an OSError
+        # when trying to do the rename().
+        if dest_path.exists():
+            shutil.rmtree(dest_path, ignore_errors=True)
+
+        os.rename(active_dir_path, dest_path)
 
 
 def python_path_for(*search_paths: Path) -> str:

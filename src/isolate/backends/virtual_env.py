@@ -11,8 +11,8 @@ from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import (
     get_executable_path,
     logged_io,
-    rmdir_on_fail,
     sha256_digest_of,
+    temp_path_for,
 )
 from isolate.backends.connections import PythonIPC
 from isolate.backends.context import GLOBAL_CONTEXT, ContextType
@@ -83,11 +83,14 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
     def create(self) -> Path:
         from virtualenv import cli_run
 
-        path = self.context.get_cache_dir(self) / self.key
-        if path.exists():
-            return path
+        cache_dir = self.context.get_cache_dir(self)
+        cache_dir.mkdir(parents=True, exist_ok=True)
 
-        with rmdir_on_fail(path):
+        cache_path = cache_dir / self.key
+        if cache_path.exists():
+            return cache_path
+
+        with temp_path_for(cache_path) as path:
             self.log(f"Creating the environment at '{path}'")
 
             try:
@@ -99,7 +102,9 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
 
             self.install_requirements(path)
 
-        return path
+        assert cache_path.exists()
+        self.log(f"New environment cached at '{cache_path}'")
+        return cache_path
 
     def destroy(self, connection_key: Path) -> None:
         shutil.rmtree(connection_key)
