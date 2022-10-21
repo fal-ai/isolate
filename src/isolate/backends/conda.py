@@ -8,12 +8,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
-from isolate.backends.common import (
-    cache_static,
-    logged_io,
-    sha256_digest_of,
-    temp_path_for,
-)
+from isolate.backends.common import cache_static, logged_io, sha256_digest_of
 from isolate.backends.connections import PythonIPC
 from isolate.backends.context import GLOBAL_CONTEXT, ContextType
 
@@ -45,15 +40,12 @@ class CondaEnvironment(BaseEnvironment[Path]):
         return sha256_digest_of(*self.packages)
 
     def create(self) -> Path:
-        cache_dir = self.context.get_cache_dir(self)
-        cache_dir.mkdir(parents=True, exist_ok=True)
+        env_path = self.context.cache_dir_for(self)
+        if env_path.exists():
+            return env_path
 
-        cache_path = cache_dir / self.key
-        if cache_path.exists():
-            return cache_path
-
-        with temp_path_for(cache_path) as path:
-            self.log(f"Creating the environment at '{path}'")
+        with self.context.build_ctx_for(env_path) as build_path:
+            self.log(f"Creating the environment at '{build_path}'")
             conda_executable = _get_conda_executable()
             if self.packages:
                 self.log(f"Installing packages: {', '.join(self.packages)}")
@@ -68,7 +60,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
                             # The environment will be created under $BASE_CACHE_DIR/conda
                             # so that in the future we can reuse it.
                             "--prefix",
-                            path,
+                            build_path,
                             *self.packages,
                         ],
                         stdout=stdout,
@@ -79,15 +71,15 @@ class CondaEnvironment(BaseEnvironment[Path]):
                         "Failure during 'conda create'"
                     ) from exc
 
-        assert cache_path.exists()
-        self.log(f"New environment cached at '{cache_path}'")
-        return cache_path
+        assert env_path.exists(), "Environment must be built at this point"
+        self.log(f"New environment cached at '{env_path}'")
+        return env_path
 
     def destroy(self, connection_key: Path) -> None:
         shutil.rmtree(connection_key)
 
     def exists(self) -> bool:
-        path = self.context.get_cache_dir(self) / self.key
+        path = self.context.cache_dir_for(self)
         return path.exists()
 
     def open_connection(self, connection_key: Path) -> PythonIPC:

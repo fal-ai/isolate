@@ -6,42 +6,41 @@ import importlib
 import os
 import shutil
 import sysconfig
-import tempfile
 import threading
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional, Tuple
 
+_OLD_DIR_PREFIX = "old-"
 
-@contextmanager
-def temp_path_for(dest_path: Path) -> Iterator[Path]:
-    """Return a new temporary directory that will be moved to the given `dest_path`
-    after exitting the context successfully (otherwise the temporary directory will
-    be removed completely, but the `dest_path` will stay the same).
 
-    If the given `dest_path` is not empty when exiting the context, the original
-    contents will be removed."""
+def replace_dir(src_path: Path, dst_path: Path) -> None:
+    """Atomically replace 'dst_path' with 'src_path'.
 
-    temp_dir = Path(tempfile.mkdtemp(prefix="isolate-environment"))
-    try:
-        yield temp_dir
-    except BaseException as exc:
-        shutil.rmtree(temp_dir)
-        raise exc
+    Be aware that this is not actually atomic (and there is no
+    way to do so, at least in a cross-platform fashion). The basic
+    idea is that, we first rename the 'dst_path' to something else
+    (if it exists), and then rename the 'src_path' to 'dst_path' and
+    finally remove the temporary directory in which we hold 'dst_path'.
+
+    Prioritizing these two renames allows us to keep the cache always
+    in a working state (if we were to remove 'dst_path' first and then
+    try renaming 'src_path' to 'dst_path', any error while removing it
+    would make the cache corrupted).
+    """
+
+    if dst_path.exists():
+        cleanup = dst_path.rename(dst_path.with_name(_OLD_DIR_PREFIX + dst_path.name))
     else:
-        # This is technically not atomic and it is still possible to
-        # trigger a race where between the branch below and the rename
-        # call something else might happen.
-        #
-        # Unfortunately there is currently no way of providing this
-        # atomicity in Python for both Linux and MacOS. But at the worst
-        # case, it will not corrupt the cache, rather just raise an OSError
-        # when trying to do the rename().
-        if dest_path.exists():
-            shutil.rmtree(dest_path, ignore_errors=True)
+        cleanup = None
 
-        os.rename(temp_dir, dest_path)
+    assert not dst_path.exists()
+    try:
+        src_path.rename(dst_path)
+    finally:
+        if cleanup is not None:
+            shutil.rmtree(cleanup)
 
 
 def python_path_for(*search_paths: Path) -> str:
