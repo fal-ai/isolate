@@ -13,8 +13,9 @@ from isolate.backends import (
 )
 from isolate.backends.context import Log, LogLevel, LogSource
 from isolate.connections._local import PythonExecutionBase, agent_startup
-from isolate.server import agent, definitions
-from isolate.server.serialization import from_grpc, to_grpc
+from isolate.connections.common import serialize_object
+from isolate.connections.grpc import agent, definitions
+from isolate.connections.grpc.interface import from_grpc, to_grpc
 
 
 class AgentError(Exception):
@@ -22,26 +23,24 @@ class AgentError(Exception):
 
 
 @dataclass
-class RemotePythonConnection(EnvironmentConnection):
-    """A gRPC based connection system to allow proxying incoming
-    messages from one node to another in the form of native gRPC
-    messages."""
+class GRPCExecutionBase(EnvironmentConnection):
+    """A customizable gRPC-based execution backend."""
 
     def start_agent(self) -> ContextManager[Tuple[str, grpc.ChannelCredentials]]:
-        """Start the RPC agent and return the address it is listening on and the required
-        credentials to connect to it."""
+        """Starts the gRPC agent and returns the address it is listening on and
+        the required credentials to connect to it."""
         raise NotImplementedError
 
-    def proxy_grpc(
+    def _run_through_grpc(
         self,
         function: definitions.SerializedObject,
         *,
         max_wait_timeout: float = 5,
     ) -> Iterator[definitions.PartialRunResult]:
-        """Send the given 'function' to the agent, and then return the received
-        response (and all the underlying logs). This function takes and returns
-        raw gRPC messages (use `run()` to actually execute Python functions and
-        receive Python objects).
+        """Starts a new agent process, sends the given 'function' to the agent and
+        awaits until the result is received. This function takes and returns raw gRPC
+        messages (use `run()` to actually execute Python functions and receive Python
+        objects).
 
         If the gRPC server is not accessible at the passed maximum timeout, an
         AgentError will be raised."""
@@ -84,28 +83,32 @@ class RemotePythonConnection(EnvironmentConnection):
         *args: Any,
         **kwargs: Any,
     ) -> CallResultType:
-        function = to_grpc(
-            executable,
-            definitions.SerializedObject,
-            method=self.environment.settings.serialization_method,
+        method = self.environment.settings.serialization_method
+        function = definitions.SerializedObject(
+            method=method,
+            definition=serialize_object(method, executable),
             was_it_raised=False,
         )
 
-        for partial_result in self.proxy_grpc(function):
+        for partial_result in self._run_through_grpc(function):
             for raw_log in partial_result.logs:
-                log = from_grpc(raw_log, Log)
+                log = from_grpc(raw_log)
                 self.log(log.message, level=log.level, source=log.source)
 
             if partial_result.is_complete:
-                assert partial_result.result
-                return cast(CallResultType, from_grpc(partial_result.result, object))
+                if not partial_result.result:
+                    raise AgentError(
+                        "The agent didn't return a result, but it should have."
+                    )
+
+                return cast(CallResultType, from_grpc(partial_result.result))
 
         raise AgentError(
             "No result object was received from the agent (it never set is_complete to True)."
         )
 
 
-class LocalPythonRPC(PythonExecutionBase[str], RemotePythonConnection):
+class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
     @contextmanager
     def start_agent(self) -> Iterator[Tuple[str, grpc.ChannelCredentials]]:
         def find_free_port() -> Tuple[str, int]:
@@ -130,8 +133,6 @@ class LocalPythonRPC(PythonExecutionBase[str], RemotePythonConnection):
         executable: Path,
         connection: str,
     ) -> List[Union[str, Path]]:
-        # TODO: we should probably assert that the isolate[server] is installed
-        # on the agent side.
         return [
             executable,
             agent_startup.__file__,

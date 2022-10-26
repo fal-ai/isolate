@@ -16,8 +16,8 @@ from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 
 
-class GenericCreationTests:
-    """Generic tests related to environment creation that most
+class GenericEnvironmentTests:
+    """Generic tests related to environment management that most
     of the backends can share easily."""
 
     def get_project_environment(self, tmp_path: Any, name: str) -> BaseEnvironment:
@@ -130,7 +130,7 @@ class GenericCreationTests:
         assert not environment.exists()
 
 
-class TestVirtualenv(GenericCreationTests):
+class TestVirtualenv(GenericEnvironmentTests):
 
     backend_cls = VirtualPythonEnvironment
     configs = {
@@ -220,7 +220,7 @@ else:
 
 
 @pytest.mark.skipif(not IS_CONDA_AVAILABLE, reason="Conda is not available")
-class TestConda(GenericCreationTests):
+class TestConda(GenericEnvironmentTests):
 
     backend_cls = CondaEnvironment
     configs = {

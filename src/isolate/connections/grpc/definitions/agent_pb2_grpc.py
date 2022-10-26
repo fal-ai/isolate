@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from isolate.server.definitions import common_pb2 as common__pb2
+from isolate.connections.grpc.definitions import common_pb2 as common__pb2
 
 
 class AgentStub(object):

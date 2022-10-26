@@ -6,13 +6,14 @@ import traceback
 from argparse import ArgumentParser
 from concurrent import futures
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Iterator
 
 import grpc
 from grpc import ServicerContext, StatusCode
 
-from isolate.server import definitions
-from isolate.server.serialization import SerializationError, from_grpc, to_grpc
+from isolate.connections.common import SerializationError, serialize_object
+from isolate.connections.grpc import definitions
+from isolate.connections.grpc.interface import from_grpc
 
 
 @dataclass
@@ -26,11 +27,14 @@ class AgentServicer(definitions.AgentServicer):
 
         if request.was_it_raised:
             return self.abort_with_msg(
-                "The input function must be callable, not a raised exception.", context
+                "The input function must be callable, not a raised exception.",
+                context,
             )
 
         try:
-            function = from_grpc(request, object)
+            # TODO: technically any sort of exception could be raised here, since
+            # depickling is basically involves code execution from the *user*.
+            function = from_grpc(request)
         except SerializationError:
             yield from self.log(traceback.format_exc())
             return self.abort_with_msg(
@@ -56,12 +60,7 @@ class AgentServicer(definitions.AgentServicer):
         yield from self.log("Completed the execution of the input function.")
 
         try:
-            serialized_result = to_grpc(
-                result,
-                definitions.SerializedObject,
-                method=request.method,
-                was_it_raised=was_it_raised,
-            )
+            definition = serialize_object(request.method, result)
         except SerializationError:
             yield from self.log(traceback.format_exc(), level=definitions.ERROR)
             return self.abort_with_msg(
@@ -74,11 +73,16 @@ class AgentServicer(definitions.AgentServicer):
                 "An unexpected error occurred while serializing the result.", context
             )
 
-        yield from self.log(
-            "Serialization of the result is complete. Sending the result."
+        yield from self.log("Sending the result.")
+        serialized_obj = definitions.SerializedObject(
+            method=request.method,
+            definition=definition,
+            was_it_raised=was_it_raised,
         )
         yield definitions.PartialRunResult(
-            result=serialized_result, is_complete=True, logs=[]
+            result=serialized_obj,
+            is_complete=True,
+            logs=[],
         )
 
     def log(
