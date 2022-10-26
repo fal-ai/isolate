@@ -36,7 +36,7 @@ class RemotePythonConnection(EnvironmentConnection):
         self,
         function: definitions.SerializedObject,
         *,
-        max_wait_timeout: float = 2.5,
+        max_wait_timeout: float = 5,
     ) -> Iterator[definitions.PartialRunResult]:
         """Send the given 'function' to the agent, and then return the received
         response (and all the underlying logs). This function takes and returns

@@ -11,12 +11,9 @@ virtualenv = ">=20.4"
 importlib-metadata = ">=4.4"
 grpcio = { version = ">=1.49", optional = true }
 protobuf = { version = "*", optional = true }
-flask = { version = "*", optional = true }
-marshmallow = { version = "*", optional = true }
-pyjwt = { version = "*", optional = true }
 
 [tool.poetry.extras]
-server = ["flask", "marshmallow", "pyjwt"]
+server = ["grpcio", "protobuf"]
 
 [tool.poetry.plugins."isolate.backends"]
 "virtualenv" = "isolate.backends.virtual_env:VirtualPythonEnvironment"
