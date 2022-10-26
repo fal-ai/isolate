@@ -22,12 +22,6 @@ repos:
          -   --disallow-incomplete-defs
          -   --ignore-missing-imports
          -   --no-warn-no-return
-         -   --disable-error-code
-         -   attr-defined
-         -   --disable-error-code
-         -   misc
-         -   --disable-error-code
-         -   var-annotated
          exclude: '^src/.*_pb2.py$'
          additional_dependencies: [types-protobuf]
 -   repo: https://github.com/codespell-project/codespell

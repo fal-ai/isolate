@@ -13,7 +13,7 @@ from isolate.backends.common import (
     logged_io,
     sha256_digest_of,
 )
-from isolate.backends.context import DEFAULT_SETTINGS, IsolateSettings
+from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
 from isolate.connections import PythonIPC
 
 

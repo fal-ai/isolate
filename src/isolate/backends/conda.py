@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import os
 import shutil
 import subprocess
@@ -8,8 +9,8 @@ from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
-from isolate.backends.common import cache_static, logged_io, sha256_digest_of
-from isolate.backends.context import DEFAULT_SETTINGS, IsolateSettings
+from isolate.backends.common import logged_io, sha256_digest_of
+from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
 from isolate.connections import PythonIPC
 
 # Specify the path where the conda binary might reside in (or
@@ -86,7 +87,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
         return PythonIPC(self, connection_key)
 
 
-@cache_static
+@functools.lru_cache(1)
 def _get_conda_executable() -> Path:
     for path in [_ISOLATE_CONDA_HOME, None]:
         conda_path = shutil.which(_CONDA_COMMAND, path=path)

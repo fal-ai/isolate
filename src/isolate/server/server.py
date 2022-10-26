@@ -2,23 +2,19 @@ import os
 import traceback
 from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from functools import partial
 from queue import Empty as QueueEmpty
 from queue import Queue
-from typing import Callable, Iterator, Optional, cast
+from typing import Callable, Iterator, cast
 
 import grpc
 from grpc import ServicerContext, StatusCode
 
-from isolate.backends import (
-    BaseEnvironment,
-    EnvironmentCreationError,
-    IsolateSettings,
-)
-from isolate.backends.context import Log
+from isolate.backends import EnvironmentCreationError, IsolateSettings
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.connections.grpc import AgentError, LocalPythonGRPC
+from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions
 from isolate.server.interface import from_grpc, to_grpc
 
@@ -33,13 +29,16 @@ MAX_THREADS = int(os.getenv("MAX_THREADS", 5))
 _Q_WAIT_DELAY = 0.1
 
 
+@dataclass
 class IsolateServicer(definitions.IsolateServicer):
+    default_settings: IsolateSettings = field(default_factory=IsolateSettings)
+
     def Run(
         self,
         request: definitions.BoundFunction,
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
-        messages = Queue()
+        messages: Queue[definitions.PartialRunResult] = Queue()
         try:
             environment = from_grpc(request.environment)
         except ValueError as exc:
@@ -48,7 +47,8 @@ class IsolateServicer(definitions.IsolateServicer):
                 context,
             )
 
-        run_settings = IsolateSettings(
+        run_settings = replace(
+            self.default_settings,
             log_hook=partial(_add_log_to_queue, messages),
             serialization_method=request.function.method,
         )
@@ -98,7 +98,7 @@ class IsolateServicer(definitions.IsolateServicer):
                     for line in traceback.format_exception(
                         type(exception), exception, exception.__traceback__
                     ):
-                        yield from self.log(line)
+                        yield from self.log(line, level=LogLevel.ERROR)
                     if isinstance(exception, AgentError):
                         return self.abort_with_msg(
                             str(exception),
@@ -133,10 +133,11 @@ class IsolateServicer(definitions.IsolateServicer):
     def log(
         self,
         message: str,
-        level: definitions.LogLevel = definitions.TRACE,
-        source: definitions.LogSource = definitions.BRIDGE,
+        level: LogLevel = LogLevel.TRACE,
+        source: LogSource = LogSource.BRIDGE,
     ) -> Iterator[definitions.PartialRunResult]:
-        log = definitions.Log(message=message, level=level, source=source)
+        log = to_grpc(Log(message, level=level, source=source))
+        log = cast(definitions.Log, log)
         yield definitions.PartialRunResult(result=None, is_complete=False, logs=[log])
 
     def abort_with_msg(

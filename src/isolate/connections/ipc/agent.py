@@ -22,8 +22,32 @@ import sys
 import time
 from argparse import ArgumentParser
 from contextlib import closing
-from multiprocessing.connection import Client, ConnectionWrapper
-from typing import ContextManager, Tuple
+from multiprocessing.connection import Client
+from typing import TYPE_CHECKING, Any, Callable, ContextManager, Tuple
+
+if TYPE_CHECKING:
+    # Somhow mypy can't figure out that `ConnectionWrapper`
+    # really exists.
+    class ConnectionWrapper:
+        def __init__(
+            self,
+            connection: Any,
+            loads: Callable[[bytes], Any],
+            dumps: Callable[[Any], bytes],
+        ) -> None:
+            ...
+
+        def recv(self) -> Any:
+            ...
+
+        def send(self, value: Any) -> None:
+            ...
+
+        def close(self) -> None:
+            ...
+
+else:
+    from multiprocessing.connection import ConnectionWrapper
 
 
 def decode_service_address(address: str) -> Tuple[str, int]:

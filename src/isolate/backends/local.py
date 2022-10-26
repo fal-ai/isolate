@@ -7,7 +7,7 @@ from typing import Any, ClassVar, Dict
 
 from isolate.backends import BaseEnvironment
 from isolate.backends.common import sha256_digest_of
-from isolate.backends.context import DEFAULT_SETTINGS, IsolateSettings
+from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
 from isolate.connections import PythonIPC
 
 

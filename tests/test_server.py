@@ -7,7 +7,8 @@ from typing import Any, List, Optional, Tuple
 import grpc
 import pytest
 
-from isolate.backends.context import Log, LogLevel, LogSource
+from isolate.backends.settings import IsolateSettings
+from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions
 from isolate.server.interface import from_grpc, to_grpc, to_serialized_object
 from isolate.server.server import IsolateServicer
@@ -24,9 +25,10 @@ def inherit_from_local(monkeypatch: Any, value: bool = True) -> None:
 
 
 @pytest.fixture
-def stub():
+def stub(tmp_path):
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-    definitions.register_isolate(IsolateServicer(), server)
+    test_settings = IsolateSettings(cache_dir=tmp_path / "cache")
+    definitions.register_isolate(IsolateServicer(test_settings), server)
     host, port = "localhost", server.add_insecure_port(f"[::]:0")
     server.start()
 

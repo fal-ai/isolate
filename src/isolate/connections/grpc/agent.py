@@ -6,14 +6,15 @@ import traceback
 from argparse import ArgumentParser
 from concurrent import futures
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Iterator, cast
 
 import grpc
 from grpc import ServicerContext, StatusCode
 
 from isolate.connections.common import SerializationError, serialize_object
 from isolate.connections.grpc import definitions
-from isolate.connections.grpc.interface import from_grpc
+from isolate.connections.grpc.interface import from_grpc, to_grpc
+from isolate.logs import Log, LogLevel, LogSource
 
 
 @dataclass
@@ -62,13 +63,13 @@ class AgentServicer(definitions.AgentServicer):
         try:
             definition = serialize_object(request.method, result)
         except SerializationError:
-            yield from self.log(traceback.format_exc(), level=definitions.ERROR)
+            yield from self.log(traceback.format_exc(), level=LogLevel.ERROR)
             return self.abort_with_msg(
                 "The result of the input function could not be serialized.",
                 context,
             )
         except BaseException:
-            yield from self.log(traceback.format_exc(), level=definitions.ERROR)
+            yield from self.log(traceback.format_exc(), level=LogLevel.ERROR)
             return self.abort_with_msg(
                 "An unexpected error occurred while serializing the result.", context
             )
@@ -88,10 +89,11 @@ class AgentServicer(definitions.AgentServicer):
     def log(
         self,
         message: str,
-        level: definitions.LogLevel = definitions.TRACE,
-        source: definitions.LogSource = definitions.BRIDGE,
+        level: LogLevel = LogLevel.TRACE,
+        source: LogSource = LogSource.BRIDGE,
     ) -> Iterator[definitions.PartialRunResult]:
-        log = definitions.Log(message=message, level=level, source=source)
+        log = to_grpc(Log(message, level=level, source=source))
+        log = cast(definitions.Log, log)
         yield definitions.PartialRunResult(result=None, is_complete=False, logs=[log])
 
     def abort_with_msg(

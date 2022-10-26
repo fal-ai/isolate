@@ -2,11 +2,11 @@
 and the Isolate Server to share."""
 
 import functools
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any
 
-from isolate.backends.context import Log, LogLevel, LogSource
 from isolate.connections.common import load_serialized_object, serialize_object
 from isolate.connections.grpc import definitions
+from isolate.logs import Log, LogLevel, LogSource
 
 
 @functools.singledispatch
@@ -47,8 +47,8 @@ def _(message: definitions.Log) -> Log:
 def _(obj: Log) -> definitions.Log:
     return definitions.Log(
         message=obj.message,
-        source=obj.source.name.upper(),
-        level=obj.level.name.upper(),
+        source=definitions.LogSource.Value(obj.source.name.upper()),
+        level=definitions.LogLevel.Value(obj.level.name.upper()),
     )
 
 

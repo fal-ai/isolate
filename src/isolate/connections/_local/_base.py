@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sysconfig
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
@@ -17,17 +18,30 @@ from typing import (
     Union,
 )
 
-from isolate.backends.common import (
-    get_executable_path,
-    logged_io,
-    python_path_for,
-)
-from isolate.backends.context import LogLevel
+from isolate.backends.common import get_executable_path, logged_io
+from isolate.logs import LogLevel
 
 if TYPE_CHECKING:
     from isolate.backends import BaseEnvironment
 
 ConnectionType = TypeVar("ConnectionType")
+
+
+def python_path_for(*search_paths: Path) -> str:
+    """Return the PYTHONPATH for the library paths residing
+    in the given 'search_paths'. The order of the paths is
+    preserved."""
+
+    assert len(search_paths) >= 1
+    return os.pathsep.join(
+        # sysconfig defines the schema of the directories under
+        # any comforming Python installation (like venv, conda, etc.).
+        #
+        # Be aware that Debian's system installation does not
+        # comform sysconfig.
+        sysconfig.get_path("purelib", vars={"base": search_path})
+        for search_path in search_paths
+    )
 
 
 @dataclass
