@@ -46,6 +46,9 @@ def define_environment(kind: str, **kwargs: Any) -> definitions.EnvironmentDefin
     )
 
 
+_NOT_SET = object()
+
+
 def run_request(
     stub: definitions.IsolateStub,
     request: definitions.BoundFunction,
@@ -59,13 +62,23 @@ def run_request(
         LogSource.BRIDGE: bridge_logs if bridge_logs is not None else [],
         LogSource.USER: user_logs if user_logs is not None else [],
     }
+
+    result = _NOT_SET
     for result in stub.Run(request):
         for log in result.logs:
             log = from_grpc(log, Log)
             log_store[log.source].append(log)
 
         if result.is_complete:
-            return result.result
+            if result is _NOT_SET:
+                result = result.result
+            else:
+                raise ValueError("Sent the result twice")
+
+    if result is _NOT_SET:
+        raise ValueError("Never sent the result")
+    else:
+        return result
 
 
 @pytest.mark.parametrize("inherit_local", [True, False])
