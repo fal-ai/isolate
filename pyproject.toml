@@ -16,7 +16,7 @@ protobuf = { version = "*", optional = true }
 server = ["grpcio", "protobuf"]
 
 [tool.poetry.plugins."isolate.backends"]
-"virtualenv" = "isolate.backends.virtual_env:VirtualPythonEnvironment"
+"virtualenv" = "isolate.backends.virtualenv:VirtualPythonEnvironment"
 "conda" = "isolate.backends.conda:CondaEnvironment"
 "local" = "isolate.backends.local:LocalPythonEnvironment"
 

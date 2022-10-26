@@ -13,8 +13,8 @@ from isolate.backends.common import (
     logged_io,
     sha256_digest_of,
 )
-from isolate.backends.connections import PythonIPC
-from isolate.backends.context import GLOBAL_CONTEXT, ContextType
+from isolate.backends.context import DEFAULT_SETTINGS, IsolateSettings
+from isolate.connections import PythonIPC
 
 
 @dataclass
@@ -28,7 +28,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
     def from_config(
         cls,
         config: Dict[str, Any],
-        context: ContextType = GLOBAL_CONTEXT,
+        settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         requirements = config.get("requirements", [])
         # TODO: we probably should validate that this file actually exists
@@ -37,7 +37,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             requirements=requirements,
             constraints_file=constraints_file,
         )
-        environment.set_context(context)
+        environment.apply_settings(settings)
         return environment
 
     @property
@@ -82,11 +82,11 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
     def create(self) -> Path:
         from virtualenv import cli_run
 
-        venv_path = self.context.cache_dir_for(self)
+        venv_path = self.settings.cache_dir_for(self)
         if venv_path.exists():
             return venv_path
 
-        with self.context.build_ctx_for(venv_path) as build_path:
+        with self.settings.build_ctx_for(venv_path) as build_path:
             self.log(f"Creating the environment at '{build_path}'")
 
             try:
@@ -106,7 +106,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         shutil.rmtree(connection_key)
 
     def exists(self) -> bool:
-        path = self.context.cache_dir_for(self)
+        path = self.settings.cache_dir_for(self)
         return path.exists()
 
     def open_connection(self, connection_key: Path) -> PythonIPC:

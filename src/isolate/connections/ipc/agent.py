@@ -32,9 +32,9 @@ def decode_service_address(address: str) -> Tuple[str, int]:
 
 
 def child_connection(
-    serialization_backend_name: str, address: Tuple[str, int]
+    serialization_method: str, address: Tuple[str, int]
 ) -> ContextManager[ConnectionWrapper]:
-    serialization_backend = importlib.import_module(serialization_backend_name)
+    serialization_backend = importlib.import_module(serialization_method)
     return closing(
         ConnectionWrapper(
             Client(address),
@@ -49,7 +49,7 @@ DEBUG_TIMEOUT = 60 * 15
 
 
 def run_client(
-    serialization_backend_name: str, address: Tuple[str, int], *, with_pdb: bool = False
+    serialization_method: str, address: Tuple[str, int], *, with_pdb: bool = False
 ) -> None:
     # Debug Mode
     # ==========
@@ -78,7 +78,7 @@ def run_client(
     print(f"[trace] Trying to create a connection to {address}")
     # TODO(feat): this should probably run in a loop instead of
     # receiving a single function and then exitting immediately.
-    with child_connection(serialization_backend_name, address) as connection:
+    with child_connection(serialization_method, address) as connection:
         print(f"[trace] Created child connection to {address}")
         callable = connection.recv()
         print(f"[trace] Received the callable at {address}")
@@ -151,9 +151,9 @@ def main() -> int:
         print(message)
         time.sleep(DEBUG_TIMEOUT)
 
-    serialization_backend_name = options.serialization_backend
+    serialization_method = options.serialization_backend
     address = decode_service_address(options.listen_at)
-    run_client(serialization_backend_name, address, with_pdb=options.with_pdb)
+    run_client(serialization_method, address, with_pdb=options.with_pdb)
     return 0
 
 

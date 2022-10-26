@@ -3,12 +3,12 @@ from typing import Any, Type, TypeVar, cast
 
 from isolate import prepare_environment
 from isolate.backends import BaseEnvironment
-from isolate.backends.connections.common import (
+from isolate.backends.context import Log, LogLevel, LogSource
+from isolate.connections.common import (
     SerializationError,
     load_serialized_object,
     serialize_object,
 )
-from isolate.backends.context import Log, LogLevel, LogSource
 from isolate.server import definitions
 
 T = TypeVar("T")

@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from isolate.backends import BaseEnvironment, UserException
-from isolate.backends.connections import PythonIPC
-from isolate.backends.context import _Context
-from isolate.backends.virtual_env import VirtualPythonEnvironment
+from isolate.backends import BaseEnvironment
+from isolate.backends.context import IsolateSettings
+from isolate.backends.virtualenv import VirtualPythonEnvironment
+from isolate.connections import PythonIPC
 
 
 class FakeEnvironment(BaseEnvironment):
@@ -40,10 +40,8 @@ def test_python_ipc_serialization():
 
     # But we can switch serialization backends, and use cloudpickle
     # which can serialize anonymous functions.
-    cloudpickle_context = replace(
-        fake_env.context, _serialization_backend="cloudpickle"
-    )
-    fake_env.set_context(cloudpickle_context)
+    cloudpickle_ettings = replace(fake_env.settings, serialization_method="cloudpickle")
+    fake_env.apply_settings(cloudpickle_ettings)
 
     with PythonIPC(fake_env, environment_path=Path(sys.prefix)) as conn:
         result = conn.run(lambda: 1 + 2)
@@ -52,10 +50,10 @@ def test_python_ipc_serialization():
 
 def test_extra_inheritance_paths(tmp_path):
     first_env = VirtualPythonEnvironment(["pyjokes==0.5.0"])
-    first_env.set_context(_Context(Path(tmp_path)))
+    first_env.apply_settings(IsolateSettings(Path(tmp_path)))
 
     second_env = VirtualPythonEnvironment(["emoji==0.5.4"])
-    second_env.set_context(_Context(Path(tmp_path)))
+    second_env.apply_settings(IsolateSettings(Path(tmp_path)))
 
     with PythonIPC(
         first_env, first_env.create(), extra_inheritance_paths=[second_env.create()]
@@ -64,7 +62,7 @@ def test_extra_inheritance_paths(tmp_path):
         assert conn.run(partial(eval, "__import__('emoji').__version__")) == "0.5.4"
 
     third_env = VirtualPythonEnvironment(["pyjokes==0.6.0", "emoji==2.0.0"])
-    third_env.set_context(_Context(Path(tmp_path)))
+    third_env.apply_settings(IsolateSettings(Path(tmp_path)))
 
     with PythonIPC(
         second_env, second_env.create(), extra_inheritance_paths=[third_env.create()]
@@ -88,7 +86,7 @@ def test_extra_inheritance_paths(tmp_path):
         assert conn.run(partial(eval, "__import__('pyjokes').__version__")) == "0.6.0"
 
     fourth_env = VirtualPythonEnvironment(["pyjokes==0.4.1", "emoji==2.1.0"])
-    fourth_env.set_context(_Context(Path(tmp_path)))
+    fourth_env.apply_settings(IsolateSettings(Path(tmp_path)))
 
     with PythonIPC(
         first_env,
@@ -99,16 +97,3 @@ def test_extra_inheritance_paths(tmp_path):
         assert conn.run(partial(eval, "__import__('pyjokes').__version__")) == "0.5.0"
         # This comes from the third_env
         assert conn.run(partial(eval, "__import__('emoji').__version__")) == "2.0.0"
-
-
-def test_ignore_exceptions(tmp_path):
-    env = VirtualPythonEnvironment([])
-    env.set_context(_Context(Path(tmp_path)))
-
-    with PythonIPC(env, env.create()) as connection:
-        with pytest.raises(ZeroDivisionError):
-            assert connection.run(partial(eval, "1 / 0"))
-
-        user_exc = connection.run(partial(eval, "1 / 0"), ignore_exceptions=True)
-        assert isinstance(user_exc, UserException)
-        assert isinstance(user_exc.exception, ZeroDivisionError)

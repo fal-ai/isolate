@@ -1,19 +1,20 @@
 import os
-import threading
 import traceback
-from argparse import ArgumentParser
 from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from queue import Empty as QueueEmpty
 from queue import Queue
-from typing import Any, Callable, Iterator, Optional, Tuple
+from typing import Callable, Iterator, Optional
 
 import grpc
 from grpc import ServicerContext, StatusCode
 
-from isolate.backends import BaseEnvironment, EnvironmentCreationError
-from isolate.backends.context import GLOBAL_CONTEXT
+from isolate.backends import (
+    BaseEnvironment,
+    EnvironmentCreationError,
+    IsolateSettings,
+)
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.server import definitions
 from isolate.server.controller import AgentError, LocalPythonRPC
@@ -48,17 +49,17 @@ class IsolateServicer(definitions.IsolateServicer):
         except ValueError as exc:
             return self.abort_with_msg(f"Environment creation error: {exc}.", context)
 
-        run_ctx = GLOBAL_CONTEXT._replace(
-            _log_handler=lambda log: messages.put_nowait(
+        run_ctx = IsolateSettings(
+            log_hook=lambda log: messages.put_nowait(
                 definitions.PartialRunResult(
                     is_complete=False,
                     logs=[to_grpc(log, definitions.Log)],
                     result=None,
                 )
             ),
-            _serialization_backend=request.function.method,
+            serialization_method=request.function.method,
         )
-        environment.set_context(run_ctx)
+        environment.apply_settings(run_ctx)
 
         extra_inheritance_paths = []
         if INHERIT_FROM_LOCAL:

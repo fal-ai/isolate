@@ -175,11 +175,11 @@ def logged_io(
             raise RuntimeError("Log observers did not terminate in time.")
 
 
-def run_serialized(serialization_backend_name: str, data: bytes) -> Any:
+def run_serialized(serialization_method: str, data: bytes) -> Any:
     """Deserialize the given 'data' into an parameter-less callable and
     run it."""
 
-    serialization_backend = importlib.import_module(serialization_backend_name)
+    serialization_backend = importlib.import_module(serialization_method)
     executable = serialization_backend.loads(data)
     return executable()
 

@@ -9,8 +9,8 @@ from typing import Any, ClassVar, Dict, List
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import cache_static, logged_io, sha256_digest_of
-from isolate.backends.connections import PythonIPC
-from isolate.backends.context import GLOBAL_CONTEXT, ContextType
+from isolate.backends.context import DEFAULT_SETTINGS, IsolateSettings
+from isolate.connections import PythonIPC
 
 # Specify the path where the conda binary might reside in (or
 # mamba, if it is the preferred one).
@@ -28,11 +28,11 @@ class CondaEnvironment(BaseEnvironment[Path]):
     def from_config(
         cls,
         config: Dict[str, Any],
-        context: ContextType = GLOBAL_CONTEXT,
+        settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         user_provided_packages = config.get("packages", [])
         environment = cls(user_provided_packages)
-        environment.set_context(context)
+        environment.apply_settings(settings)
         return environment
 
     @property
@@ -40,11 +40,11 @@ class CondaEnvironment(BaseEnvironment[Path]):
         return sha256_digest_of(*self.packages)
 
     def create(self) -> Path:
-        env_path = self.context.cache_dir_for(self)
+        env_path = self.settings.cache_dir_for(self)
         if env_path.exists():
             return env_path
 
-        with self.context.build_ctx_for(env_path) as build_path:
+        with self.settings.build_ctx_for(env_path) as build_path:
             self.log(f"Creating the environment at '{build_path}'")
             conda_executable = _get_conda_executable()
             if self.packages:
@@ -79,7 +79,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
         shutil.rmtree(connection_key)
 
     def exists(self) -> bool:
-        path = self.context.cache_dir_for(self)
+        path = self.settings.cache_dir_for(self)
         return path.exists()
 
     def open_connection(self, connection_key: Path) -> PythonIPC:

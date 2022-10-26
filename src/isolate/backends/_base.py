@@ -14,8 +14,8 @@ from typing import (
 )
 
 from isolate.backends.context import (
-    GLOBAL_CONTEXT,
-    ContextType,
+    DEFAULT_SETTINGS,
+    IsolateSettings,
     Log,
     LogLevel,
     LogSource,
@@ -26,7 +26,6 @@ __all__ = [
     "CallResultType",
     "EnvironmentConnection",
     "BaseEnvironment",
-    "UserException",
     "EnvironmentCreationError",
 ]
 
@@ -45,17 +44,13 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
 
     BACKEND_NAME: ClassVar[Optional[str]] = None
 
-    # Context is currently a special object that is not exposed to the users.
-    # In the future there might be many contexts with different abilities (e.g.
-    # a context object that changes cache location to /tmp, or a context that
-    # changes the serialization form)
-    context: ContextType = GLOBAL_CONTEXT
+    settings: IsolateSettings = DEFAULT_SETTINGS
 
     @classmethod
     def from_config(
         cls,
         config: Dict[str, Any],
-        context: ContextType = GLOBAL_CONTEXT,
+        settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         """Create a new environment from the given configuration."""
         raise NotImplementedError
@@ -95,9 +90,9 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
         with self.open_connection(connection_key) as connection:
             yield connection
 
-    def set_context(self, context: ContextType) -> None:
-        """Replace the existing context with the given `context`."""
-        self.context = context
+    def apply_settings(self, settings: IsolateSettings) -> None:
+        """Apply the new settings to this environment."""
+        self.settings = settings
 
     def log(
         self,
@@ -108,15 +103,7 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
     ) -> None:
         """Log a message."""
         log_msg = Log(message, level=level, source=source, bound_env=self)
-        self.context.log(log_msg)
-
-
-@dataclass
-class UserException:
-    """Represents an exception that was raised during
-    the user program."""
-
-    exception: BaseException
+        self.settings.log(log_msg)
 
 
 @dataclass
@@ -132,14 +119,11 @@ class EnvironmentConnection:
     def run(
         self,
         executable: BasicCallable,
-        ignore_exceptions: bool = False,
         *args: Any,
         **kwargs: Any,
     ) -> CallResultType:
         """Run the given executable inside the environment, and return the result.
-        If the executable raises an exception, then it will be raised directly unless
-        'ignore_exceptions' is set. In that case, the exception will be wrapped by
-        a UserException box and returned."""
+        If the executable raises an exception, then it will be raised directly."""
         raise NotImplementedError
 
     def log(

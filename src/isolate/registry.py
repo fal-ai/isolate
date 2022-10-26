@@ -15,7 +15,7 @@ _ENTRY_POINT = "isolate.backends"
 _ENVIRONMENT_REGISTRY: Dict[str, Type["BaseEnvironment"]] = {}
 
 
-def _reload_registry() -> Dict[str, Type[BaseEnvironment]]:
+def _reload_registry() -> None:
     entry_points = importlib_metadata.entry_points()
     _ENVIRONMENT_REGISTRY.update(
         {
@@ -33,11 +33,11 @@ def prepare_environment(
     **kwargs: Any,
 ) -> BaseEnvironment:
     """Get the environment for the given `kind` with the given `config`."""
-    from isolate.backends.context import GLOBAL_CONTEXT
+    from isolate.backends.context import DEFAULT_SETTINGS
 
     registered_env_cls = _ENVIRONMENT_REGISTRY.get(kind)
     if not registered_env_cls:
         raise ValueError(f"Unknown environment: '{kind}'")
 
-    context = kwargs.pop("context", GLOBAL_CONTEXT)
-    return registered_env_cls.from_config(config=kwargs, context=context)
+    settings = kwargs.pop("context", DEFAULT_SETTINGS)
+    return registered_env_cls.from_config(config=kwargs, settings=settings)

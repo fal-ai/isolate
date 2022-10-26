@@ -11,9 +11,9 @@ import pytest
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import get_executable_path, sha256_digest_of
 from isolate.backends.conda import CondaEnvironment, _get_conda_executable
-from isolate.backends.context import _Context
+from isolate.backends.context import IsolateSettings
 from isolate.backends.local import LocalPythonEnvironment
-from isolate.backends.virtual_env import VirtualPythonEnvironment
+from isolate.backends.virtualenv import VirtualPythonEnvironment
 
 
 class GenericCreationTests:
@@ -32,8 +32,8 @@ class GenericCreationTests:
     def get_environment(self, tmp_path: Any, config: Dict[str, Any]) -> BaseEnvironment:
         environment = self.backend_cls.from_config(config)
 
-        test_context = _Context(Path(tmp_path))
-        environment.set_context(test_context)
+        test_settings = IsolateSettings(Path(tmp_path))
+        environment.apply_settings(test_settings)
         return environment
 
     def get_example_version(
