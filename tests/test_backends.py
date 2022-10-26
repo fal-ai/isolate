@@ -1,24 +1,26 @@
 import subprocess
 import sys
-import textwrap
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Type
 
 import pytest
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
-from isolate.backends.common import get_executable_path, sha256_digest_of
+from isolate.backends.common import sha256_digest_of
 from isolate.backends.conda import CondaEnvironment, _get_conda_executable
-from isolate.backends.context import IsolateSettings
 from isolate.backends.local import LocalPythonEnvironment
+from isolate.backends.settings import IsolateSettings
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 
 
 class GenericEnvironmentTests:
     """Generic tests related to environment management that most
     of the backends can share easily."""
+
+    backend_cls: Type[BaseEnvironment]
+    configs: Dict[str, Dict[str, Any]]
 
     def get_project_environment(self, tmp_path: Any, name: str) -> BaseEnvironment:
         if name not in self.configs:

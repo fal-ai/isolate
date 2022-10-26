@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-import functools
 import hashlib
-import importlib
 import os
 import shutil
-import sysconfig
 import threading
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional, Tuple
+from typing import Callable, Iterator, Optional, Tuple
 
 _OLD_DIR_PREFIX = "old-"
 
@@ -43,23 +40,6 @@ def replace_dir(src_path: Path, dst_path: Path) -> None:
             shutil.rmtree(cleanup)
 
 
-def python_path_for(*search_paths: Path) -> str:
-    """Return the PYTHONPATH for the library paths residing
-    in the given 'search_paths'. The order of the paths is
-    preserved."""
-
-    assert len(search_paths) >= 1
-    return os.pathsep.join(
-        # sysconfig defines the schema of the directories under
-        # any comforming Python installation (like venv, conda, etc.).
-        #
-        # Be aware that Debian's system installation does not
-        # comform sysconfig.
-        sysconfig.get_path("purelib", vars={"base": search_path})
-        for search_path in search_paths
-    )
-
-
 def get_executable_path(search_path: Path, executable_name: str) -> Path:
     """Return the path for the executable named 'executable_name' under
     the '/bin' directory of 'search_path'."""
@@ -73,23 +53,6 @@ def get_executable_path(search_path: Path, executable_name: str) -> Path:
         )
 
     return Path(executable_path)
-
-
-_NO_HIT = object()
-
-
-def cache_static(func):
-    """Cache the result of an parameter-less function."""
-    _function_cache = _NO_HIT
-
-    @functools.wraps(func)
-    def wrapper():
-        nonlocal _function_cache
-        if _function_cache is _NO_HIT:
-            _function_cache = func()
-        return _function_cache
-
-    return wrapper
 
 
 _MESSAGE_STREAM_DELAY = 0.1
@@ -173,15 +136,6 @@ def logged_io(
             stderr_observer.join(timeout=_MESSAGE_STREAM_DELAY)
         except TimeoutError:
             raise RuntimeError("Log observers did not terminate in time.")
-
-
-def run_serialized(serialization_method: str, data: bytes) -> Any:
-    """Deserialize the given 'data' into an parameter-less callable and
-    run it."""
-
-    serialization_backend = importlib.import_module(serialization_method)
-    executable = serialization_backend.loads(data)
-    return executable()
 
 
 @lru_cache(maxsize=None)

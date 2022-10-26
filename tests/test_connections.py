@@ -7,8 +7,8 @@ from typing import Any, List
 import pytest
 
 from isolate.backends import BaseEnvironment, EnvironmentConnection
-from isolate.backends.context import IsolateSettings
 from isolate.backends.local import LocalPythonEnvironment
+from isolate.backends.settings import IsolateSettings
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 from isolate.connections import LocalPythonGRPC, PythonIPC
 
@@ -66,7 +66,7 @@ class GenericPythonConnectionTests:
         # a lambda function.
         with self.open_connection(local_env, local_env.create()) as conn:
             with pytest.raises(Exception):
-                result = conn.run(lambda: 1 + 2)
+                result: int = conn.run(lambda: 1 + 2)
 
         # But we can switch serialization backends, and use cloudpickle or dill
         # since both of them can serialize a lambda function.

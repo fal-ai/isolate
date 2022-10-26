@@ -33,7 +33,7 @@ def prepare_environment(
     **kwargs: Any,
 ) -> BaseEnvironment:
     """Get the environment for the given `kind` with the given `config`."""
-    from isolate.backends.context import DEFAULT_SETTINGS
+    from isolate.backends.settings import DEFAULT_SETTINGS
 
     registered_env_cls = _ENVIRONMENT_REGISTRY.get(kind)
     if not registered_env_cls:

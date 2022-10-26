@@ -11,11 +11,11 @@ from isolate.backends import (
     CallResultType,
     EnvironmentConnection,
 )
-from isolate.backends.context import Log, LogLevel, LogSource
 from isolate.connections._local import PythonExecutionBase, agent_startup
 from isolate.connections.common import serialize_object
 from isolate.connections.grpc import agent, definitions
 from isolate.connections.grpc.interface import from_grpc, to_grpc
+from isolate.logs import Log, LogLevel, LogSource
 
 
 class AgentError(Exception):

@@ -13,13 +13,8 @@ from typing import (
     TypeVar,
 )
 
-from isolate.backends.context import (
-    DEFAULT_SETTINGS,
-    IsolateSettings,
-    Log,
-    LogLevel,
-    LogSource,
-)
+from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
+from isolate.logs import Log, LogLevel, LogSource
 
 __all__ = [
     "BasicCallable",

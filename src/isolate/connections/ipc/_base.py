@@ -6,32 +6,65 @@ import subprocess
 import time
 from contextlib import ExitStack, closing
 from dataclasses import dataclass
-from multiprocessing.connection import ConnectionWrapper, Listener
+from multiprocessing.connection import Connection, Listener
 from pathlib import Path
-from typing import Any, ContextManager, List, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    ContextManager,
+    List,
+    Tuple,
+    Union,
+)
 
 from isolate.backends import (
     BasicCallable,
     CallResultType,
     EnvironmentConnection,
 )
-from isolate.backends.context import LogLevel, LogSource
 from isolate.connections._local import PythonExecutionBase, agent_startup
 from isolate.connections.ipc import agent
+from isolate.logs import LogLevel, LogSource
+
+if TYPE_CHECKING:
+    # Somhow mypy can't figure out that `ConnectionWrapper`
+    # really exists.
+    class ConnectionWrapper(Connection):
+        def __init__(
+            self,
+            connection: Any,
+            loads: Callable[[bytes], Any],
+            dumps: Callable[[Any], bytes],
+        ) -> None:
+            ...
+
+        def recv(self) -> Any:
+            ...
+
+        def send(self, value: Any) -> None:
+            ...
+
+        def close(self) -> None:
+            ...
+
+else:
+    from multiprocessing.connection import ConnectionWrapper
 
 
-class _MultiFormatListener(Listener):
+class AgentListener(Listener):
+    """A custom listener that can use any available serialization method
+    to communicate with the child process."""
+
     def __init__(self, backend_name: str, *args: Any, **kwargs: Any) -> None:
         self.serialization_backend = loadserialization_method(backend_name)
         super().__init__(*args, **kwargs)
 
-    def accept(self) -> ConnectionWrapper:
-        return closing(
-            ConnectionWrapper(
-                super().accept(),
-                dumps=self.serialization_backend.dumps,
-                loads=self.serialization_backend.loads,
-            )
+    def accept(self) -> Connection:
+        return ConnectionWrapper(
+            super().accept(),
+            dumps=self.serialization_backend.dumps,
+            loads=self.serialization_backend.loads,
         )
 
 
@@ -60,7 +93,7 @@ class IsolatedProcessConnection(EnvironmentConnection):
 
     def start_process(
         self,
-        connection: ConnectionWrapper,
+        connection: AgentListener,
         *args: Any,
         **kwargs: Any,
     ) -> ContextManager[subprocess.Popen]:
@@ -92,7 +125,7 @@ class IsolatedProcessConnection(EnvironmentConnection):
 
             self.log("Starting the controller bridge.")
             controller_service = stack.enter_context(
-                _MultiFormatListener(
+                AgentListener(
                     self.environment.settings.serialization_method,
                     family="AF_INET",
                 )
@@ -113,7 +146,9 @@ class IsolatedProcessConnection(EnvironmentConnection):
                 f"Awaiting agent process of {isolated_process.pid}"
                 " to establish a connection."
             )
-            established_connection = stack.enter_context(controller_service.accept())
+            established_connection = stack.enter_context(
+                closing(controller_service.accept())
+            )
 
             self.log("Bridge between controller and the agent has been established.")
             established_connection.send(executable)
@@ -127,7 +162,7 @@ class IsolatedProcessConnection(EnvironmentConnection):
     def poll_until_result(
         self,
         process: subprocess.Popen,
-        connection: ConnectionWrapper,
+        connection: Connection,
     ) -> CallResultType:
         """Take the given process, and poll until either it exits or returns
         a result object."""
@@ -165,12 +200,13 @@ class IsolatedProcessConnection(EnvironmentConnection):
 
 
 @dataclass
-class PythonIPC(PythonExecutionBase[ConnectionWrapper], IsolatedProcessConnection):
+class PythonIPC(PythonExecutionBase[AgentListener], IsolatedProcessConnection):
     def get_python_cmd(
         self,
         executable: Path,
-        connection: ConnectionWrapper,
+        connection: AgentListener,
     ) -> List[Union[str, Path]]:
+        assert isinstance(connection.address, tuple)
         return [
             executable,
             agent_startup.__file__,

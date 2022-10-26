@@ -1,4 +1,5 @@
 import ast
+import os
 import subprocess
 import sys
 from argparse import ArgumentParser
@@ -7,6 +8,8 @@ from pathlib import Path
 from refactor import Rule, Session, actions
 
 PROJECT_ROOT = Path(__file__).parent.parent / "src"
+COMMON_DIR = PROJECT_ROOT / "isolate" / "connections" / "grpc" / "definitions"
+KNOWN_PATHS = {"common_pb2": "isolate.connections.grpc.definitions"}
 
 
 class FixGRPCImports(Rule):
@@ -16,11 +19,18 @@ class FixGRPCImports(Rule):
         # import *_pb2
         assert isinstance(node, ast.Import)
         assert len(node.names) == 1
+        assert not node.names[0].name.startswith("google")
         assert node.names[0].name.endswith("_pb2")
 
-        # from <actual_pkg> import *_pb2
-        parent_dir = self.context.file.resolve().relative_to(PROJECT_ROOT).parent
-        qualified_name = ".".join(parent_dir.parts)
+        # If we know where the import is coming from, use that.
+        qualified_name = KNOWN_PATHS.get(node.names[0].name)
+
+        if not qualified_name:
+            # Otherwise discover it from the current file path.
+            parent_dir = self.context.file.resolve().relative_to(PROJECT_ROOT).parent
+            qualified_name = ".".join(parent_dir.parts)
+
+        # Change import *_pb2 to from <qualified_name> import *_pb2
         return actions.Replace(
             node,
             ast.ImportFrom(module=qualified_name, names=node.names, level=0),
@@ -31,15 +41,17 @@ def regen_grpc(file: Path) -> None:
     assert file.exists()
 
     parent_dir = file.parent
+    common_dir = os.path.relpath(COMMON_DIR, parent_dir)
     subprocess.check_output(
         [
             sys.executable,
             "-m",
             "grpc_tools.protoc",
+            f"-I={common_dir}",
             "--proto_path=.",
             "--python_out=.",
             "--grpc_python_out=.",
-            "--pyi_out=.",
+            "--mypy_out=.",
             file.name,
         ],
         cwd=parent_dir,
