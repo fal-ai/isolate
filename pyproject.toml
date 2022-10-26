@@ -13,6 +13,7 @@ grpcio = { version = ">=1.49", optional = true }
 protobuf = { version = "*", optional = true }
 
 [tool.poetry.extras]
+grpc = ["grpcio", "protobuf"]
 server = ["grpcio", "protobuf"]
 
 [tool.poetry.plugins."isolate.backends"]

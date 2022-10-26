@@ -3,9 +3,9 @@ Agent process execution wrapper for handling extended PYTHONPATH.
 """
 
 import os
+import runpy
 import site
 import sys
-import tokenize
 
 
 def load_pth_files() -> None:
@@ -35,16 +35,10 @@ def main():
     real_agent, *real_arguments = sys.argv[1:]
 
     load_pth_files()
-    with tokenize.open(real_agent) as stream:
-        # TODO(feat): implement a check to parse "agent-requires" line and see if
-        # all the dependencies are installed.
-        code = compile(stream.read(), real_agent, "exec")
-
-    # Restore sys.argv so that the agent can parse it as if
-    # it was executed normally.
-    sys.argv = [real_agent, *real_arguments]
-    namespace = {"__name__": "__main__"}
-    exec(code, namespace, namespace)
+    # TODO(feat): implement a check to parse "agent-requires" line and see if
+    # all the dependencies are installed.
+    sys.argv = [real_agent] + real_arguments
+    runpy.run_path(real_agent, run_name="__main__")
 
 
 if __name__ == "__main__":

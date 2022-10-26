@@ -1,4 +1,4 @@
-from isolate.server.definitions import common_pb2 as _common_pb2
+from isolate.connections.grpc.definitions import common_pb2 as _common_pb2
 from google.protobuf import descriptor as _descriptor
 from typing import ClassVar as _ClassVar
 

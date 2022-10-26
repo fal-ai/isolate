@@ -9,7 +9,7 @@ import pytest
 
 from isolate.backends.context import Log, LogLevel, LogSource
 from isolate.server import definitions
-from isolate.server.serialization import from_grpc, to_grpc
+from isolate.server.interface import from_grpc, to_grpc, to_serialized_object
 from isolate.server.server import IsolateServicer
 
 REPO_DIR = Path(__file__).parent.parent
@@ -61,7 +61,7 @@ def run_request(
     }
     for result in stub.Run(request):
         for log in result.logs:
-            log = from_grpc(log, Log)
+            log = from_grpc(log)
             log_store[log.source].append(log)
 
         if result.is_complete:
@@ -82,25 +82,24 @@ def test_server_basic_communication(
         # when we are not inheriting the local environment.
         requirements.append("dill==0.3.5.1")
 
-        # TODO: this can probably install the local version of isolate
-        # you have when you are running the tests.
-        requirements.append(str(REPO_DIR) + "[server]")
+        # TODO: apparently [server] doesn't work but [grpc] does work (not sure why
+        # needs further investigation, probably poetry related).
+        requirements.append(f"{REPO_DIR}[grpc]")
 
     env_definition = define_environment("virtualenv", requirements=requirements)
     request = definitions.BoundFunction(
-        function=to_grpc(
+        function=to_serialized_object(
             partial(
                 eval,
                 "__import__('pyjokes').__version__",
             ),
-            definitions.SerializedObject,
             method="dill",
-            was_it_raised=False,
         ),
         environment=env_definition,
     )
+
     raw_result = run_request(stub, request)
-    assert from_grpc(raw_result, object) == "0.6.0"
+    assert from_grpc(raw_result) == "0.6.0"
 
 
 def test_server_builder_error(stub: definitions.IsolateStub, monkeypatch: Any) -> None:
@@ -113,14 +112,12 @@ def test_server_builder_error(stub: definitions.IsolateStub, monkeypatch: Any) -
 
     env_definition = define_environment("virtualenv", requirements=["$$$$"])
     request = definitions.BoundFunction(
-        function=to_grpc(
+        function=to_serialized_object(
             partial(
                 eval,
                 "__import__('pyjokes').__version__",
             ),
-            definitions.SerializedObject,
             method="dill",
-            was_it_raised=False,
         ),
         environment=env_definition,
     )
@@ -140,7 +137,7 @@ def test_user_logs_immediate(stub: definitions.IsolateStub, monkeypatch: Any) ->
 
     env_definition = define_environment("virtualenv", requirements=["pyjokes==0.6.0"])
     request = definitions.BoundFunction(
-        function=to_grpc(
+        function=to_serialized_object(
             partial(
                 exec,
                 textwrap.dedent(
@@ -153,9 +150,7 @@ def test_user_logs_immediate(stub: definitions.IsolateStub, monkeypatch: Any) ->
                 """
                 ),
             ),
-            definitions.SerializedObject,
             method="dill",
-            was_it_raised=False,
         ),
         environment=env_definition,
     )
