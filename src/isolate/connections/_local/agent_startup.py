@@ -1,5 +1,6 @@
-# A common set of utilities to handle the pre and post execution of
-# the agent code.
+"""
+Agent process execution wrapper for handling extended PYTHONPATH.
+"""
 
 import os
 import site

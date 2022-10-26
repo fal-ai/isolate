@@ -78,19 +78,13 @@ class Log:
 
 
 @dataclass(frozen=True)
-class _Context:
-    _base_cache_dir: Path = field(repr=False)
-    _serialization_backend: str = "pickle"
-    _log_handler: Callable[[Log], None] = print
+class IsolateSettings:
+    cache_dir: Path = Path(user_cache_dir("isolate", "isolate"))
+    serialization_method: str = "pickle"
+    log_hook: Callable[[Log], None] = print
 
     def log(self, log: Log) -> None:
-        self._log_handler(log)
-
-    @property
-    def serialization_backend_name(self) -> str:
-        return self._serialization_backend
-
-    _replace = replace
+        self.log_hook(log)
 
     def _get_temp_base(self) -> Path:
         """Return the base path for creating temporary files/directories.
@@ -99,19 +93,19 @@ class _Context:
         system temp base (e.g. /tmp), then it will return a new directory
         under the cache directory."""
 
-        cache_stat = self._base_cache_dir.stat()
+        cache_stat = self.cache_dir.stat()
         system_stat = _SYSTEM_TEMP_DIR.stat()
         if cache_stat.st_dev == system_stat.st_dev:
             return _SYSTEM_TEMP_DIR
 
-        if _SYSTEM_TEMP_DIR.samefile(self._base_cache_dir):
+        if _SYSTEM_TEMP_DIR.samefile(self.cache_dir):
             path = _SYSTEM_TEMP_DIR / "isolate"
         else:
             # This is quite important since if we have a shared cache
             # disk, then /tmp is going to be in a different disk than
             # the cache directory, which would make it impossible to
             # rename() atomically.
-            path = self._base_cache_dir / "tmp"
+            path = self.cache_dir / "tmp"
 
         path.mkdir(exist_ok=True, parents=True)
         return path
@@ -138,18 +132,9 @@ class _Context:
         backend_name = backend.BACKEND_NAME
         assert backend_name is not None
 
-        environment_base_path = self._base_cache_dir / backend_name
+        environment_base_path = self.cache_dir / backend_name
         environment_base_path.mkdir(exist_ok=True, parents=True)
         return environment_base_path / backend.key
 
 
-# We don't want to expose the context API just yet, but still want people
-# to properly annotate it.
-ContextType = NewType("ContextType", _Context)
-GLOBAL_CONTEXT = ContextType(
-    _Context(
-        _base_cache_dir=Path(
-            user_cache_dir("isolate", "isolate"),
-        )
-    )
-)
+DEFAULT_SETTINGS = IsolateSettings()

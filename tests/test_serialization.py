@@ -1,8 +1,10 @@
-import pytest
 from functools import partial
-from isolate.backends.connections.common import (
+
+import pytest
+
+from isolate.connections.common import (
     SerializationError,
-    as_serialization_backend,
+    as_serialization_method,
     load_serialized_object,
     serialize_object,
 )
@@ -51,7 +53,6 @@ def error_while_serializing():
         load_serialized_object("pickle", dill_serialized_lambda)
 
     assert exc_info.match("Error while deserializing the given object")
-
 
 
 def error_while_loading_backend():

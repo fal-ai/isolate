@@ -32,7 +32,7 @@ def _step(message: str) -> Iterator[None]:
         raise SerializationError("Error while " + message) from exception
 
 
-def as_serialization_backend(backend: Any) -> SerializationBackend:
+def as_serialization_method(backend: Any) -> SerializationBackend:
     """Ensures that the given backend has loads/dumps methods, and returns
     it as is (also convinces type checkers that the given object satisfies
     the serialization protocol)."""
@@ -58,7 +58,7 @@ def load_serialized_object(
     of being returned)."""
 
     with _step(f"preparing the serialization backend ({serialization_method})"):
-        serialization_backend = as_serialization_backend(
+        serialization_backend = as_serialization_method(
             importlib.import_module(serialization_method)
         )
 
@@ -76,7 +76,7 @@ def serialize_object(serialization_method: str, object: Any) -> bytes:
     anything fails, then a SerializationError will be raised."""
 
     with _step(f"preparing the serialization backend ({serialization_method})"):
-        serialization_backend = as_serialization_backend(
+        serialization_backend = as_serialization_method(
             importlib.import_module(serialization_method)
         )
 

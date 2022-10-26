@@ -7,8 +7,8 @@ from typing import Any, ClassVar, Dict
 
 from isolate.backends import BaseEnvironment
 from isolate.backends.common import sha256_digest_of
-from isolate.backends.connections import PythonIPC
-from isolate.backends.context import GLOBAL_CONTEXT, ContextType
+from isolate.backends.context import DEFAULT_SETTINGS, IsolateSettings
+from isolate.connections import PythonIPC
 
 
 @dataclass
@@ -19,10 +19,10 @@ class LocalPythonEnvironment(BaseEnvironment[Path]):
     def from_config(
         cls,
         config: Dict[str, Any],
-        context: ContextType = GLOBAL_CONTEXT,
+        settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         environment = cls()
-        environment.set_context(context)
+        environment.apply_settings(settings)
         return environment
 
     @property

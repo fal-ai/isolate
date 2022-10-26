@@ -2,51 +2,27 @@ from __future__ import annotations
 
 import base64
 import importlib
-import os
 import subprocess
 import time
-from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass, field
-from functools import partial
+from contextlib import ExitStack, closing
+from dataclasses import dataclass
 from multiprocessing.connection import ConnectionWrapper, Listener
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    ContextManager,
-    Dict,
-    Generic,
-    Iterator,
-    List,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import Any, ContextManager, List, Tuple, Union
 
 from isolate.backends import (
     BasicCallable,
     CallResultType,
     EnvironmentConnection,
-    UserException,
 )
-from isolate.backends.common import (
-    get_executable_path,
-    logged_io,
-    python_path_for,
-)
-from isolate.backends.connections import agent_startup
-from isolate.backends.connections.ipc import agent
 from isolate.backends.context import LogLevel, LogSource
-
-if TYPE_CHECKING:
-    from isolate.backends import BaseEnvironment
-
-IPCConnectionType = TypeVar("IPCConnectionType")
+from isolate.connections._local import PythonExecutionBase, agent_startup
+from isolate.connections.ipc import agent
 
 
 class _MultiFormatListener(Listener):
     def __init__(self, backend_name: str, *args: Any, **kwargs: Any) -> None:
-        self.serialization_backend = load_serialization_backend(backend_name)
+        self.serialization_backend = loadserialization_method(backend_name)
         super().__init__(*args, **kwargs)
 
     def accept(self) -> ConnectionWrapper:
@@ -59,7 +35,7 @@ class _MultiFormatListener(Listener):
         )
 
 
-def load_serialization_backend(backend_name: str) -> Any:
+def loadserialization_method(backend_name: str) -> Any:
     # TODO(feat): This should probably throw a better error if the
     # given backend does not exist.
     return importlib.import_module(backend_name)
@@ -94,7 +70,6 @@ class IsolatedProcessConnection(EnvironmentConnection):
     def run(
         self,
         executable: BasicCallable,
-        ignore_exceptions: bool = False,
         *args: Any,
         **kwargs: Any,
     ) -> CallResultType:
@@ -118,7 +93,7 @@ class IsolatedProcessConnection(EnvironmentConnection):
             self.log("Starting the controller bridge.")
             controller_service = stack.enter_context(
                 _MultiFormatListener(
-                    self.environment.context.serialization_backend_name,
+                    self.environment.settings.serialization_method,
                     family="AF_INET",
                 )
             )
@@ -147,14 +122,12 @@ class IsolatedProcessConnection(EnvironmentConnection):
             return self.poll_until_result(
                 isolated_process,
                 established_connection,
-                ignore_exceptions,
             )
 
     def poll_until_result(
         self,
         process: subprocess.Popen,
         connection: ConnectionWrapper,
-        ignore_exceptions: bool,
     ) -> CallResultType:
         """Take the given process, and poll until either it exits or returns
         a result object."""
@@ -186,91 +159,9 @@ class IsolatedProcessConnection(EnvironmentConnection):
         result, did_it_raise = connection.recv()
 
         if did_it_raise:
-            if ignore_exceptions:
-                return UserException(result)  # type: ignore
-            else:
-                raise result
+            raise result
         else:
             return result
-
-
-@dataclass
-class PythonExecutionBase(Generic[IPCConnectionType]):
-    """A generic Python execution implementation that can trigger a new process
-    and start watching stdout/stderr for the logs. The environment_path must be
-    the base directory of a new Python environment (structure that complies with
-    sysconfig). Python binary inside that environment will be used to run the
-    agent process.
-
-    If set, extra_inheritance_paths allows extending the custom package search
-    system with additional environments. As an example, the current environment_path
-    might point to an environment with numpy and the extra_inheritance_paths might
-    point to an environment with pandas. In this case, the agent process will have
-    access to both numpy and pandas. The order is important here, as the first
-    path in the list will be the first one to be looked up (so if there is multiple
-    versions of the same package in different environments, the one in the first
-    path will take precedence). Dependency resolution and compatibility must be
-    handled by the user."""
-
-    environment: BaseEnvironment
-    environment_path: Path
-    extra_inheritance_paths: List[Path] = field(default_factory=list)
-
-    @contextmanager
-    def start_process(
-        self,
-        connection: IPCConnectionType,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Iterator[subprocess.Popen]:
-        """Start the agent process with the Python binary available inside the
-        bound environment."""
-
-        python_executable = get_executable_path(self.environment_path, "python")
-        with logged_io(
-            partial(self.handle_agent_log, level=LogLevel.STDOUT),
-            partial(self.handle_agent_log, level=LogLevel.STDERR),
-        ) as (stdout, stderr):
-            yield subprocess.Popen(
-                self.get_python_cmd(python_executable, connection),
-                env=self.get_env_vars(),
-                stdout=stdout,
-                stderr=stderr,
-                text=True,
-            )
-
-    def get_env_vars(self) -> Dict[str, str]:
-        """Return the environment variables to run the agent process with. By default
-        PYTHONUNBUFFERED is set to 1 to ensure the prints to stdout/stderr are reflect
-        immediately (so that we can seamlessly transfer logs)."""
-
-        custom_vars = {}
-        custom_vars["PYTHONUNBUFFERED"] = "1"
-        if self.extra_inheritance_paths:
-            # The order here should reflect the order of the inheritance
-            # where the actual environment already takes precedence.
-            python_path = python_path_for(
-                self.environment_path, *self.extra_inheritance_paths
-            )
-            custom_vars["PYTHONPATH"] = python_path
-
-        return {
-            **os.environ,
-            **custom_vars,
-        }
-
-    def get_python_cmd(
-        self,
-        executable: Path,
-        connection: IPCConnectionType,
-    ) -> List[Union[str, Path]]:
-        """Return the command to run the agent process with."""
-        raise NotImplementedError
-
-    def handle_agent_log(self, line: str, level: LogLevel) -> None:
-        """Handle a log line emitted by the agent process. The level will be either
-        STDOUT or STDERR."""
-        raise NotImplementedError
 
 
 @dataclass
@@ -289,7 +180,7 @@ class PythonIPC(PythonExecutionBase[ConnectionWrapper], IsolatedProcessConnectio
             # on the remote interpreter, otherwise it will fail without establishing
             # the connection with the bridge.
             "--serialization-backend",
-            self.environment.context.serialization_backend_name,
+            self.environment.settings.serialization_method,
         ]
 
     def handle_agent_log(self, line: str, level: LogLevel) -> None:

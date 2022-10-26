@@ -1,4 +1,4 @@
-from isolate.backends.connections.ipc import (
+from isolate.connections.ipc._base import (
     IsolatedProcessConnection,
     PythonExecutionBase,
     PythonIPC,

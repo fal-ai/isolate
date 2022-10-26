@@ -11,8 +11,8 @@ from isolate.backends import (
     CallResultType,
     EnvironmentConnection,
 )
-from isolate.backends.connections import PythonExecutionBase, agent_startup
 from isolate.backends.context import Log, LogLevel, LogSource
+from isolate.connections._local import PythonExecutionBase, agent_startup
 from isolate.server import agent, definitions
 from isolate.server.serialization import from_grpc, to_grpc
 
@@ -81,14 +81,13 @@ class RemotePythonConnection(EnvironmentConnection):
     def run(
         self,
         executable: BasicCallable,
-        ignore_exceptions: bool = False,
         *args: Any,
         **kwargs: Any,
     ) -> CallResultType:
         function = to_grpc(
             executable,
             definitions.SerializedObject,
-            method=self.environment.context.serialization_backend_name,
+            method=self.environment.settings.serialization_method,
             was_it_raised=False,
         )
 
