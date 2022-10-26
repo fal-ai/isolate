@@ -12,18 +12,35 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional, Tuple
 
+_OLD_DIR_PREFIX = "old-"
 
-@contextmanager
-def rmdir_on_fail(path: Path) -> Iterator[None]:
-    """Recursively remove the 'path; directory if there
-    were any exceptions raised while this context is active."""
 
+def replace_dir(src_path: Path, dst_path: Path) -> None:
+    """Atomically replace 'dst_path' with 'src_path'.
+
+    Be aware that this is not actually atomic (and there is no
+    way to do so, at least in a cross-platform fashion). The basic
+    idea is that, we first rename the 'dst_path' to something else
+    (if it exists), and then rename the 'src_path' to 'dst_path' and
+    finally remove the temporary directory in which we hold 'dst_path'.
+
+    Prioritizing these two renames allows us to keep the cache always
+    in a working state (if we were to remove 'dst_path' first and then
+    try renaming 'src_path' to 'dst_path', any error while removing it
+    would make the cache corrupted).
+    """
+
+    if dst_path.exists():
+        cleanup = dst_path.rename(dst_path.with_name(_OLD_DIR_PREFIX + dst_path.name))
+    else:
+        cleanup = None
+
+    assert not dst_path.exists()
     try:
-        yield
-    except Exception:
-        if path.exists():
-            shutil.rmtree(path)
-        raise
+        src_path.rename(dst_path)
+    finally:
+        if cleanup is not None:
+            shutil.rmtree(cleanup)
 
 
 def python_path_for(*search_paths: Path) -> str:
