@@ -1,3 +1,11 @@
+# For building this image, you need to be in the project
+# root and then pass -f tools/Dockerfile to docker build.
+#
+# $ docker build -f tools/Dockerfile -t isolate_server [--network=host]
+#
+# This is important since we want to be able to access src/ directory
+# for copying the source code into the container (so the dockerfile
+# will stay in a different directory than its context).
 FROM python:3.9
 
 RUN apt-get update && apt-get install -y git
