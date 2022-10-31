@@ -35,7 +35,7 @@ class GRPCExecutionBase(EnvironmentConnection):
         self,
         function: definitions.SerializedObject,
         *,
-        max_wait_timeout: float = 5,
+        max_wait_timeout: float = 10,
     ) -> Iterator[definitions.PartialRunResult]:
         """Starts a new agent process, sends the given 'function' to the agent and
         awaits until the result is received. This function takes and returns raw gRPC
