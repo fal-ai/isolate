@@ -4,7 +4,7 @@ import functools
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List
 
@@ -23,7 +23,7 @@ _ISOLATE_CONDA_HOME = os.getenv("ISOLATE_CONDA_HOME")
 class CondaEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "conda"
 
-    packages: List[str]
+    packages: List[str] = field(default_factory=list)
 
     @classmethod
     def from_config(
@@ -31,8 +31,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
         config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
-        user_provided_packages = config.get("packages", [])
-        environment = cls(user_provided_packages)
+        environment = cls(**config)
         environment.apply_settings(settings)
         return environment
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Union
 
@@ -21,7 +21,7 @@ from isolate.connections import PythonIPC
 class VirtualPythonEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "virtualenv"
 
-    requirements: List[str]
+    requirements: List[str] = field(default_factory=list)
     constraints_file: Optional[os.PathLike] = None
 
     @classmethod
@@ -30,13 +30,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
-        requirements = config.get("requirements", [])
-        # TODO: we probably should validate that this file actually exists
-        constraints_file = config.get("constraints_file", None)
-        environment = cls(
-            requirements=requirements,
-            constraints_file=constraints_file,
-        )
+        environment = cls(**config)
         environment.apply_settings(settings)
         return environment
 

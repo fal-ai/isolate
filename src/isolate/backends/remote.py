@@ -36,11 +36,7 @@ class IsolateServer(BaseEnvironment[EnvironmentDefinition]):
         config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
-        environment = cls(
-            host=config["host"],
-            target_environment_kind=config["target_environment_kind"],
-            target_environment_config=config["target_environment_config"],
-        )
+        environment = cls(**config)
         environment.apply_settings(settings)
 
         return environment
