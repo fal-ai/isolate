@@ -7,10 +7,12 @@ from typing import Any, Dict, List, Type
 
 import pytest
 
+import isolate
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import sha256_digest_of
 from isolate.backends.conda import CondaEnvironment, _get_conda_executable
 from isolate.backends.local import LocalPythonEnvironment
+from isolate.backends.remote import IsolateServer
 from isolate.backends.settings import IsolateSettings
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 
@@ -266,3 +268,116 @@ def test_local_python_environment():
 
     with pytest.raises(NotImplementedError):
         local_env.destroy(connection_key)
+
+
+@pytest.fixture
+def isolate_server(monkeypatch, tmp_path):
+    from concurrent import futures
+
+    import grpc
+
+    from isolate.server import IsolateServicer, definitions
+
+    monkeypatch.setattr("isolate.server.server.INHERIT_FROM_LOCAL", True)
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+    test_settings = IsolateSettings(cache_dir=tmp_path / "cache")
+    definitions.register_isolate(IsolateServicer(test_settings), server)
+    host, port = "localhost", server.add_insecure_port(f"[::]:0")
+    server.start()
+    try:
+        yield f"{host}:{port}"
+    finally:
+        server.stop(None)
+
+
+def test_isolate_server_environment(isolate_server):
+    environment = IsolateServer(
+        host=isolate_server,
+        target_environment_kind="virtualenv",
+        target_environment_config={"requirements": ["pyjokes==0.5.0"]},
+    )
+
+    connection_key = environment.create()
+    with environment.open_connection(connection_key) as connection:
+        assert (
+            connection.run(partial(eval, "__import__('pyjokes').__version__"))
+            == "0.5.0"
+        )
+
+
+def test_isolate_server_on_conda(isolate_server):
+    environment_2 = IsolateServer(
+        host=isolate_server,
+        target_environment_kind="conda",
+        target_environment_config={
+            "packages": [
+                # Match the same python version (since inherit local=
+                # is True).
+                f"python={'.'.join(map(str, sys.version_info[:2]))}",
+                "pyjokes=0.6.0",
+            ]
+        },
+    )
+    with environment_2.connect() as connection:
+        assert (
+            connection.run(partial(eval, "__import__('pyjokes').__version__"))
+            == "0.6.0"
+        )
+
+
+def test_isolate_server_logs(isolate_server):
+    collected_logs = []
+    environment = IsolateServer(
+        host=isolate_server,
+        target_environment_kind="virtualenv",
+        target_environment_config={"requirements": ["pyjokes==0.5.0"]},
+    )
+    environment.apply_settings(IsolateSettings(log_hook=collected_logs.append))
+
+    with environment.connect() as connection:
+        connection.run(partial(eval, "print('hello!!!')"))
+
+    assert "hello!!!" in [log.message for log in collected_logs]
+
+
+def test_isolate_server_demo(isolate_server):
+    from functools import partial
+
+    environments = {
+        "dev": {
+            "kind": "virtualenv",
+            "configuration": {
+                "requirements": [
+                    "pyjokes==0.6.0",
+                ]
+            },
+        },
+        "prod": {
+            "kind": "virtualenv",
+            "configuration": {
+                "requirements": [
+                    "pyjokes==0.5.0",
+                ]
+            },
+        },
+    }
+
+    for definition in environments.values():
+        local_environment = isolate.prepare_environment(
+            definition["kind"],
+            **definition["configuration"],
+        )
+        remote_environment = isolate.prepare_environment(
+            "isolate-server",
+            host=isolate_server,
+            target_environment_kind=definition["kind"],
+            target_environment_config=definition["configuration"],
+        )
+        with local_environment.connect() as local_connection, remote_environment.connect() as remote_connection:
+            for target_func in [
+                partial(eval, "__import__('pyjokes').__version__"),
+                partial(eval, "2 + 2"),
+            ]:
+                assert local_connection.run(target_func) == remote_connection.run(
+                    target_func
+                )
