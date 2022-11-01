@@ -2,7 +2,7 @@ import textwrap
 from concurrent import futures
 from functools import partial
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, cast
 
 import grpc
 import pytest
@@ -80,7 +80,7 @@ def run_request(
     if return_value is _NOT_SET:
         raise ValueError("Never sent the result")
     else:
-        return return_value
+        return cast(definitions.SerializedObject, return_value)
 
 
 @pytest.mark.parametrize("inherit_local", [True, False])
@@ -178,3 +178,45 @@ def test_user_logs_immediate(stub: definitions.IsolateStub, monkeypatch: Any) ->
     by_stream = {log.level: log.message for log in user_logs}
     assert by_stream[LogLevel.STDOUT] == "0.6.0"
     assert by_stream[LogLevel.STDERR] == "error error!"
+
+
+def test_unknown_environment(stub: definitions.IsolateStub, monkeypatch: Any) -> None:
+    inherit_from_local(monkeypatch)
+
+    env_definition = define_environment("unknown")
+    request = definitions.BoundFunction(
+        function=to_serialized_object(
+            partial(
+                eval,
+                "__import__('pyjokes').__version__",
+            ),
+            method="dill",
+        ),
+        environment=env_definition,
+    )
+
+    with pytest.raises(grpc.RpcError) as exc:
+        run_request(stub, request)
+
+    assert exc.match("Unknown environment kind")
+
+
+def test_invalid_param(stub: definitions.IsolateStub, monkeypatch: Any) -> None:
+    inherit_from_local(monkeypatch)
+
+    env_definition = define_environment("virtualenv", packages=["pyjokes==1.0"])
+    request = definitions.BoundFunction(
+        function=to_serialized_object(
+            partial(
+                eval,
+                "__import__('pyjokes').__version__",
+            ),
+            method="dill",
+        ),
+        environment=env_definition,
+    )
+
+    with pytest.raises(grpc.RpcError) as exc:
+        run_request(stub, request)
+
+    assert exc.match("unexpected keyword argument 'packages'")

@@ -381,3 +381,42 @@ def test_isolate_server_demo(isolate_server):
                 assert local_connection.run(target_func) == remote_connection.run(
                     target_func
                 )
+
+
+@pytest.mark.parametrize(
+    "kind, config",
+    [
+        (
+            "virtualenv",
+            {
+                "packages": [
+                    "pyjokes==1.0.0",
+                ]
+            },
+        ),
+        (
+            "conda",
+            {
+                "requirements": [
+                    "pyjokes=1.0.0",
+                ]
+            },
+        ),
+        (
+            "isolate-server",
+            {
+                "host": "localhost",
+                "port": 1234,
+                "target_environment_kind": "virtualenv",
+                "target_environment_config": {
+                    "requirements": [
+                        "pyjokes==1.0.0",
+                    ]
+                },
+            },
+        ),
+    ],
+)
+def test_wrong_options(kind, config):
+    with pytest.raises(TypeError):
+        isolate.prepare_environment(kind, **config)

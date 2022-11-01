@@ -21,7 +21,7 @@ class LocalPythonEnvironment(BaseEnvironment[Path]):
         config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
-        environment = cls()
+        environment = cls(**config)
         environment.apply_settings(settings)
         return environment
 

@@ -41,9 +41,14 @@ class IsolateServicer(definitions.IsolateServicer):
         messages: Queue[definitions.PartialRunResult] = Queue()
         try:
             environment = from_grpc(request.environment)
-        except ValueError as exc:
+        except ValueError:
             return self.abort_with_msg(
                 f"Unknown environment kind: {request.environment.kind}.",
+                context,
+            )
+        except TypeError as exc:
+            return self.abort_with_msg(
+                f"Invalid environment parameter: {str(exc)}.",
                 context,
             )
 
