@@ -20,6 +20,7 @@ server = ["grpcio", "protobuf"]
 "virtualenv" = "isolate.backends.virtualenv:VirtualPythonEnvironment"
 "conda" = "isolate.backends.conda:CondaEnvironment"
 "local" = "isolate.backends.local:LocalPythonEnvironment"
+"isolate-server" = "isolate.backends.remote:IsolateServer"
 
 [build-system]
 requires = ["poetry-core>=1.1.0"]
