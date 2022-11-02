@@ -55,6 +55,9 @@ class IsolateServer(BaseEnvironment[EnvironmentDefinition]):
             configuration=interface.to_struct(self.target_environment_config),
         )
 
+    def exists(self) -> bool:
+        return False
+
     def open_connection(
         self, connection_key: EnvironmentDefinition
     ) -> IsolateServerConnection:

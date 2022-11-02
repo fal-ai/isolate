@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterator
 
@@ -76,6 +76,8 @@ class IsolateSettings:
         environment_base_path = self.cache_dir / backend_name
         environment_base_path.mkdir(exist_ok=True, parents=True)
         return environment_base_path / backend.key
+
+    replace = replace
 
 
 DEFAULT_SETTINGS = IsolateSettings()
