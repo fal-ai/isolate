@@ -13,7 +13,6 @@ from IPython.core.magic_arguments import (
     parse_argstring,
 )
 
-import isolate
 from isolate.backends import BaseEnvironment
 from isolate.backends.settings import IsolateSettings
 
@@ -99,11 +98,11 @@ class IsolateRunner(Magics):
         import dill
 
         args = parse_argstring(self.isolated, line)
-        environment = local_ns.get(args.environment_name)
-        if environment is None:
+        environment_definition = local_ns.get(args.environment_name)
+        if environment_definition is None:
             raise ValueError(f"Environment {args.environment_name} is not defined.")
 
-        environment = isolate.prepare_environment(**environment.dump())
+        environment = environment_definition.prepare()
 
         # Remove all the isolate environment definitions (e.g. Machine, Environment)
         hidden_entries = split_hidden_entries(__main__)
