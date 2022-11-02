@@ -38,7 +38,7 @@ _DEBUG_LOGGING = bool(os.environ.get("ISOLATE_ENABLE_DEBUG_LOGGING", False))
 _SERIALIZATION_OPTIONS = ["dill", "cloudpickle"]
 
 
-@lru_cache
+@lru_cache(1)
 def _decide_default_backend():
     for option in _SERIALIZATION_OPTIONS:
         try:
