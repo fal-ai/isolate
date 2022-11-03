@@ -58,7 +58,11 @@ def _decide_default_backend():
     return "pickle"
 
 
-def Environment(kind: str, **config: Any) -> _EnvironmentBuilder:
+def Template(kind: str, **config: Any) -> _EnvironmentBuilder:
+    """Create a new environment builder for the given kind (it can be virtualenv
+    or conda, depending on the flavor of packages you'd like to add). You can also
+    pass any configuration options that the backend supports."""
+
     default_pkgs = []
 
     default_backend = _decide_default_backend()
@@ -91,7 +95,16 @@ class _EnvironmentBuilder:
             return NotImplemented
 
         definition, settings = self.get_definition()
-        return left.wrap_it(definition, settings)
+        return left.wrap(definition, settings)
+
+    def _not_supported(self, *args: Any, **kwargs: Any) -> None:
+        raise ValueError(
+            "Can't run a function on an environment template!"
+            "Be sure to forward it into a box first. Like: `environment = template >> box`"
+        )
+
+    run = _not_supported
+    map = _not_supported
 
 
 @dataclass(repr=False)
@@ -120,9 +133,9 @@ class _PackageCollector(_EnvironmentBuilder):
 
 @dataclass
 class Box:
-    """Some sort of a box."""
+    """Some sort of a box/machine to run Python on."""
 
-    def wrap_it(
+    def wrap(
         self,
         definition: Dict[str, Any],
         settings: IsolateSettings,
@@ -136,9 +149,9 @@ class Box:
 class LocalBox(Box):
     """Run locally."""
 
-    parallelism: int = 1
+    pool_size: int = 1
 
-    def wrap_it(
+    def wrap(
         self,
         definition: Dict[str, Any],
         settings: IsolateSettings,
@@ -148,14 +161,14 @@ class LocalBox(Box):
                 **definition,
                 context=settings,
             ),
-            parallelism=self.parallelism,
+            pool_size=self.pool_size,
         )
 
     def __mul__(self, right: int) -> LocalBox:
         if not isinstance(right, int):
             return NotImplemented
 
-        return self.replace(parallelism=self.parallelism * right)
+        return self.replace(pool_size=self.pool_size * right)
 
 
 @dataclass
@@ -163,9 +176,9 @@ class RemoteBox(Box):
     """Run on an hosted isolate server."""
 
     host: str
-    parallelism: int = 1
+    pool_size: int = 1
 
-    def wrap_it(
+    def wrap(
         self,
         definition: Dict[str, Any],
         settings: IsolateSettings,
@@ -185,14 +198,14 @@ class RemoteBox(Box):
                 target_environment_config=definition,
                 context=settings,
             ),
-            parallelism=self.parallelism,
+            pool_size=self.pool_size,
         )
 
     def __mul__(self, right: int) -> RemoteBox:
         if not isinstance(right, int):
             return NotImplemented
 
-        return self.replace(parallelism=self.parallelism * right)
+        return self.replace(pool_size=self.pool_size * right)
 
 
 @dataclass
@@ -201,13 +214,12 @@ class BoxedEnvironment:
     environments!"""
 
     environment: BaseEnvironment
-    parallelism: int = 1
+    pool_size: int = 1
     _console: Console = field(
         default_factory=partial(Console, highlighter=None), repr=False
     )
-    _is_building: bool = field(default=True, repr=False)
     _status: Optional[Status] = field(default=None, repr=False)
-    _active_parallelism: Optional[str] = field(default=None, repr=False)
+    _active_pool_size: Optional[str] = field(default=None, repr=False)
 
     def __post_init__(self):
         existing_settings = self.environment.settings
@@ -219,9 +231,9 @@ class BoxedEnvironment:
             if from_builder:
                 self._status.update("Building the environment...", spinner="clock")
             else:
-                if self._active_parallelism:
+                if self._active_pool_size:
                     self._status.update(
-                        f"Running the isolated tasks {self._active_parallelism}",
+                        f"Running the isolated tasks {self._active_pool_size}",
                         spinner="runner",
                     )
                 else:
@@ -258,7 +270,7 @@ class BoxedEnvironment:
                 yield
         finally:
             self._status = None
-            self._active_parallelism = None
+            self._active_pool_size = None
 
     def run(
         self,
@@ -277,15 +289,18 @@ class BoxedEnvironment:
         func: Callable[..., ReturnType],
         *iterables: Iterable[Any],
     ) -> Iterable[ReturnType]:
+        """Map the given `func` over the given iterables in parallel. pool_size
+        is determined by the originating box."""
+
         with self._status_display("Preparing for execution..."):
-            with ThreadPoolExecutor(max_workers=self.parallelism) as executor:
+            with ThreadPoolExecutor(max_workers=self.pool_size) as executor:
                 with self.environment.connect() as connection:
                     futures = [
                         executor.submit(connection.run, partial(func, *args))
                         for args in zip(*iterables)
                     ]
-                    self._active_parallelism = f"0/{len(futures)}"
+                    self._active_pool_size = f"0/{len(futures)}"
                     for n, future in enumerate(as_completed(futures), 1):
                         yield cast(ReturnType, future.result())
-                        self._active_parallelism = f"{n}/{len(futures)}"
+                        self._active_pool_size = f"{n}/{len(futures)}"
                         self._update_status()
