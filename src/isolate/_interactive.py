@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import importlib
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache, partial
 from typing import (
     Any,
     Callable,
     Dict,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -127,10 +129,14 @@ class Box:
     ) -> BoxedEnvironment:
         raise NotImplementedError
 
+    replace = replace
+
 
 @dataclass
 class LocalBox(Box):
     """Run locally."""
+
+    parallelism: int = 1
 
     def wrap_it(
         self,
@@ -141,8 +147,15 @@ class LocalBox(Box):
             isolate.prepare_environment(
                 **definition,
                 context=settings,
-            )
+            ),
+            parallelism=self.parallelism,
         )
+
+    def __mul__(self, right: int) -> LocalBox:
+        if not isinstance(right, int):
+            return NotImplemented
+
+        return self.replace(parallelism=self.parallelism * right)
 
 
 @dataclass
@@ -150,6 +163,7 @@ class RemoteBox(Box):
     """Run on an hosted isolate server."""
 
     host: str
+    parallelism: int = 1
 
     def wrap_it(
         self,
@@ -170,8 +184,15 @@ class RemoteBox(Box):
                 target_environment_kind=kind,
                 target_environment_config=definition,
                 context=settings,
-            )
+            ),
+            parallelism=self.parallelism,
         )
+
+    def __mul__(self, right: int) -> RemoteBox:
+        if not isinstance(right, int):
+            return NotImplemented
+
+        return self.replace(parallelism=self.parallelism * right)
 
 
 @dataclass
@@ -180,24 +201,34 @@ class BoxedEnvironment:
     environments!"""
 
     environment: BaseEnvironment
+    parallelism: int = 1
     _console: Console = field(
         default_factory=partial(Console, highlighter=None), repr=False
     )
     _is_building: bool = field(default=True, repr=False)
     _status: Optional[Status] = field(default=None, repr=False)
+    _active_parallelism: Optional[str] = field(default=None, repr=False)
 
     def __post_init__(self):
         existing_settings = self.environment.settings
         new_settings = existing_settings.replace(log_hook=self._rich_log)
         self.environment.apply_settings(new_settings)
 
-    def _rich_log(self, log: Log) -> None:
+    def _update_status(self, from_builder: bool = False) -> None:
         if self._status is not None:
-            if log.source is LogSource.BUILDER:
+            if from_builder:
                 self._status.update("Building the environment...", spinner="clock")
             else:
-                self._status.update("Running the code", spinner="runner")
+                if self._active_parallelism:
+                    self._status.update(
+                        f"Running the isolated tasks {self._active_parallelism}",
+                        spinner="runner",
+                    )
+                else:
+                    self._status.update("Running the isolated task", spinner="runner")
 
+    def _rich_log(self, log: Log) -> None:
+        self._update_status(from_builder=log.source is LogSource.BUILDER)
         if log.source is LogSource.USER:
             # If the log is originating from user code, then print it
             # as a normal message.
@@ -227,6 +258,7 @@ class BoxedEnvironment:
                 yield
         finally:
             self._status = None
+            self._active_parallelism = None
 
     def run(
         self,
@@ -239,3 +271,21 @@ class BoxedEnvironment:
         with self._status_display("Preparing for execution..."):
             with self.environment.connect() as connection:
                 return cast(ReturnType, connection.run(executable))
+
+    def map(
+        self,
+        func: Callable[..., ReturnType],
+        *iterables: Iterable[Any],
+    ) -> Iterable[ReturnType]:
+        with self._status_display("Preparing for execution..."):
+            with ThreadPoolExecutor(max_workers=self.parallelism) as executor:
+                with self.environment.connect() as connection:
+                    futures = [
+                        executor.submit(connection.run, partial(func, *args))
+                        for args in zip(*iterables)
+                    ]
+                    self._active_parallelism = f"0/{len(futures)}"
+                    for n, future in enumerate(as_completed(futures), 1):
+                        yield cast(ReturnType, future.result())
+                        self._active_parallelism = f"{n}/{len(futures)}"
+                        self._update_status()

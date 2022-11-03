@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 import importlib_metadata
 import pytest
@@ -113,9 +113,11 @@ class UncachedLocalBox(LocalBox):
     """Prevent caching of test environments when running
     these tests locally."""
 
-    cache_dir: Any
+    cache_dir: Optional[Any] = None
 
     def wrap_it(self, *args: Any, **kwargs: Any) -> BoxedEnvironment:
+        assert self.cache_dir is not None, "cache_dir must be set"
+
         boxed_env = super().wrap_it(*args, **kwargs)
         boxed_env.environment.apply_settings(
             boxed_env.environment.settings.replace(cache_dir=self.cache_dir)
@@ -127,7 +129,7 @@ def test_local_box(tmp_path):
     builder = Environment("virtualenv")
     builder << "pyjokes==0.5.0"
 
-    environment = builder >> UncachedLocalBox(tmp_path)
+    environment = builder >> UncachedLocalBox(cache_dir=tmp_path)
     result = environment.run(eval, "__import__('pyjokes').__version__")
     assert result == "0.5.0"
 
@@ -140,3 +142,59 @@ def test_remote_box(isolate_server):
     environment = builder >> RemoteBox(isolate_server)
     result = environment.run(eval, "__import__('pyjokes').__version__")
     assert result == "0.5.0"
+
+
+def test_parallelism_local(tmp_path):
+    builder = Environment("virtualenv")
+    environment = builder >> UncachedLocalBox(cache_dir=tmp_path)
+
+    assert set(environment.map(eval, ["1", "2", "3", "4", "5", "6"])) == {
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+    }
+
+
+def test_parallelism_local_threads(tmp_path):
+    builder = Environment("virtualenv")
+    environment = builder >> UncachedLocalBox(cache_dir=tmp_path) * 3
+
+    assert set(environment.map(eval, ["1", "2", "3", "4", "5", "6"])) == {
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+    }
+
+
+def test_parallelism_remote(isolate_server):
+    builder = Environment("virtualenv")
+    environment = builder >> RemoteBox(isolate_server)
+
+    assert set(environment.map(eval, ["1", "2", "3", "4", "5", "6"])) == {
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+    }
+
+
+def test_parallelism_remote_threads(isolate_server):
+    builder = Environment("virtualenv")
+    environment = builder >> RemoteBox(isolate_server) * 3
+
+    assert set(environment.map(eval, ["1", "2", "3", "4", "5", "6"])) == {
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+    }
