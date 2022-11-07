@@ -4,7 +4,37 @@
 
 Run any Python function, with any dependencies, in any machine you want. Isolate offers a
 pluggable end-to-end solution for building, managing, and using isolated environments (virtualenv,
-conda, and possibly more).
+conda, remote, and more).
+
+## Try it!
+
+```py
+from isolate import Template, LocalBox
+
+# Build you first environment by specifying its kind (like virtualenv or conda)
+template = Template("virtualenv")
+
+# Add some packages to it.
+template << "pyjokes==0.5.0"
+
+# Forward it to a box (your local machine, or a remote machine)
+environment = template >> LocalBox()
+
+# And then, finally try executing some code
+
+def get_pyjokes_version():
+    import pyjokes
+
+    return pyjokes.__version__
+
+# If pyjokes==0.6.0 is installed in your local environment, it is going to print
+# 0.6.0 here.
+print("Installed pyjokes version: ", get_pyjokes_version())
+
+# But if you run the same function in an isolated environment, you'll get
+# 0.5.0.
+print("Isolated pyjokes version: ", environment.run(get_pyjokes_version))
+```
 
 ## Motivation
 
