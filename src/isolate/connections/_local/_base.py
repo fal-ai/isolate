@@ -19,6 +19,7 @@ from typing import (
 )
 
 from isolate.backends.common import get_executable_path, logged_io
+from isolate.connections.common import AGENT_SIGNATURE
 from isolate.logs import LogLevel
 
 if TYPE_CHECKING:
@@ -95,6 +96,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
         immediately (so that we can seamlessly transfer logs)."""
 
         custom_vars = {}
+        custom_vars[AGENT_SIGNATURE] = "1"
         custom_vars["PYTHONUNBUFFERED"] = "1"
         if self.extra_inheritance_paths:
             # The order here should reflect the order of the inheritance
