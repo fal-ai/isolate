@@ -11,6 +11,7 @@ from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.settings import IsolateSettings
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 from isolate.connections import LocalPythonGRPC, PythonIPC
+from isolate.connections.common import is_agent
 
 REPO_DIR = Path(__file__).parent.parent
 assert (
@@ -132,6 +133,16 @@ class GenericPythonConnectionTests:
             assert self.check_version(conn, "pyjokes") == "0.5.0"
             # This comes from the third_env
             assert self.check_version(conn, "emoji") == "2.0.0"
+
+    def test_is_agent(self):
+        local_env = LocalPythonEnvironment()
+
+        assert not is_agent()
+        with self.open_connection(local_env, local_env.create()) as conn:
+            assert not is_agent()
+            assert conn.run(is_agent)
+            assert not is_agent()
+        assert not is_agent()
 
 
 class TestPythonIPC(GenericPythonConnectionTests):

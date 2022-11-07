@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Iterator, cast
 
@@ -13,6 +14,9 @@ if TYPE_CHECKING:
 
         def dumps(self, obj: Any) -> bytes:
             ...
+
+
+AGENT_SIGNATURE = "IS_ISOLATE_AGENT"
 
 
 class SerializationError(Exception):
@@ -82,3 +86,8 @@ def serialize_object(serialization_method: str, object: Any) -> bytes:
 
     with _step("serializing the given object"):
         return serialization_backend.dumps(object)
+
+
+def is_agent() -> bool:
+    """Returns true if the current process is an isolate agent."""
+    return os.environ.get(AGENT_SIGNATURE) == "1"
