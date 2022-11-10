@@ -23,13 +23,15 @@ def _(message: definitions.EnvironmentDefinition) -> BaseEnvironment:
 
 @from_grpc.register
 def _(messages: RepeatedCompositeContainer) -> Any:
-    # TODO: check if repeated are messages
+    # TODO: Right now this function is called for every list, it should only be called on env definitions
     from isolate import prepare_environment
-    envs = [
-        prepare_environment(
+    envs = []
+    for message in messages:
+        assert type(message) is definitions.EnvironmentDefinition, f"Unexpected message type: {type(message)}"
+        envs.append(prepare_environment(
             message.kind,
             **definitions.struct_to_dict(message.configuration),
-        ) for message in messages]
+        ))
     return envs
 
 def to_struct(data: Dict[str, Any]) -> definitions.Struct:
