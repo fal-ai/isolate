@@ -59,9 +59,11 @@ class IsolateServer(BaseEnvironment[EnvironmentDefinition]):
         return False
 
     def open_connection(
-        self, connection_key: EnvironmentDefinition
+            self,
+            connection_key: EnvironmentDefinition,
+            extra_environments: List[EnvironmentDefinition]=[]
     ) -> IsolateServerConnection:
-        return IsolateServerConnection(self, self.host, connection_key)
+        return IsolateServerConnection(self, self.host, [connection_key] + extra_environments)
 
 
 @dataclass
