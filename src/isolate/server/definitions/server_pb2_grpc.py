@@ -16,10 +16,10 @@ class IsolateStub(object):
             channel: A grpc.Channel.
         """
         self.Run = channel.unary_stream(
-            "/Isolate/Run",
-            request_serializer=server__pb2.BoundFunction.SerializeToString,
-            response_deserializer=common__pb2.PartialRunResult.FromString,
-        )
+                '/Isolate/Run',
+                request_serializer=server__pb2.BoundFunction.SerializeToString,
+                response_deserializer=common__pb2.PartialRunResult.FromString,
+                )
 
 
 class IsolateServicer(object):
@@ -30,53 +30,40 @@ class IsolateServicer(object):
         and the result originating from that function.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details("Method not implemented!")
-        raise NotImplementedError("Method not implemented!")
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
 
 def add_IsolateServicer_to_server(servicer, server):
     rpc_method_handlers = {
-        "Run": grpc.unary_stream_rpc_method_handler(
-            servicer.Run,
-            request_deserializer=server__pb2.BoundFunction.FromString,
-            response_serializer=common__pb2.PartialRunResult.SerializeToString,
-        ),
+            'Run': grpc.unary_stream_rpc_method_handler(
+                    servicer.Run,
+                    request_deserializer=server__pb2.BoundFunction.FromString,
+                    response_serializer=common__pb2.PartialRunResult.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-        "Isolate", rpc_method_handlers
-    )
+            'Isolate', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
 
 
-# This class is part of an EXPERIMENTAL API.
+ # This class is part of an EXPERIMENTAL API.
 class Isolate(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def Run(
-        request,
-        target,
-        options=(),
-        channel_credentials=None,
-        call_credentials=None,
-        insecure=False,
-        compression=None,
-        wait_for_ready=None,
-        timeout=None,
-        metadata=None,
-    ):
-        return grpc.experimental.unary_stream(
-            request,
+    def Run(request,
             target,
-            "/Isolate/Run",
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(request, target, '/Isolate/Run',
             server__pb2.BoundFunction.SerializeToString,
             common__pb2.PartialRunResult.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-        )
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

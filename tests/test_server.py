@@ -110,7 +110,7 @@ def test_server_basic_communication(
             ),
             method="dill",
         ),
-        environment=env_definition,
+        environments=[env_definition],
     )
 
     raw_result = run_request(stub, request)
@@ -134,7 +134,7 @@ def test_server_builder_error(stub: definitions.IsolateStub, monkeypatch: Any) -
             ),
             method="dill",
         ),
-        environment=env_definition,
+        environments=[env_definition],
     )
 
     build_logs: List[Log] = []
@@ -167,7 +167,7 @@ def test_user_logs_immediate(stub: definitions.IsolateStub, monkeypatch: Any) ->
             ),
             method="dill",
         ),
-        environment=env_definition,
+        environments=[env_definition],
     )
 
     user_logs: List[Log] = []
@@ -192,7 +192,7 @@ def test_unknown_environment(stub: definitions.IsolateStub, monkeypatch: Any) ->
             ),
             method="dill",
         ),
-        environment=env_definition,
+        environments=[env_definition],
     )
 
     with pytest.raises(grpc.RpcError) as exc:
@@ -213,7 +213,7 @@ def test_invalid_param(stub: definitions.IsolateStub, monkeypatch: Any) -> None:
             ),
             method="dill",
         ),
-        environment=env_definition,
+        environments=[env_definition],
     )
 
     with pytest.raises(grpc.RpcError) as exc:

@@ -7,6 +7,7 @@ from isolate.connections.grpc.interface import (
     to_serialized_object,
 )
 from isolate.server import definitions
+from google._upb._message import RepeatedCompositeContainer
 
 __all__ = ["from_grpc", "to_grpc", "to_serialized_object", "to_struct"]
 
@@ -20,6 +21,16 @@ def _(message: definitions.EnvironmentDefinition) -> BaseEnvironment:
         **definitions.struct_to_dict(message.configuration),
     )
 
+@from_grpc.register
+def _(messages: RepeatedCompositeContainer) -> Any:
+    # TODO: check if repeated are messages
+    from isolate import prepare_environment
+    envs = [
+        prepare_environment(
+            message.kind,
+            **definitions.struct_to_dict(message.configuration),
+        ) for message in messages]
+    return envs
 
 def to_struct(data: Dict[str, Any]) -> definitions.Struct:
     struct = definitions.Struct()

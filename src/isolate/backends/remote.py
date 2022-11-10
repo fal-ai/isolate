@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 import grpc
 
@@ -67,7 +67,7 @@ class IsolateServer(BaseEnvironment[EnvironmentDefinition]):
 @dataclass
 class IsolateServerConnection(EnvironmentConnection):
     host: str
-    definition: EnvironmentDefinition
+    definitions: List[EnvironmentDefinition]
     _channel: Optional[grpc.Channel] = None
 
     def _acquire_channel(self) -> None:
@@ -97,7 +97,7 @@ class IsolateServerConnection(EnvironmentConnection):
                 method=self.environment.settings.serialization_method,
                 was_it_raised=False,
             ),
-            environment=self.definition,
+            environments=self.definitions
         )
 
         return_value = []

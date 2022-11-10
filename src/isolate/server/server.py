@@ -40,10 +40,10 @@ class IsolateServicer(definitions.IsolateServicer):
     ) -> Iterator[definitions.PartialRunResult]:
         messages: Queue[definitions.PartialRunResult] = Queue()
         try:
-            environment = from_grpc(request.environment)
+            environments = from_grpc(request.environments)
         except ValueError:
             return self.abort_with_msg(
-                f"Unknown environment kind: {request.environment.kind}.",
+                f"Unknown environment kind",
                 context,
             )
         except TypeError as exc:
@@ -57,7 +57,11 @@ class IsolateServicer(definitions.IsolateServicer):
             log_hook=partial(_add_log_to_queue, messages),
             serialization_method=request.function.method,
         )
-        environment.apply_settings(run_settings)
+
+        for environment in environments:
+            environment.apply_settings(run_settings)
+
+        environment = environments.pop(0)
 
         extra_inheritance_paths = []
         if INHERIT_FROM_LOCAL:
@@ -65,9 +69,17 @@ class IsolateServicer(definitions.IsolateServicer):
             extra_inheritance_paths.append(local_environment.create())
 
         with ThreadPoolExecutor(max_workers=1) as local_pool:
+            # Setup extra environments
+            if len(environments):
+                extra_inheritance_paths.extend([env.create() for env in environments])
+                for env in environments:
+                    xtra_future = local_pool.submit(env.create)
+                    yield from self.watch_queue_until_completed(messages, xtra_future.done)
+
             future = local_pool.submit(environment.create)
 
             yield from self.watch_queue_until_completed(messages, future.done)
+
             try:
                 # Assuming that the iterator above only stops yielding once
                 # the future is completed, the timeout here should be redundant
