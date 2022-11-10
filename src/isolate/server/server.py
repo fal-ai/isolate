@@ -39,18 +39,22 @@ class IsolateServicer(definitions.IsolateServicer):
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
         messages: Queue[definitions.PartialRunResult] = Queue()
-        try:
-            environments = from_grpc(request.environments)
-        except ValueError:
-            return self.abort_with_msg(
-                f"Unknown environment kind",
-                context,
-            )
-        except TypeError as exc:
-            return self.abort_with_msg(
-                f"Invalid environment parameter: {str(exc)}.",
-                context,
-            )
+        environments = []
+        for env in request.environments:
+            try:
+                environments.append(from_grpc(env))
+            except ValueError:
+                return self.abort_with_msg(
+                    f"Unknown environment kind",
+                    context,
+                )
+            except TypeError as exc:
+                return self.abort_with_msg(
+                    f"Invalid environment parameter: {str(exc)}.",
+                    context,
+                )
+
+        assert len(environments), "No environment definition found."
 
         run_settings = replace(
             self.default_settings,

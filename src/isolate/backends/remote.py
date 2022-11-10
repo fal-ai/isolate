@@ -27,8 +27,7 @@ class IsolateServer(BaseEnvironment[EnvironmentDefinition]):
     BACKEND_NAME: ClassVar[str] = "isolate-server"
 
     host: str
-    target_environment_kind: str
-    target_environment_config: Dict[str, Any]
+    target_environments: List[Dict[str, Any]]
 
     @classmethod
     def from_config(
@@ -45,25 +44,23 @@ class IsolateServer(BaseEnvironment[EnvironmentDefinition]):
     def key(self) -> str:
         return sha256_digest_of(
             self.host,
-            self.target_environment_kind,
-            json.dumps(self.target_environment_config),
+            json.dumps(self.target_environments),
         )
 
-    def create(self) -> EnvironmentDefinition:
-        return EnvironmentDefinition(
-            kind=self.target_environment_kind,
-            configuration=interface.to_struct(self.target_environment_config),
-        )
+    def create(self) -> List[EnvironmentDefinition]:
+        return [EnvironmentDefinition(
+            kind=env["kind"],
+            configuration=interface.to_struct(env["configuration"]),
+        ) for env in self.target_environments]
 
     def exists(self) -> bool:
         return False
 
     def open_connection(
             self,
-            connection_key: EnvironmentDefinition,
-            extra_environments: List[EnvironmentDefinition]=[]
+            connection_key: List[EnvironmentDefinition],
     ) -> IsolateServerConnection:
-        return IsolateServerConnection(self, self.host, [connection_key] + extra_environments)
+        return IsolateServerConnection(self, self.host, connection_key)
 
 
 @dataclass
