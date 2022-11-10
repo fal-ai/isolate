@@ -362,6 +362,54 @@ def test_isolate_server_demo(isolate_server):
                     target_func
                 )
 
+def test_isolate_server_multiple_envs(isolate_server):
+    from functools import partial
+
+    environments = {
+        "base": {
+            "kind": "virtualenv",
+            "configuration": {
+                "requirements": [
+                    "python-dateutil==2.8.2",
+                ]
+            },
+        },
+        "main": {
+            "kind": "virtualenv",
+            "configuration": {
+                "requirements": [
+                    "pyjokes==0.5.0",
+                ]
+            },
+        },
+    }
+
+
+    base_environment = isolate.prepare_environment(
+        "isolate-server",
+        host=isolate_server,
+        target_environment_kind=environments["base"]["kind"],
+        target_environment_config=environments["base"]["configuration"],
+    )
+
+    main_environment = isolate.prepare_environment(
+        "isolate-server",
+        host=isolate_server,
+        target_environment_kind=environments["main"]["kind"],
+        target_environment_config=environments["main"]["configuration"],
+    )
+
+    connection_key = main_environment.create()
+    extra_keys = [base_environment.create()]
+
+    with main_environment.open_connection(connection_key, extra_keys) as connection:
+        assert (
+            connection.run(partial(
+                eval,
+                "__import__('pyjokes').__version__ + ' ' + __import__('dateutil').__version__"))
+            == "0.5.0 2.8.2"
+        )
+
 
 @pytest.mark.parametrize(
     "kind, config",
