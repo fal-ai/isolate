@@ -189,13 +189,19 @@ class RemoteBox(Box):
         kind = definition.pop("kind", None)
         assert kind is not None, f"Corrupted definition: {definition}"
 
+        # TODO: We should think of a way to set multiple environment definitions
+
+        target_list = [{
+            "kind": kind,
+            "configuration": definition
+        }]
+
         # Create a remote environment.
         return BoxedEnvironment(
             isolate.prepare_environment(
                 "isolate-server",
                 host=self.host,
-                target_environment_kind=kind,
-                target_environment_config=definition,
+                target_environments=target_list,
                 context=settings,
             ),
             pool_size=self.pool_size,

@@ -39,16 +39,24 @@ class IsolateServicer(definitions.IsolateServicer):
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
         messages: Queue[definitions.PartialRunResult] = Queue()
-        try:
-            environment = from_grpc(request.environment)
-        except ValueError:
+        environments = []
+        for env in request.environments:
+            try:
+                environments.append(from_grpc(env))
+            except ValueError:
+                return self.abort_with_msg(
+                    f"Unknown environment kind: {env.kind}",
+                    context,
+                )
+            except TypeError as exc:
+                return self.abort_with_msg(
+                    f"Invalid environment parameter: {str(exc)}.",
+                    context,
+                )
+
+        if not environments:
             return self.abort_with_msg(
-                f"Unknown environment kind: {request.environment.kind}.",
-                context,
-            )
-        except TypeError as exc:
-            return self.abort_with_msg(
-                f"Invalid environment parameter: {str(exc)}.",
+                f"At least one environment must be specified for a run!",
                 context,
             )
 
@@ -57,7 +65,9 @@ class IsolateServicer(definitions.IsolateServicer):
             log_hook=partial(_add_log_to_queue, messages),
             serialization_method=request.function.method,
         )
-        environment.apply_settings(run_settings)
+
+        for environment in environments:
+            environment.apply_settings(run_settings)
 
         extra_inheritance_paths = []
         if INHERIT_FROM_LOCAL:
@@ -65,24 +75,29 @@ class IsolateServicer(definitions.IsolateServicer):
             extra_inheritance_paths.append(local_environment.create())
 
         with ThreadPoolExecutor(max_workers=1) as local_pool:
-            future = local_pool.submit(environment.create)
+            environment_paths = []
+            for environment in environments:
+                future = local_pool.submit(environment.create)
+                yield from self.watch_queue_until_completed(messages, future.done)
+                try:
+                    # Assuming that the iterator above only stops yielding once
+                    # the future is completed, the timeout here should be redundant
+                    # but it is just in case.
+                    environment_paths.append(future.result(timeout=0.1))
+                except EnvironmentCreationError:
+                    return self.abort_with_msg(
+                        f"A problem occurred while creating the environment.",
+                        context,
+                    )
 
-            yield from self.watch_queue_until_completed(messages, future.done)
-            try:
-                # Assuming that the iterator above only stops yielding once
-                # the future is completed, the timeout here should be redundant
-                # but it is just in case.
-                connection = future.result(timeout=0.1)
-            except EnvironmentCreationError:
-                return self.abort_with_msg(
-                    f"A problem occurred while creating the environment.",
-                    context,
-                )
+            primary_path, *inheritance_paths = environment_paths
+            inheritance_paths.extend(extra_inheritance_paths)
+            primary_environment = environments[0]
 
             with LocalPythonGRPC(
-                environment,
-                connection,
-                extra_inheritance_paths=extra_inheritance_paths,
+                primary_environment,
+                primary_path,
+                extra_inheritance_paths=inheritance_paths,
             ) as connection:
                 future = local_pool.submit(
                     _proxy_to_queue,

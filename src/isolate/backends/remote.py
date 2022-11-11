@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 import grpc
 
@@ -23,12 +23,11 @@ from isolate.server.definitions import (
 
 
 @dataclass
-class IsolateServer(BaseEnvironment[EnvironmentDefinition]):
+class IsolateServer(BaseEnvironment[List[EnvironmentDefinition]]):
     BACKEND_NAME: ClassVar[str] = "isolate-server"
 
     host: str
-    target_environment_kind: str
-    target_environment_config: Dict[str, Any]
+    target_environments: List[Dict[str, Any]]
 
     @classmethod
     def from_config(
@@ -45,21 +44,25 @@ class IsolateServer(BaseEnvironment[EnvironmentDefinition]):
     def key(self) -> str:
         return sha256_digest_of(
             self.host,
-            self.target_environment_kind,
-            json.dumps(self.target_environment_config),
+            json.dumps(self.target_environments),
         )
 
-    def create(self) -> EnvironmentDefinition:
-        return EnvironmentDefinition(
-            kind=self.target_environment_kind,
-            configuration=interface.to_struct(self.target_environment_config),
-        )
+    def create(self) -> List[EnvironmentDefinition]:
+        envs = []
+        for env in self.target_environments:
+            if not env.get("kind") or not env.get("configuration"):
+                raise RuntimeError(f"`kind` or `configuration` key missing in: {env}")
+            envs.append(EnvironmentDefinition(
+                kind=env["kind"],
+                configuration=interface.to_struct(env["configuration"])))
+        return envs
 
     def exists(self) -> bool:
         return False
 
     def open_connection(
-        self, connection_key: EnvironmentDefinition
+            self,
+            connection_key: List[EnvironmentDefinition],
     ) -> IsolateServerConnection:
         return IsolateServerConnection(self, self.host, connection_key)
 
@@ -67,7 +70,7 @@ class IsolateServer(BaseEnvironment[EnvironmentDefinition]):
 @dataclass
 class IsolateServerConnection(EnvironmentConnection):
     host: str
-    definition: EnvironmentDefinition
+    definitions: List[EnvironmentDefinition]
     _channel: Optional[grpc.Channel] = None
 
     def _acquire_channel(self) -> None:
@@ -97,7 +100,7 @@ class IsolateServerConnection(EnvironmentConnection):
                 method=self.environment.settings.serialization_method,
                 was_it_raised=False,
             ),
-            environment=self.definition,
+            environments=self.definitions
         )
 
         return_value = []

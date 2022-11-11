@@ -1,3 +1,4 @@
+from os import environ
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -273,8 +274,11 @@ def test_local_python_environment():
 def test_isolate_server_environment(isolate_server):
     environment = IsolateServer(
         host=isolate_server,
-        target_environment_kind="virtualenv",
-        target_environment_config={"requirements": ["pyjokes==0.5.0"]},
+        target_environments=[{
+            "kind":"virtualenv",
+            "configuration": {
+                "requirements": ["pyjokes==0.5.0"]},
+        }],
     )
 
     connection_key = environment.create()
@@ -288,15 +292,17 @@ def test_isolate_server_environment(isolate_server):
 def test_isolate_server_on_conda(isolate_server):
     environment_2 = IsolateServer(
         host=isolate_server,
-        target_environment_kind="conda",
-        target_environment_config={
-            "packages": [
-                # Match the same python version (since inherit local=
-                # is True).
-                f"python={'.'.join(map(str, sys.version_info[:2]))}",
-                "pyjokes=0.6.0",
-            ]
-        },
+        target_environments=[{
+            "kind": "conda",
+            "configuration": {
+                "packages": [
+                    # Match the same python version (since inherit local=
+                    # is True).
+                    f"python={'.'.join(map(str, sys.version_info[:2]))}",
+                    "pyjokes=0.6.0",
+                ]
+            },
+        }]
     )
     with environment_2.connect() as connection:
         assert (
@@ -309,9 +315,10 @@ def test_isolate_server_logs(isolate_server):
     collected_logs = []
     environment = IsolateServer(
         host=isolate_server,
-        target_environment_kind="virtualenv",
-        target_environment_config={"requirements": ["pyjokes==0.5.0"]},
-    )
+        target_environments=[{
+            "kind": "virtualenv",
+            "configuration": { "requirements": ["pyjokes==0.5.0"] }}
+        ])
     environment.apply_settings(IsolateSettings(log_hook=collected_logs.append))
 
     with environment.connect() as connection:
@@ -350,8 +357,7 @@ def test_isolate_server_demo(isolate_server):
         remote_environment = isolate.prepare_environment(
             "isolate-server",
             host=isolate_server,
-            target_environment_kind=definition["kind"],
-            target_environment_config=definition["configuration"],
+            target_environments= [definition]
         )
         with local_environment.connect() as local_connection, remote_environment.connect() as remote_connection:
             for target_func in [
@@ -361,6 +367,38 @@ def test_isolate_server_demo(isolate_server):
                 assert local_connection.run(target_func) == remote_connection.run(
                     target_func
                 )
+
+def test_isolate_server_multiple_envs(isolate_server):
+    from functools import partial
+
+    environment_configs = [
+        {
+            "kind": "virtualenv",
+            "configuration": {
+                "requirements": [
+                    "python-dateutil==2.8.2",
+                ]
+            },
+        },
+        {
+            "kind": "virtualenv",
+            "configuration": {
+                "requirements": [
+                    "pyjokes==0.5.0",
+                ]
+            },
+        }]
+
+    environment = IsolateServer(host=isolate_server, target_environments=environment_configs)
+
+    connection_key = environment.create()
+    with environment.open_connection(connection_key) as connection:
+        assert (
+            connection.run(partial(
+                eval,
+                "__import__('pyjokes').__version__ + ' ' + __import__('dateutil').__version__"))
+            == "0.5.0 2.8.2"
+        )
 
 
 @pytest.mark.parametrize(

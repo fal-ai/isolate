@@ -3,8 +3,10 @@
 isort:skip_file
 """
 import builtins
+import collections.abc
 from isolate.connections.grpc.definitions import common_pb2
 import google.protobuf.descriptor
+import google.protobuf.internal.containers
 import google.protobuf.message
 import google.protobuf.struct_pb2
 import sys
@@ -20,30 +22,20 @@ DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 class BoundFunction(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    ENVIRONMENT_FIELD_NUMBER: builtins.int
+    ENVIRONMENTS_FIELD_NUMBER: builtins.int
     FUNCTION_FIELD_NUMBER: builtins.int
     @property
-    def environment(self) -> global___EnvironmentDefinition: ...
+    def environments(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnvironmentDefinition]: ...
     @property
     def function(self) -> common_pb2.SerializedObject: ...
     def __init__(
         self,
         *,
-        environment: global___EnvironmentDefinition | None = ...,
+        environments: collections.abc.Iterable[global___EnvironmentDefinition] | None = ...,
         function: common_pb2.SerializedObject | None = ...,
     ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "environment", b"environment", "function", b"function"
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "environment", b"environment", "function", b"function"
-        ],
-    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["function", b"function"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["environments", b"environments", "function", b"function"]) -> None: ...
 
 global___BoundFunction = BoundFunction
 
@@ -64,14 +56,7 @@ class EnvironmentDefinition(google.protobuf.message.Message):
         kind: builtins.str = ...,
         configuration: google.protobuf.struct_pb2.Struct | None = ...,
     ) -> None: ...
-    def HasField(
-        self, field_name: typing_extensions.Literal["configuration", b"configuration"]
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "configuration", b"configuration", "kind", b"kind"
-        ],
-    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["configuration", b"configuration"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["configuration", b"configuration", "kind", b"kind"]) -> None: ...
 
 global___EnvironmentDefinition = EnvironmentDefinition

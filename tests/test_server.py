@@ -110,7 +110,7 @@ def test_server_basic_communication(
             ),
             method="dill",
         ),
-        environment=env_definition,
+        environments=[env_definition],
     )
 
     raw_result = run_request(stub, request)
@@ -134,7 +134,7 @@ def test_server_builder_error(stub: definitions.IsolateStub, monkeypatch: Any) -
             ),
             method="dill",
         ),
-        environment=env_definition,
+        environments=[env_definition],
     )
 
     build_logs: List[Log] = []
@@ -167,7 +167,7 @@ def test_user_logs_immediate(stub: definitions.IsolateStub, monkeypatch: Any) ->
             ),
             method="dill",
         ),
-        environment=env_definition,
+        environments=[env_definition],
     )
 
     user_logs: List[Log] = []
@@ -192,7 +192,7 @@ def test_unknown_environment(stub: definitions.IsolateStub, monkeypatch: Any) ->
             ),
             method="dill",
         ),
-        environment=env_definition,
+        environments=[env_definition],
     )
 
     with pytest.raises(grpc.RpcError) as exc:
@@ -213,10 +213,47 @@ def test_invalid_param(stub: definitions.IsolateStub, monkeypatch: Any) -> None:
             ),
             method="dill",
         ),
-        environment=env_definition,
+        environments=[env_definition],
     )
 
     with pytest.raises(grpc.RpcError) as exc:
         run_request(stub, request)
 
     assert exc.match("unexpected keyword argument 'packages'")
+
+
+@pytest.mark.parametrize("inherit_local", [True, False])
+def test_server_multiple_envs(
+    stub: definitions.IsolateStub,
+    monkeypatch: Any,
+    inherit_local: bool,
+) -> None:
+    inherit_from_local(monkeypatch, inherit_local)
+    xtra_requirements = ["python-dateutil==2.8.2"]
+    requirements = ["pyjokes==0.6.0"]
+    if not inherit_local:
+        # The agent process needs dill (and isolate) to actually
+        # deserialize the given function, so they need to be installed
+        # when we are not inheriting the local environment.
+        requirements.append("dill==0.3.5.1")
+
+        # TODO: apparently [server] doesn't work but [grpc] does work (not sure why
+        # needs further investigation, probably poetry related).
+        requirements.append(f"{REPO_DIR}[grpc]")
+
+    env_definition = define_environment("virtualenv", requirements=requirements)
+    xtra_env_definition = define_environment("virtualenv", requirements=xtra_requirements)
+    request = definitions.BoundFunction(
+        function=to_serialized_object(
+            partial(
+                eval,
+                "__import__('pyjokes').__version__ + ' ' + __import__('dateutil').__version__",
+            ),
+            method="dill",
+        ),
+        environments=[env_definition, xtra_env_definition],
+    )
+
+    raw_result = run_request(stub, request)
+
+    assert from_grpc(raw_result) == "0.6.0 2.8.2"
