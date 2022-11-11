@@ -23,7 +23,7 @@ from isolate.server.definitions import (
 
 
 @dataclass
-class IsolateServer(BaseEnvironment[EnvironmentDefinition]):
+class IsolateServer(BaseEnvironment[List[EnvironmentDefinition]]):
     BACKEND_NAME: ClassVar[str] = "isolate-server"
 
     host: str
@@ -48,10 +48,14 @@ class IsolateServer(BaseEnvironment[EnvironmentDefinition]):
         )
 
     def create(self) -> List[EnvironmentDefinition]:
-        return [EnvironmentDefinition(
-            kind=env["kind"],
-            configuration=interface.to_struct(env["configuration"]),
-        ) for env in self.target_environments]
+        envs = []
+        for env in self.target_environments:
+            if not env.get("kind") or not env.get("configuration"):
+                raise RuntimeError(f"`kind` or `configuration` key missing in: {env}")
+            envs.append(EnvironmentDefinition(
+                kind=env["kind"],
+                configuration=interface.to_struct(env["configuration"])))
+        return envs
 
     def exists(self) -> bool:
         return False
