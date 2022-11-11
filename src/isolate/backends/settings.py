@@ -51,6 +51,12 @@ class IsolateSettings:
         path.mkdir(exist_ok=True, parents=True)
         return path
 
+    def _get_lock_dir(self) -> Path:
+        """Return a directory which can be used for storing file-based locks."""
+        lock_dir = self._get_temp_base() / "locks"
+        lock_dir.mkdir(exist_ok=True, parents=True)
+        return lock_dir
+
     @contextmanager
     def build_ctx_for(self, dst_path: Path) -> Iterator[Path]:
         """Create a new build context for the given 'dst_path'. It will return
@@ -65,7 +71,7 @@ class IsolateSettings:
             shutil.rmtree(tmp_path)
             raise exc
         else:
-            replace_dir(tmp_path, dst_path)
+            replace_dir(tmp_path, dst_path, self._get_lock_dir())
 
     def cache_dir_for(self, backend: BaseEnvironment) -> Path:
         """Return a directory which can be used for caching the given
