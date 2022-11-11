@@ -58,7 +58,7 @@ def replace_on_process(*args, timeout=0.5):
 
 
 def test_await_lock(tmp_path):
-    from isolate.backends.common import _lock_file_for
+    from isolate.backends.common import _lock_path
 
     lock_dir = tmp_path / "lock"
     lock_dir.mkdir()
@@ -72,7 +72,7 @@ def test_await_lock(tmp_path):
     dst_path.mkdir()
 
     # Try locking the dst_path
-    with _lock_file_for(dst_path, lock_dir):
+    with _lock_path(dst_path, lock_dir):
         # And now try replacing it (should fail because the lock is held)
         replace_on_process(src_path, dst_path, lock_dir)
         assert not (dst_path / "file").exists()
