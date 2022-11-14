@@ -2,17 +2,26 @@ from __future__ import annotations
 
 import hashlib
 import os
+import secrets
 import shutil
 import threading
-from contextlib import contextmanager
+import time
+from contextlib import contextmanager, suppress
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Iterator, Optional, Tuple
 
 _OLD_DIR_PREFIX = "old-"
 
+# For ensuring that the lock is created and not forgotten
+# (e.g. the process which acquires it crashes, so it is never
+# released), we are going to check the lock file's mtime every
+# _REVOKE_LOCK_DELAY seconds. If the mtime is older than that
+# value, we are going to assume the lock is stale and revoke it.
+_REVOKE_LOCK_DELAY = 30
 
-def replace_dir(src_path: Path, dst_path: Path) -> None:
+
+def replace_dir(src_path: Path, dst_path: Path, lock_dir: Path) -> None:
     """Atomically replace 'dst_path' with 'src_path'.
 
     Be aware that this is not actually atomic (and there is no
@@ -27,17 +36,54 @@ def replace_dir(src_path: Path, dst_path: Path) -> None:
     would make the cache corrupted).
     """
 
-    if dst_path.exists():
-        cleanup = dst_path.rename(dst_path.with_name(_OLD_DIR_PREFIX + dst_path.name))
-    else:
-        cleanup = None
-
-    assert not dst_path.exists()
+    tmp_path = None
     try:
-        src_path.rename(dst_path)
+        with _lock_file_for(dst_path, lock_dir):
+            if dst_path.exists():
+                # Rename the destination directory to a temporary location.
+                # This is to ensure that the destination directory is not
+                # removed before we can rename the source directory to it.
+                tmp_path = dst_path.parent / (
+                    _OLD_DIR_PREFIX + secrets.token_hex(16) + dst_path.name
+                )
+                dst_path.rename(tmp_path)
+
+            src_path.rename(dst_path)
     finally:
-        if cleanup is not None:
-            shutil.rmtree(cleanup)
+        # No matter what happens, we need to remove the temporary
+        # directory.
+        if tmp_path is not None:
+            shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+@contextmanager
+def _lock_file_for(path: Path, lock_dir: Path) -> Iterator[None]:
+    """Try to acquire a lock for all operations on the given 'path'."""
+    lock_file = (lock_dir / path.name).with_suffix(".lock")
+    try:
+        while not _try_acquire(lock_file):
+            time.sleep(0.05)
+            continue
+        yield
+    finally:
+        with suppress(FileNotFoundError):
+            lock_file.unlink()
+
+
+def _try_acquire(lock_file: Path) -> bool:
+    with suppress(FileNotFoundError):
+        mtime = lock_file.stat().st_mtime
+        if time.time() - mtime > _REVOKE_LOCK_DELAY:
+            # The lock file exists, but it may be stale. Check the
+            # mtime and if it is too old, revoke it.
+            lock_file.unlink()
+
+    try:
+        lock_file.touch(exist_ok=False)
+    except FileExistsError:
+        return False
+    else:
+        return True
 
 
 def get_executable_path(search_path: Path, executable_name: str) -> Path:
