@@ -102,7 +102,7 @@ class IsolateServicer(definitions.IsolateServicer):
                 future = local_pool.submit(
                     _proxy_to_queue,
                     queue=messages,
-                    connection=connection,
+                    connection=cast(LocalPythonGRPC, connection),
                     input=request.function,
                 )
 

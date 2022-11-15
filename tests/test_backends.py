@@ -134,6 +134,17 @@ class GenericEnvironmentTests:
 
         assert not environment.exists()
 
+    @pytest.mark.parametrize("executable", ["python"])
+    def test_path_resolution(self, tmp_path, executable):
+        import shutil
+
+        environment = self.get_project_environment(tmp_path, "example-binary")
+        environment_path = environment.create()
+        with environment.open_connection(environment_path) as connection:
+            executable_path = Path(connection.run(partial(shutil.which, executable)))
+            assert executable_path.exists()
+            assert executable_path.relative_to(environment_path)
+
 
 class TestVirtualenv(GenericEnvironmentTests):
 
@@ -150,6 +161,9 @@ class TestVirtualenv(GenericEnvironmentTests):
         },
         "invalid-project": {
             "requirements": ["pyjokes==999.999.999"],
+        },
+        "example-binary": {
+            "requirements": [],
         },
     }
     creation_entry_point = ("virtualenv.cli_run", PermissionError)
@@ -246,6 +260,9 @@ class TestConda(GenericEnvironmentTests):
         "r": {
             "packages": ["r-base=4.2.2"],
         },
+        "example-binary": {
+            "packages": ["python"],
+        },
     }
     creation_entry_point = ("subprocess.check_call", subprocess.SubprocessError)
 
@@ -281,6 +298,14 @@ def test_local_python_environment():
 
     with pytest.raises(NotImplementedError):
         local_env.destroy(connection_key)
+
+
+def test_path_on_local():
+    import shutil
+
+    local_env = LocalPythonEnvironment()
+    with local_env.connect() as connection:
+        assert connection.run(partial(shutil.which, "python")) == shutil.which("python")
 
 
 def test_isolate_server_environment(isolate_server):

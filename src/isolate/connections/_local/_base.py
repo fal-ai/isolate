@@ -28,6 +28,28 @@ if TYPE_CHECKING:
 ConnectionType = TypeVar("ConnectionType")
 
 
+def binary_path_for(*search_paths: Path) -> str:
+    """Return the binary search path for the given 'search_paths'.
+    It will be a combination of the 'bin/' folders in them and
+    the existing PATH environment variable."""
+
+    paths = []
+    for search_path in search_paths:
+        path = sysconfig.get_path("scripts", vars={"base": search_path})
+        paths.append(path)
+        # Some distributions (conda) might include both a 'bin' and
+        # a 'scripts' folder.
+
+        auxilary_binary_path = search_path / "bin"
+        if path != auxilary_binary_path and auxilary_binary_path.exists():
+            paths.append(str(auxilary_binary_path))
+
+    if "PATH" in os.environ:
+        paths.append(os.environ["PATH"])
+
+    return os.pathsep.join(paths)
+
+
 def python_path_for(*search_paths: Path) -> str:
     """Return the PYTHONPATH for the library paths residing
     in the given 'search_paths'. The order of the paths is
@@ -98,13 +120,22 @@ class PythonExecutionBase(Generic[ConnectionType]):
         custom_vars = {}
         custom_vars[AGENT_SIGNATURE] = "1"
         custom_vars["PYTHONUNBUFFERED"] = "1"
+
+        # NOTE: we don't have to manually set PYTHONPATH here if we are
+        # using a single environment since python will automatically
+        # use the proper path.
         if self.extra_inheritance_paths:
             # The order here should reflect the order of the inheritance
             # where the actual environment already takes precedence.
-            python_path = python_path_for(
+            custom_vars["PYTHONPATH"] = python_path_for(
                 self.environment_path, *self.extra_inheritance_paths
             )
-            custom_vars["PYTHONPATH"] = python_path
+
+        # But the PATH must be always set since it will be not be
+        # automatically set by Python (think of this as ./venv/bin/activate)
+        custom_vars["PATH"] = binary_path_for(
+            self.environment_path, *self.extra_inheritance_paths
+        )
 
         return {
             **os.environ,
