@@ -5,7 +5,7 @@ import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Iterator
+from typing import TYPE_CHECKING, Any, Callable, Iterator
 
 from platformdirs import user_cache_dir
 
@@ -58,7 +58,7 @@ class IsolateSettings:
         return lock_dir
 
     @contextmanager
-    def build_ctx_for(self, dst_path: Path) -> Iterator[Path]:
+    def build_ctx_for(self, dst_path: Path, **replace_args: Any) -> Iterator[Path]:
         """Create a new build context for the given 'dst_path'. It will return
         a temporary directory which can be used to create the environment and
         once the context is closed, the build directory will be moved to
@@ -71,7 +71,7 @@ class IsolateSettings:
             shutil.rmtree(tmp_path)
             raise exc
         else:
-            replace_dir(tmp_path, dst_path, self._get_lock_dir())
+            replace_dir(tmp_path, dst_path, self._get_lock_dir(), **replace_args)
 
     def cache_dir_for(self, backend: BaseEnvironment) -> Path:
         """Return a directory which can be used for caching the given

@@ -9,7 +9,7 @@ import time
 from contextlib import contextmanager, suppress
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Iterator, Optional, Tuple
+from typing import Any, Callable, Iterator, Optional, Tuple
 
 _OLD_DIR_PREFIX = "old-"
 
@@ -21,7 +21,12 @@ _OLD_DIR_PREFIX = "old-"
 _REVOKE_LOCK_DELAY = 30
 
 
-def replace_dir(src_path: Path, dst_path: Path, lock_dir: Path) -> None:
+def replace_dir(
+    src_path: Path,
+    dst_path: Path,
+    lock_dir: Path,
+    environment_move_hook: Callable[[Path, Path], Any] = Path.rename,
+) -> None:
     """Atomically replace 'dst_path' with 'src_path'.
 
     Be aware that this is not actually atomic (and there is no
@@ -38,7 +43,7 @@ def replace_dir(src_path: Path, dst_path: Path, lock_dir: Path) -> None:
 
     tmp_path = None
     try:
-        with _lock_file_for(dst_path, lock_dir):
+        with _lock_path(dst_path, lock_dir):
             if dst_path.exists():
                 # Rename the destination directory to a temporary location.
                 # This is to ensure that the destination directory is not
@@ -48,7 +53,7 @@ def replace_dir(src_path: Path, dst_path: Path, lock_dir: Path) -> None:
                 )
                 dst_path.rename(tmp_path)
 
-            src_path.rename(dst_path)
+            environment_move_hook(src_path, dst_path)
     finally:
         # No matter what happens, we need to remove the temporary
         # directory.
@@ -57,7 +62,7 @@ def replace_dir(src_path: Path, dst_path: Path, lock_dir: Path) -> None:
 
 
 @contextmanager
-def _lock_file_for(path: Path, lock_dir: Path) -> Iterator[None]:
+def _lock_path(path: Path, lock_dir: Path) -> Iterator[None]:
     """Try to acquire a lock for all operations on the given 'path'."""
     lock_file = (lock_dir / path.name).with_suffix(".lock")
     try:
