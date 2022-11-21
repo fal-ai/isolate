@@ -18,6 +18,14 @@ from isolate.connections import PythonIPC
 _CONDA_COMMAND = os.environ.get("CONDA_EXE", "conda")
 _ISOLATE_CONDA_HOME = os.getenv("ISOLATE_CONDA_HOME")
 
+# Conda accepts the following version specifiers: =, ==, >=, <=, >, <, !=
+_CONDA_VERSION_IDENTIFIER_CHARS = (
+    "=",
+    "<",
+    ">",
+    "!",
+)
+
 
 @dataclass
 class CondaEnvironment(BaseEnvironment[Path]):
@@ -42,6 +50,33 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     def _compute_dependencies(self) -> List[str]:
         user_dependencies = self.packages.copy()
+        for raw_requirement in user_dependencies:
+            # Get rid of all whitespace characters (python = 3.8 becomes python=3.8)
+            raw_requirement = raw_requirement.replace(" ", "")
+            if not raw_requirement.startswith("python"):
+                continue
+
+            # Ensure that the package is either python or python followed
+            # by a version specifier. Examples:
+            #  - python # OK
+            #  - python=3.8 # OK
+            #  - python>=3.8 # OK
+            #  - python-user-toolkit # NOT OK
+            #  - pythonhelp!=1.0 # NOT OK
+
+            python_suffix = raw_requirement[len("python") :]
+            if (
+                python_suffix
+                and python_suffix[0] not in _CONDA_VERSION_IDENTIFIER_CHARS
+            ):
+                continue
+
+            raise EnvironmentCreationError(
+                "Python version can not be specified by packages (it needs to be passed as `python_version` option)"
+            )
+
+        # Now that we verified that the user did not specify the Python version
+        # we can add it by ourselves
         target_python = self.python_version or active_python()
         user_dependencies.append(f"python={target_python}")
         return user_dependencies
