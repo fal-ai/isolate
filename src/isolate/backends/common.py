@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import secrets
 import shutil
 import threading
 import time
@@ -10,8 +9,6 @@ from contextlib import contextmanager, suppress
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional, Tuple
-
-_OLD_DIR_PREFIX = "old-"
 
 # For ensuring that the lock is created and not forgotten
 # (e.g. the process which acquires it crashes, so it is never
@@ -21,58 +18,37 @@ _OLD_DIR_PREFIX = "old-"
 _REVOKE_LOCK_DELAY = 30
 
 
-def replace_dir(
-    src_path: Path,
-    dst_path: Path,
-    lock_dir: Path,
-    environment_move_hook: Callable[[Path, Path], Any] = Path.rename,
-) -> None:
-    """Atomically replace 'dst_path' with 'src_path'.
+@contextmanager
+def lock_build_path(path: Path, lock_dir: Path) -> Iterator[None]:
+    """Try to acquire a lock for all operations on the given 'path'. This guarantees
+    that the path will not be modified by any other process while the lock is held."""
+    lock_file = (lock_dir / path.name).with_suffix(".lock")
+    while not _try_acquire(lock_file):
+        time.sleep(0.05)
+        continue
 
-    Be aware that this is not actually atomic (and there is no
-    way to do so, at least in a cross-platform fashion). The basic
-    idea is that, we first rename the 'dst_path' to something else
-    (if it exists), and then rename the 'src_path' to 'dst_path' and
-    finally remove the temporary directory in which we hold 'dst_path'.
-
-    Prioritizing these two renames allows us to keep the cache always
-    in a working state (if we were to remove 'dst_path' first and then
-    try renaming 'src_path' to 'dst_path', any error while removing it
-    would make the cache corrupted).
-    """
-
-    tmp_path = None
-    try:
-        with _lock_path(dst_path, lock_dir):
-            if dst_path.exists():
-                # Rename the destination directory to a temporary location.
-                # This is to ensure that the destination directory is not
-                # removed before we can rename the source directory to it.
-                tmp_path = dst_path.parent / (
-                    _OLD_DIR_PREFIX + secrets.token_hex(16) + dst_path.name
-                )
-                dst_path.rename(tmp_path)
-
-            environment_move_hook(src_path, dst_path)
-    finally:
-        # No matter what happens, we need to remove the temporary
-        # directory.
-        if tmp_path is not None:
-            shutil.rmtree(tmp_path, ignore_errors=True)
+    with _keep_lock_alive(lock_file):
+        yield
 
 
 @contextmanager
-def _lock_path(path: Path, lock_dir: Path) -> Iterator[None]:
-    """Try to acquire a lock for all operations on the given 'path'."""
-    lock_file = (lock_dir / path.name).with_suffix(".lock")
+def _keep_lock_alive(lock_file: Path) -> Iterator[None]:
+    """Keep the lock file alive by updating its mtime as long
+    as we are doing something in the cache."""
+    event = threading.Event()
+
+    def _keep_alive(per_beat_delay: float = 1) -> None:
+        while not event.wait(per_beat_delay):
+            lock_file.touch()
+        lock_file.unlink()
+
+    thread = threading.Thread(target=_keep_alive)
     try:
-        while not _try_acquire(lock_file):
-            time.sleep(0.05)
-            continue
+        thread.start()
         yield
     finally:
-        with suppress(FileNotFoundError):
-            lock_file.unlink()
+        event.set()
+        thread.join()
 
 
 def _try_acquire(lock_file: Path) -> bool:

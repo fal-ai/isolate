@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Callable, Iterator
 
 from platformdirs import user_cache_dir
 
-from isolate.backends.common import replace_dir
+from isolate.backends.common import lock_build_path
 from isolate.logs import Log
 
 if TYPE_CHECKING:
@@ -58,20 +58,19 @@ class IsolateSettings:
         return lock_dir
 
     @contextmanager
-    def build_ctx_for(self, dst_path: Path, **replace_args: Any) -> Iterator[Path]:
-        """Create a new build context for the given 'dst_path'. It will return
-        a temporary directory which can be used to create the environment and
-        once the context is closed, the build directory will be moved to
-        the destination."""
+    def cache_lock_for(self, path: Path) -> Iterator[Path]:
+        """Create a lock for accessing (and operating on) the given path. This
+        means whenever the context manager is entered, the path can be freely
+        modified and accessed without any other process interfering."""
 
-        tmp_path = Path(tempfile.mkdtemp(dir=self._get_temp_base()))
-        try:
-            yield tmp_path
-        except BaseException as exc:
-            shutil.rmtree(tmp_path)
-            raise exc
-        else:
-            replace_dir(tmp_path, dst_path, self._get_lock_dir(), **replace_args)
+        with lock_build_path(path, self._get_lock_dir()):
+            try:
+                yield path
+            except BaseException:
+                # If anything goes wrong, we have to clean up the
+                # directory (we can't leave it as a corrupted build).
+                shutil.rmtree(path, ignore_errors=True)
+                raise
 
     def cache_dir_for(self, backend: BaseEnvironment) -> Path:
         """Return a directory which can be used for caching the given

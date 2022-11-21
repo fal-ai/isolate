@@ -10,8 +10,6 @@ from typing import TYPE_CHECKING, Callable, Dict, Iterator, NewType, Optional
 
 from platformdirs import user_cache_dir
 
-from isolate.backends.common import replace_dir
-
 if TYPE_CHECKING:
     from isolate.backends import BaseEnvironment
 
