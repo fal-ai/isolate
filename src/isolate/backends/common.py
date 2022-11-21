@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+import sysconfig
 import threading
 import time
 from contextlib import contextmanager, suppress
@@ -172,3 +173,10 @@ def sha256_digest_of(*unique_fields: str, _join_char: str = "\n") -> str:
 
     inner_text = _join_char.join(unique_fields).encode()
     return hashlib.sha256(inner_text).hexdigest()
+
+
+def active_python() -> str:
+    """Return the active Python version that can be used for caching
+    and re-creating this environment. Currently only covers major and
+    minor versions (like 3.9); patch versions are ignored (like 3.9.4)."""
+    return sysconfig.get_python_version()

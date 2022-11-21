@@ -48,6 +48,12 @@ class GenericEnvironmentTests:
         with environment.open_connection(connection_key) as connection:
             return connection.run(partial(eval, "__import__('pyjokes').__version__"))
 
+    def get_python_version(
+        self, environment: BaseEnvironment, connection_key: Any
+    ) -> str:
+        with environment.open_connection(connection_key) as connection:
+            return connection.run(partial(eval, "sys.version"))
+
     @contextmanager
     def fail_active_creation(self, monkeypatch):
         # This function patches the specified entry_point function
@@ -171,6 +177,15 @@ class GenericEnvironmentTests:
             dbt_version = self._run_cmd(connection, "dbt", "--version")
             assert "installed: 1.3.1" in dbt_version
 
+    def test_custom_python_version(self, tmp_path):
+        for python_type, python_version in [
+            ("old-python", "3.7"),
+            ("new-python", "3.10"),
+        ]:
+            environment = self.get_project_environment(tmp_path, python_type)
+            python_version = self.get_python_version(environment, environment.create())
+            assert python_version.startswith(python_version)
+
 
 class TestVirtualenv(GenericEnvironmentTests):
 
@@ -193,6 +208,12 @@ class TestVirtualenv(GenericEnvironmentTests):
         },
         "dbt-core": {
             "requirements": ["dbt-core==1.3.1"],
+        },
+        "old-python": {
+            "python_version": "3.7",
+        },
+        "new-python": {
+            "python_version": "3.10",
         },
     }
     creation_entry_point = ("virtualenv.cli_run", PermissionError)
@@ -256,6 +277,22 @@ class TestVirtualenv(GenericEnvironmentTests):
         )
         assert environment_1.key != environment_2.key != environment_3.key
 
+    def test_custom_python_version(self, tmp_path):
+        for python_type, expected_python_version in [
+            ("old-python", "3.7"),
+            ("new-python", "3.10"),
+        ]:
+            environment = self.get_project_environment(tmp_path, python_type)
+            try:
+                connection = environment.create()
+            except EnvironmentCreationError:
+                pytest.skip(
+                    "This python version not available on the system (through virtualenv)"
+                )
+
+            python_version = self.get_python_version(environment, connection)
+            assert python_version.startswith(expected_python_version)
+
 
 # Since conda is an external dependency, we'll skip tests using it
 # if it is not installed. v1 vbn
@@ -273,9 +310,7 @@ class TestConda(GenericEnvironmentTests):
     backend_cls = CondaEnvironment
     configs = {
         "empty": {
-            # Empty environments on conda does not have Python
-            # pre-installed.
-            "packages": ["python"],
+            "packages": [],
         },
         "old-example-project": {
             "packages": ["pyjokes=0.5.0"],
@@ -290,10 +325,16 @@ class TestConda(GenericEnvironmentTests):
             "packages": ["r-base=4.2.2"],
         },
         "example-binary": {
-            "packages": ["python"],
+            "packages": [],
         },
         "dbt-core": {
             "packages": ["dbt-core=1.3.1"],
+        },
+        "old-python": {
+            "python_version": "3.7",
+        },
+        "new-python": {
+            "python_version": "3.10",
         },
     }
     creation_entry_point = ("subprocess.check_call", subprocess.SubprocessError)

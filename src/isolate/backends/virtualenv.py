@@ -9,6 +9,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import (
+    active_python,
     get_executable_path,
     logged_io,
     sha256_digest_of,
@@ -23,6 +24,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
 
     requirements: List[str] = field(default_factory=list)
     constraints_file: Optional[os.PathLike] = None
+    python_version: Optional[str] = None
 
     @classmethod
     def from_config(
@@ -41,7 +43,9 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                 constraints = stream.read().splitlines()
         else:
             constraints = []
-        return sha256_digest_of(*self.requirements, *constraints)
+
+        active_python_version = self.python_version or active_python()
+        return sha256_digest_of(active_python_version, *self.requirements, *constraints)
 
     def install_requirements(self, path: Path) -> None:
         """Install the requirements of this environment using 'pip' to the
@@ -83,9 +87,13 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
 
             self.log(f"Creating the environment at '{venv_path}'")
 
+            args = [str(venv_path)]
+            if self.python_version:
+                args.append(f"--python={self.python_version}")
+
             try:
-                cli_run([str(venv_path)])
-            except OSError as exc:
+                cli_run(args)
+            except (RuntimeError, OSError) as exc:
                 raise EnvironmentCreationError(
                     f"Failed to create the environment at '{venv_path}'"
                 ) from exc

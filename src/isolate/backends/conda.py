@@ -6,10 +6,10 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
-from isolate.backends.common import logged_io, sha256_digest_of
+from isolate.backends.common import active_python, logged_io, sha256_digest_of
 from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
 from isolate.connections import PythonIPC
 
@@ -24,6 +24,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "conda"
 
     packages: List[str] = field(default_factory=list)
+    python_version: Optional[str] = None
 
     @classmethod
     def from_config(
@@ -37,7 +38,13 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     @property
     def key(self) -> str:
-        return sha256_digest_of(*self.packages)
+        return sha256_digest_of(*self._compute_dependencies())
+
+    def _compute_dependencies(self) -> List[str]:
+        user_dependencies = self.packages.copy()
+        target_python = self.python_version or active_python()
+        user_dependencies.append(f"python={target_python}")
+        return user_dependencies
 
     def create(self) -> Path:
         env_path = self.settings.cache_dir_for(self)
@@ -45,23 +52,25 @@ class CondaEnvironment(BaseEnvironment[Path]):
             if env_path.exists():
                 return env_path
 
-            self.log(f"Creating the environment at '{env_path}'")
-            if self.packages:
-                self.log(f"Installing packages: {', '.join(self.packages)}")
+            # Since our agent needs Python to be installed (at very least)
+            # we need to make sure that the base environment is created with
+            # the same Python version as the one that is used to run the
+            # isolate agent.
+            dependencies = self._compute_dependencies()
 
-            with logged_io(self.log) as (stdout, stderr):
-                try:
-                    self._run_conda(
-                        "create",
-                        "--yes",
-                        "--prefix",
-                        env_path,
-                        *self.packages,
-                    )
-                except subprocess.SubprocessError as exc:
-                    raise EnvironmentCreationError(
-                        "Failure during 'conda create'"
-                    ) from exc
+            self.log(f"Creating the environment at '{env_path}'")
+            self.log(f"Installing packages: {', '.join(dependencies)}")
+
+            try:
+                self._run_conda(
+                    "create",
+                    "--yes",
+                    "--prefix",
+                    env_path,
+                    *dependencies,
+                )
+            except subprocess.SubprocessError as exc:
+                raise EnvironmentCreationError("Failure during 'conda create'") from exc
 
         self.log(f"New environment cached at '{env_path}'")
         return env_path
