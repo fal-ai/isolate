@@ -249,7 +249,6 @@ class TestVirtualenv(GenericEnvironmentTests):
 
         # When we can't find a version that satisfies all the constraints, we
         # are going to abort early to let you know.
-
         with pytest.raises(EnvironmentCreationError):
             environment.create()
 
