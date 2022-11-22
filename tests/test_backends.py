@@ -354,6 +354,39 @@ class TestConda(GenericEnvironmentTests):
         output = subprocess.check_output([r_binary, "--version"], text=True)
         assert "R version 4.2.2" in output
 
+    @pytest.mark.parametrize(
+        "user_packages",
+        [
+            ["python"],
+            ["python=3.7"],
+            ["python>=3.7"],
+            ["python=3.7.*"],
+            ["python=3.7.10"],
+            ["python != 3.7"],
+            ["python> 3.7"],
+            ["python <3.7"],
+            ["pyjokes", "python>=3.7", "emoji"],
+            ["python<=3.7", "emoji"],
+            ["pyjokes", "python==3.7"],
+        ],
+    )
+    @pytest.mark.parametrize("python_version", [None, "3.9"])
+    def test_fail_when_user_overwrites_python(
+        self, tmp_path, user_packages, python_version
+    ):
+        environment = self.get_environment(
+            tmp_path,
+            {
+                "packages": user_packages,
+                "python_version": python_version,
+            },
+        )
+        with pytest.raises(
+            EnvironmentCreationError,
+            match="Python version can not be specified by packages",
+        ):
+            environment.create()
+
 
 def test_local_python_environment():
     """Since 'local' environment does not support installation of extra dependencies
@@ -408,9 +441,6 @@ def test_isolate_server_on_conda(isolate_server):
                 "kind": "conda",
                 "configuration": {
                     "packages": [
-                        # Match the same python version (since inherit local=
-                        # is True).
-                        f"python={'.'.join(map(str, sys.version_info[:2]))}",
                         "pyjokes=0.6.0",
                     ]
                 },
