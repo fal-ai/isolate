@@ -77,27 +77,32 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         from virtualenv import cli_run
 
         venv_path = self.settings.cache_dir_for(self)
-        if venv_path.exists():
-            return venv_path
+        with self.settings.cache_lock_for(venv_path):
+            if venv_path.exists():
+                return venv_path
 
-        with self.settings.build_ctx_for(venv_path) as build_path:
-            self.log(f"Creating the environment at '{build_path}'")
+            self.log(f"Creating the environment at '{venv_path}'")
 
             try:
-                cli_run([str(build_path)])
+                cli_run([str(venv_path)])
             except OSError as exc:
                 raise EnvironmentCreationError(
-                    f"Failed to create the environment at '{build_path}'"
+                    f"Failed to create the environment at '{venv_path}'"
                 ) from exc
 
-            self.install_requirements(build_path)
+            self.install_requirements(venv_path)
 
-        assert venv_path.exists(), "Environment must be built at this point"
         self.log(f"New environment cached at '{venv_path}'")
         return venv_path
 
     def destroy(self, connection_key: Path) -> None:
-        shutil.rmtree(connection_key)
+        with self.settings.cache_lock_for(connection_key):
+            # It might be destroyed already (when we are awaiting
+            # for the lock to be released).
+            if not connection_key.exists():
+                return
+
+            shutil.rmtree(connection_key)
 
     def exists(self) -> bool:
         path = self.settings.cache_dir_for(self)

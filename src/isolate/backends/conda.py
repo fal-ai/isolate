@@ -41,70 +41,54 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     def create(self) -> Path:
         env_path = self.settings.cache_dir_for(self)
-        if env_path.exists():
-            return env_path
+        with self.settings.cache_lock_for(env_path):
+            if env_path.exists():
+                return env_path
 
-        with self.settings.build_ctx_for(
-            env_path, environment_move_hook=self._rename_conda_env
-        ) as build_path:
-            self.log(f"Creating the environment at '{build_path}'")
-            conda_executable = _get_conda_executable()
+            self.log(f"Creating the environment at '{env_path}'")
             if self.packages:
                 self.log(f"Installing packages: {', '.join(self.packages)}")
 
             with logged_io(self.log) as (stdout, stderr):
                 try:
-                    subprocess.check_call(
-                        [
-                            conda_executable,
-                            "create",
-                            "--yes",
-                            # The environment will be created under $BASE_CACHE_DIR/conda
-                            # so that in the future we can reuse it.
-                            "--prefix",
-                            build_path,
-                            *self.packages,
-                        ],
-                        stdout=stdout,
-                        stderr=stderr,
+                    self._run_conda(
+                        "create",
+                        "--yes",
+                        "--prefix",
+                        env_path,
+                        *self.packages,
                     )
                 except subprocess.SubprocessError as exc:
                     raise EnvironmentCreationError(
                         "Failure during 'conda create'"
                     ) from exc
 
-        assert env_path.exists(), "Environment must be built at this point"
         self.log(f"New environment cached at '{env_path}'")
         return env_path
 
-    def _rename_conda_env(self, src_path: Path, dst_path: Path) -> None:
-        # Simply renaming the src_path to dst_path is not enough
-        # for conda, since there might be some binaries built with
-        # the assumption that the some libraries are located inside
-        # src_path (even after it doesn't exist anymore).
+    def destroy(self, connection_key: Path) -> None:
+        with self.settings.cache_lock_for(connection_key):
+            # It might be destroyed already (when we are awaiting
+            # for the lock to be released).
+            if not connection_key.exists():
+                return
 
-        self.log(f"Renaming the environment from '{src_path}' to '{dst_path}'")
+            self._run_conda(
+                "remove",
+                "--yes",
+                "--all",
+                "--prefix",
+                connection_key,
+            )
+
+    def _run_conda(self, *args: Any) -> None:
+        conda_executable = _get_conda_executable()
         with logged_io(self.log) as (stdout, stderr):
-            conda_executable = _get_conda_executable()
-
-            # Note: newer versions of conda have a `conda
-            # rename` command, but it is not commonly available.
             subprocess.check_call(
-                [
-                    conda_executable,
-                    "create",
-                    "--yes",
-                    "--prefix",
-                    dst_path,
-                    "--clone",
-                    src_path,
-                ],
+                [conda_executable, *args],
                 stdout=stdout,
                 stderr=stderr,
             )
-
-    def destroy(self, connection_key: Path) -> None:
-        shutil.rmtree(connection_key)
 
     def exists(self) -> bool:
         path = self.settings.cache_dir_for(self)

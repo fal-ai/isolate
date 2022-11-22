@@ -1,3 +1,4 @@
+import re
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -145,6 +146,31 @@ class GenericEnvironmentTests:
             assert executable_path.exists()
             assert executable_path.relative_to(environment_path)
 
+    def _run_cmd(self, connection, executable, *cmd_args):
+        import subprocess
+
+        cmd = [executable, *cmd_args]
+        return connection.run(
+            partial(
+                subprocess.check_output,
+                cmd,
+                text=True,
+                stderr=subprocess.STDOUT,
+            )
+        )
+
+    def test_executable_running(self, tmp_path):
+        environment = self.get_project_environment(tmp_path, "example-binary")
+        with environment.connect() as connection:
+            py_version = self._run_cmd(connection, "python", "--version")
+            assert py_version.startswith("Python 3")
+
+    def test_self_installed_executable_running(self, tmp_path):
+        environment = self.get_project_environment(tmp_path, "dbt-core")
+        with environment.connect() as connection:
+            dbt_version = self._run_cmd(connection, "dbt", "--version")
+            assert "installed: 1.3.1" in dbt_version
+
 
 class TestVirtualenv(GenericEnvironmentTests):
 
@@ -164,6 +190,9 @@ class TestVirtualenv(GenericEnvironmentTests):
         },
         "example-binary": {
             "requirements": [],
+        },
+        "dbt-core": {
+            "requirements": ["dbt-core==1.3.1"],
         },
     }
     creation_entry_point = ("virtualenv.cli_run", PermissionError)
@@ -262,6 +291,9 @@ class TestConda(GenericEnvironmentTests):
         },
         "example-binary": {
             "packages": ["python"],
+        },
+        "dbt-core": {
+            "packages": ["dbt-core=1.3.1"],
         },
     }
     creation_entry_point = ("subprocess.check_call", subprocess.SubprocessError)
