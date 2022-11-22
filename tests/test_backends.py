@@ -294,6 +294,15 @@ class TestVirtualenv(GenericEnvironmentTests):
             python_version = self.get_python_version(environment, connection)
             assert python_version.startswith(expected_python_version)
 
+    def test_invalid_python_version_raises(self, tmp_path):
+        # Hopefully there will never be a Python 9.9.9
+        environment = self.get_environment(tmp_path, {"python_version": "9.9.9"})
+        with pytest.raises(
+            EnvironmentCreationError,
+            match="Python 9.9.9 is not available",
+        ):
+            environment.create()
+
 
 # Since conda is an external dependency, we'll skip tests using it
 # if it is not installed.
