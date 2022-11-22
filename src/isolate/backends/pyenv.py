@@ -101,7 +101,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
             pyenv_root = connection_key.parent.parent
             with logged_io(self.log) as (stdout, stderr):
                 subprocess.check_call(
-                    [pyenv, "uninstall", "-f", self.python_version],
+                    [pyenv, "uninstall", "-f", connection_key.name],
                     env={**os.environ, "PYENV_ROOT": str(pyenv_root)},
                     stdout=stdout,
                     stderr=stderr,
@@ -109,9 +109,11 @@ class PyenvEnvironment(BaseEnvironment[Path]):
 
     def exists(self) -> bool:
         pyenv = _get_pyenv_executable()
-        pyenv_root = self.settings.cache_dir_for(self).parent.parent
-        prefix = self._try_get_prefix(pyenv, pyenv_root)
-        return prefix is not None
+        cache_dir = self.settings.cache_dir_for(self)
+        with self.settings.cache_lock_for(cache_dir):
+            pyenv_root = cache_dir.parent.parent
+            prefix = self._try_get_prefix(pyenv, pyenv_root)
+            return prefix is not None
 
     def open_connection(self, connection_key: Path) -> PythonIPC:
         return PythonIPC(self, connection_key)
@@ -126,7 +128,7 @@ def _get_pyenv_executable() -> Path:
             )
         return Path(_PYENV_EXECUTABLE_PATH)
 
-    pyenv_path = shutil.which("pyenv")
+    pyenv_path = shutil.which(_PYENV_EXECUTABLE_NAME)
     if pyenv_path is None:
         raise FileNotFoundError(
             "Could not find the pyenv executable. If pyenv is not already installed in your system, please"

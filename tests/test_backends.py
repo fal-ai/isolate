@@ -235,6 +235,21 @@ class TestVirtualenv(GenericEnvironmentTests):
             {"requirements": ["pyjokes>=0.4.1"], "constraints_file": contraints_file},
         )
         connection_key = environment.create()
+
+        # The only versions that satisfy the given constraints are 0.4.1 and 0.5.0
+        # and pip is going to pick the latest one.
+        assert self.get_example_version(environment, connection_key) == "0.5.0"
+
+    def test_unresolvable_constraints(self, tmp_path):
+        contraints_file = self.make_constraints_file(tmp_path, ["pyjokes>=0.6.0"])
+        environment = self.get_environment(
+            tmp_path,
+            {"requirements": ["pyjokes<0.6.0"], "constraints_file": contraints_file},
+        )
+
+        # When we can't find a version that satisfies all the constraints, we
+        # are going to abort early to let you know.
+
         with pytest.raises(EnvironmentCreationError):
             environment.create()
 
@@ -598,12 +613,12 @@ def test_pyenv_environment(python_version, tmp_path):
     assert not different_python.exists()
 
     connection_key = different_python.create()
+    assert different_python.exists()
+
     with different_python.open_connection(connection_key) as connection:
         assert connection.run(partial(eval, "__import__('sys').version")).startswith(
             python_version
         )
-
-    assert different_python.exists()
 
     # Do a cached run.
     with different_python.open_connection(connection_key) as connection:

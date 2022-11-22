@@ -36,10 +36,15 @@ jobs:
         # PyJokes is available on conda-forge
         conda-channels: anaconda, conda-forge
 
+    - name: Install pyenv
+      run: git clone https://github.com/pyenv/pyenv.git ~/.pyenv
+
     - name: Install dependencies
       run: |
         python -m pip install -r dev-requirements.txt
         python -m pip install -e ".[server]"
 
     - name: Test
-      run: python -m pytest
+      run: |
+        export ISOLATE_PYENV_EXECUTABLE=~/.pyenv
+        python -m pytest
