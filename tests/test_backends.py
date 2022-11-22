@@ -14,6 +14,7 @@ from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import sha256_digest_of
 from isolate.backends.conda import CondaEnvironment, _get_conda_executable
 from isolate.backends.local import LocalPythonEnvironment
+from isolate.backends.pyenv import PyenvEnvironment, _get_pyenv_executable
 from isolate.backends.remote import IsolateServer
 from isolate.backends.settings import IsolateSettings
 from isolate.backends.virtualenv import VirtualPythonEnvironment
@@ -234,20 +235,6 @@ class TestVirtualenv(GenericEnvironmentTests):
             {"requirements": ["pyjokes>=0.4.1"], "constraints_file": contraints_file},
         )
         connection_key = environment.create()
-
-        # The only versions that satisfy the given constraints are 0.4.1 and 0.5.0
-        # and pip is going to pick the latest one.
-        assert self.get_example_version(environment, connection_key) == "0.5.0"
-
-    def test_unresolvable_constraints(self, tmp_path):
-        contraints_file = self.make_constraints_file(tmp_path, ["pyjokes>=0.6.0"])
-        environment = self.get_environment(
-            tmp_path,
-            {"requirements": ["pyjokes<0.6.0"], "constraints_file": contraints_file},
-        )
-
-        # When we can't find a version that satisfies all the constraints, we
-        # are going to abort early to let you know.
         with pytest.raises(EnvironmentCreationError):
             environment.create()
 
@@ -295,7 +282,7 @@ class TestVirtualenv(GenericEnvironmentTests):
 
 
 # Since conda is an external dependency, we'll skip tests using it
-# if it is not installed. v1 vbn
+# if it is not installed.
 try:
     _get_conda_executable()
 except FileNotFoundError:
@@ -589,3 +576,40 @@ def test_isolate_server_multiple_envs(isolate_server):
 def test_wrong_options(kind, config):
     with pytest.raises(TypeError):
         isolate.prepare_environment(kind, **config)
+
+
+# Since pyenv is an external dependency, we'll skip tests using it
+# if it is not installed.
+try:
+    _get_pyenv_executable()
+except FileNotFoundError:
+    IS_PYENV_AVAILABLE = False
+else:
+    IS_PYENV_AVAILABLE = True
+
+
+@pytest.mark.skipif(not IS_PYENV_AVAILABLE, reason="Pyenv is not available")
+@pytest.mark.parametrize("python_version", ["3.7", "3.10", "3.9.15"])
+def test_pyenv_environment(python_version, tmp_path):
+    different_python = PyenvEnvironment(python_version)
+    test_settings = IsolateSettings(Path(tmp_path))
+    different_python.apply_settings(test_settings)
+
+    assert not different_python.exists()
+
+    connection_key = different_python.create()
+    with different_python.open_connection(connection_key) as connection:
+        assert connection.run(partial(eval, "__import__('sys').version")).startswith(
+            python_version
+        )
+
+    assert different_python.exists()
+
+    # Do a cached run.
+    with different_python.open_connection(connection_key) as connection:
+        assert connection.run(partial(eval, "__import__('sys').version")).startswith(
+            python_version
+        )
+
+    different_python.destroy(connection_key)
+    assert not different_python.exists()

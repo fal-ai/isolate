@@ -22,6 +22,7 @@ server = []
 "conda" = "isolate.backends.conda:CondaEnvironment"
 "local" = "isolate.backends.local:LocalPythonEnvironment"
 "isolate-server" = "isolate.backends.remote:IsolateServer"
+"pyenv" = "isolate.backends.pyenv:PyenvEnvironment"
 
 [build-system]
 requires = ["poetry-core>=1.1.0"]
