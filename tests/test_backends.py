@@ -278,22 +278,6 @@ class TestVirtualenv(GenericEnvironmentTests):
         )
         assert environment_1.key != environment_2.key != environment_3.key
 
-    def test_custom_python_version(self, tmp_path):
-        for python_type, expected_python_version in [
-            ("old-python", "3.7"),
-            ("new-python", "3.10"),
-        ]:
-            environment = self.get_project_environment(tmp_path, python_type)
-            try:
-                connection = environment.create()
-            except EnvironmentCreationError:
-                pytest.skip(
-                    "This python version not available on the system (through virtualenv)"
-                )
-
-            python_version = self.get_python_version(environment, connection)
-            assert python_version.startswith(expected_python_version)
-
     def test_invalid_python_version_raises(self, tmp_path):
         # Hopefully there will never be a Python 9.9.9
         environment = self.get_environment(tmp_path, {"python_version": "9.9.9"})
