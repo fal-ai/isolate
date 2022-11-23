@@ -666,4 +666,7 @@ def test_virtual_env_custom_python_version_with_pyenv(tmp_path, monkeypatch):
         assert connection.run(partial(eval, "__import__('sys').version")).startswith(
             "3.9"
         )
-        assert connection.run(partial(eval, "__import__('pyjokes').version")) == "0.6.0"
+        assert (
+            connection.run(partial(eval, "__import__('pyjokes').__version__"))
+            == "0.6.0"
+        )
