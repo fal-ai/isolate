@@ -278,7 +278,33 @@ class TestVirtualenv(GenericEnvironmentTests):
         )
         assert environment_1.key != environment_2.key != environment_3.key
 
-    def test_invalid_python_version_raises(self, tmp_path):
+    def test_custom_python_version(self, tmp_path, monkeypatch):
+        # Disable pyenv to prevent auto-installation
+        monkeypatch.setattr(
+            "isolate.backends.pyenv._get_pyenv_executable", lambda: 1 / 0
+        )
+
+        for python_type, expected_python_version in [
+            ("old-python", "3.7"),
+            ("new-python", "3.10"),
+        ]:
+            environment = self.get_project_environment(tmp_path, python_type)
+            try:
+                connection = environment.create()
+            except EnvironmentCreationError:
+                pytest.skip(
+                    "This python version not available on the system (through virtualenv)"
+                )
+
+            python_version = self.get_python_version(environment, connection)
+            assert python_version.startswith(expected_python_version)
+
+    def test_invalid_python_version_raises(self, tmp_path, monkeypatch):
+        # Disable pyenv to prevent auto-installation
+        monkeypatch.setattr(
+            "isolate.backends.pyenv._get_pyenv_executable", lambda: 1 / 0
+        )
+
         # Hopefully there will never be a Python 9.9.9
         environment = self.get_environment(tmp_path, {"python_version": "9.9.9"})
         with pytest.raises(
@@ -620,3 +646,24 @@ def test_pyenv_environment(python_version, tmp_path):
 
     different_python.destroy(connection_key)
     assert not different_python.exists()
+
+
+@pytest.mark.skipif(not IS_PYENV_AVAILABLE, reason="Pyenv is not available")
+def test_virtual_env_custom_python_version_with_pyenv(tmp_path, monkeypatch):
+    pyjokes_env = VirtualPythonEnvironment(
+        requirements=["pyjokes==0.6.0"],
+        python_version="3.9",
+    )
+
+    test_settings = IsolateSettings(Path(tmp_path))
+    pyjokes_env.apply_settings(test_settings)
+
+    # Force it to choose pyenv as the python version manager.
+    pyjokes_env._decide_python = pyjokes_env._install_python_through_pyenv
+
+    connection_key = pyjokes_env.create()
+    with pyjokes_env.open_connection(connection_key) as connection:
+        assert connection.run(partial(eval, "__import__('sys').version")).startswith(
+            "3.9"
+        )
+        assert connection.run(partial(eval, "__import__('pyjokes').version")) == "0.6.0"
