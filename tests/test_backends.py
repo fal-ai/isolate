@@ -14,6 +14,7 @@ from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import sha256_digest_of
 from isolate.backends.conda import CondaEnvironment, _get_conda_executable
 from isolate.backends.local import LocalPythonEnvironment
+from isolate.backends.pyenv import PyenvEnvironment, _get_pyenv_executable
 from isolate.backends.remote import IsolateServer
 from isolate.backends.settings import IsolateSettings
 from isolate.backends.virtualenv import VirtualPythonEnvironment
@@ -295,7 +296,7 @@ class TestVirtualenv(GenericEnvironmentTests):
 
 
 # Since conda is an external dependency, we'll skip tests using it
-# if it is not installed. v1 vbn
+# if it is not installed.
 try:
     _get_conda_executable()
 except FileNotFoundError:
@@ -589,3 +590,40 @@ def test_isolate_server_multiple_envs(isolate_server):
 def test_wrong_options(kind, config):
     with pytest.raises(TypeError):
         isolate.prepare_environment(kind, **config)
+
+
+# Since pyenv is an external dependency, we'll skip tests using it
+# if it is not installed.
+try:
+    _get_pyenv_executable()
+except FileNotFoundError:
+    IS_PYENV_AVAILABLE = False
+else:
+    IS_PYENV_AVAILABLE = True
+
+
+@pytest.mark.skipif(not IS_PYENV_AVAILABLE, reason="Pyenv is not available")
+@pytest.mark.parametrize("python_version", ["3.7", "3.10", "3.9.15"])
+def test_pyenv_environment(python_version, tmp_path):
+    different_python = PyenvEnvironment(python_version)
+    test_settings = IsolateSettings(Path(tmp_path))
+    different_python.apply_settings(test_settings)
+
+    assert not different_python.exists()
+
+    connection_key = different_python.create()
+    assert different_python.exists()
+
+    with different_python.open_connection(connection_key) as connection:
+        assert connection.run(partial(eval, "__import__('sys').version")).startswith(
+            python_version
+        )
+
+    # Do a cached run.
+    with different_python.open_connection(connection_key) as connection:
+        assert connection.run(partial(eval, "__import__('sys').version")).startswith(
+            python_version
+        )
+
+    different_python.destroy(connection_key)
+    assert not different_python.exists()

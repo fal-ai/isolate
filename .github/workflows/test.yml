@@ -36,10 +36,18 @@ jobs:
         # PyJokes is available on conda-forge
         conda-channels: anaconda, conda-forge
 
+    - uses: actions/checkout@v3
+      with:
+        repository: pyenv/pyenv
+        ref: v2.3.6
+        path: pyenv
+
     - name: Install dependencies
       run: |
         python -m pip install -r dev-requirements.txt
         python -m pip install -e ".[server]"
 
     - name: Test
-      run: python -m pytest
+      run: |
+        export ISOLATE_PYENV_EXECUTABLE=pyenv/bin/pyenv
+        python -m pytest
