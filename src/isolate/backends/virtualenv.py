@@ -77,17 +77,38 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             except subprocess.SubprocessError as exc:
                 raise EnvironmentCreationError("Failure during 'pip install'.") from exc
 
+    def _install_python_through_pyenv(self) -> str:
+        from isolate.backends.pyenv import PyenvEnvironment
+
+        self.log(
+            f"Requested Python version of {self.python_version} is not available "
+            "in the system, attempting to install it through pyenv."
+        )
+
+        pyenv = PyenvEnvironment.from_config(
+            {"python_version": self.python_version},
+            settings=self.settings,
+        )
+        return str(get_executable_path(pyenv.create(), "python"))
+
     def _decide_python(self) -> str:
         from virtualenv.discovery import builtin
+
+        from isolate.backends.pyenv import _get_pyenv_executable
 
         interpreter = builtin.get_interpreter(self.python_version, ())
         if interpreter is not None:
             return interpreter.executable
 
-        raise EnvironmentCreationError(
-            f"Python {self.python_version} is not available in your "
-            "system. Please install it first."
-        )
+        try:
+            _get_pyenv_executable()
+        except Exception:
+            raise EnvironmentCreationError(
+                f"Python {self.python_version} is not available in your "
+                "system. Please install it first."
+            ) from None
+        else:
+            return self._install_python_through_pyenv()
 
     def create(self) -> Path:
         from virtualenv import cli_run
