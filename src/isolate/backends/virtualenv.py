@@ -77,6 +77,18 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             except subprocess.SubprocessError as exc:
                 raise EnvironmentCreationError("Failure during 'pip install'.") from exc
 
+    def _decide_python(self) -> str:
+        from virtualenv.discovery import builtin
+
+        interpreter = builtin.get_interpreter(self.python_version, ())
+        if interpreter is not None:
+            return interpreter.executable
+
+        raise EnvironmentCreationError(
+            f"Python {self.python_version} is not available in your "
+            "system. Please install it first."
+        )
+
     def create(self) -> Path:
         from virtualenv import cli_run
 
@@ -89,7 +101,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
 
             args = [str(venv_path)]
             if self.python_version:
-                args.append(f"--python={self.python_version}")
+                args.append(f"--python={self._decide_python()}")
 
             try:
                 cli_run(args)
