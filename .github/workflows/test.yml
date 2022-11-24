@@ -40,7 +40,7 @@ jobs:
       with:
         repository: pyenv/pyenv
         ref: v2.3.6
-        path: ~/.pyenv
+        path: pyenv
 
     - name: Install dependencies
       run: |
@@ -49,5 +49,5 @@ jobs:
 
     - name: Test
       run: |
-        export ISOLATE_PYENV_EXECUTABLE=~/.pyenv/bin/pyenv
+        export ISOLATE_PYENV_EXECUTABLE=pyenvv/bin/pyenv
         python -m pytest

@@ -124,7 +124,7 @@ def _get_pyenv_executable() -> Path:
     if _PYENV_EXECUTABLE_PATH:
         if not os.path.exists(_PYENV_EXECUTABLE_PATH):
             raise EnvironmentCreationError(
-                f"Given ISOLATE_PYENV_EXECUTABLE path does not exist in the system: {_PYENV_EXECUTABLE_PATH!r}"
+                f"Path to pyenv executable not found! ISOLATE_PYENV_EXECUTABLE variable: {_PYENV_EXECUTABLE_PATH!r}"
             )
         return Path(_PYENV_EXECUTABLE_PATH)
 
