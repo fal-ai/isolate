@@ -191,10 +191,7 @@ class RemoteBox(Box):
 
         # TODO: We should think of a way to set multiple environment definitions
 
-        target_list = [{
-            "kind": kind,
-            "configuration": definition
-        }]
+        target_list = [{"kind": kind, "configuration": definition}]
 
         # Create a remote environment.
         return BoxedEnvironment(

@@ -52,17 +52,20 @@ class IsolateServer(BaseEnvironment[List[EnvironmentDefinition]]):
         for env in self.target_environments:
             if not env.get("kind") or not env.get("configuration"):
                 raise RuntimeError(f"`kind` or `configuration` key missing in: {env}")
-            envs.append(EnvironmentDefinition(
-                kind=env["kind"],
-                configuration=interface.to_struct(env["configuration"])))
+            envs.append(
+                EnvironmentDefinition(
+                    kind=env["kind"],
+                    configuration=interface.to_struct(env["configuration"]),
+                )
+            )
         return envs
 
     def exists(self) -> bool:
         return False
 
     def open_connection(
-            self,
-            connection_key: List[EnvironmentDefinition],
+        self,
+        connection_key: List[EnvironmentDefinition],
     ) -> IsolateServerConnection:
         return IsolateServerConnection(self, self.host, connection_key)
 
@@ -100,7 +103,7 @@ class IsolateServerConnection(EnvironmentConnection):
                 method=self.environment.settings.serialization_method,
                 was_it_raised=False,
             ),
-            environments=self.definitions
+            environments=self.definitions,
         )
 
         return_value = []

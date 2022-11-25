@@ -242,7 +242,9 @@ def test_server_multiple_envs(
         requirements.append(f"{REPO_DIR}[grpc]")
 
     env_definition = define_environment("virtualenv", requirements=requirements)
-    xtra_env_definition = define_environment("virtualenv", requirements=xtra_requirements)
+    xtra_env_definition = define_environment(
+        "virtualenv", requirements=xtra_requirements
+    )
     request = definitions.BoundFunction(
         function=to_serialized_object(
             partial(
