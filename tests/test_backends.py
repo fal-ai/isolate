@@ -260,6 +260,30 @@ class TestVirtualenv(GenericEnvironmentTests):
         connection_key = environment.create()
         assert self.get_example_version(environment, connection_key) == "0.5.0"
 
+    def test_extra_index_urls(self, tmp_path):
+        # Only available in test.pypi.org
+        alpha_version = "2022.9.26a0"
+        environment = self.get_environment(
+            tmp_path,
+            {"requirements": [f"black=={alpha_version}"]},
+        )
+
+        # This should fail since the default index server doesn't have
+        # the alpha version of  black
+        with pytest.raises(EnvironmentCreationError):
+            environment.create()
+
+        # This should work since we are using the test.pypi.org server
+        environment = self.get_environment(
+            tmp_path,
+            {
+                "requirements": [f"black=={alpha_version}"],
+                "extra_index_urls": ["https://test.pypi.org/simple/"],
+            },
+        )
+        with environment.connect() as connection:
+            assert alpha_version in self._run_cmd(connection, "black", "--version")
+
     def test_caching_with_constraints(self, tmp_path):
         contraints_file_1 = self.make_constraints_file(tmp_path, ["pyjokes>=0.6.0"])
         contraints_file_2 = self.make_constraints_file(tmp_path, ["pyjokes<=0.6.0"])
