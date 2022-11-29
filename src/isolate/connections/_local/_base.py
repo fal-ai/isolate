@@ -54,17 +54,32 @@ def python_path_for(*search_paths: Path) -> str:
     """Return the PYTHONPATH for the library paths residing
     in the given 'search_paths'. The order of the paths is
     preserved."""
-
     assert len(search_paths) >= 1
-    return os.pathsep.join(
+    lib_paths = []
+    for search_path in search_paths:
         # sysconfig defines the schema of the directories under
         # any comforming Python installation (like venv, conda, etc.).
         #
         # Be aware that Debian's system installation does not
         # comform sysconfig.
-        sysconfig.get_path("purelib", vars={"base": search_path})
-        for search_path in search_paths
-    )
+        raw_glob_expr = sysconfig.get_path(
+            "purelib",
+            vars={
+                "base": search_path,
+                "python_version": "*",
+                "py_version_short": "*",
+                "py_version_nodot": "*",
+            },
+        )
+        relative_glob_expr = Path(raw_glob_expr).relative_to(search_path).as_posix()
+
+        # Try to find expand the Python version in the path. This is
+        # necessary for supporting multiple Python versions in the same
+        # environment.
+        for file in search_path.glob(relative_glob_expr):
+            lib_paths.append(str(file))
+
+    return os.pathsep.join(lib_paths)
 
 
 @dataclass
