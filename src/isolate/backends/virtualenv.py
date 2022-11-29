@@ -25,6 +25,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
     requirements: List[str] = field(default_factory=list)
     constraints_file: Optional[os.PathLike] = None
     python_version: Optional[str] = None
+    extra_index_urls: List[str] = field(default_factory=list)
 
     @classmethod
     def from_config(
@@ -45,7 +46,12 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             constraints = []
 
         active_python_version = self.python_version or active_python()
-        return sha256_digest_of(active_python_version, *self.requirements, *constraints)
+        return sha256_digest_of(
+            active_python_version,
+            *self.requirements,
+            *constraints,
+            *self.extra_index_urls,
+        )
 
     def install_requirements(self, path: Path) -> None:
         """Install the requirements of this environment using 'pip' to the
@@ -66,6 +72,9 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         ]
         if self.constraints_file:
             pip_cmd.extend(["-c", self.constraints_file])
+
+        for extra_index_url in self.extra_index_urls:
+            pip_cmd.extend(["--extra-index-url", extra_index_url])
 
         with logged_io(self.log) as (stdout, stderr):
             try:
