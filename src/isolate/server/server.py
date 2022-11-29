@@ -12,7 +12,9 @@ import grpc
 from grpc import ServicerContext, StatusCode
 
 from isolate.backends import EnvironmentCreationError, IsolateSettings
+from isolate.backends.common import active_python
 from isolate.backends.local import LocalPythonEnvironment
+from isolate.backends.virtualenv import VirtualPythonEnvironment
 from isolate.connections.grpc import AgentError, LocalPythonGRPC
 from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions
@@ -23,6 +25,14 @@ INHERIT_FROM_LOCAL = os.getenv("ISOLATE_INHERIT_FROM_LOCAL") == "1"
 
 # Number of threads that the gRPC server will use.
 MAX_THREADS = int(os.getenv("MAX_THREADS", 5))
+_AGENT_REQUIREMENTS_TXT = os.getenv("AGENT_REQUIREMENTS_TXT")
+
+if _AGENT_REQUIREMENTS_TXT is not None:
+    with open(_AGENT_REQUIREMENTS_TXT) as stream:
+        AGENT_REQUIREMENTS = stream.read().splitlines()
+else:
+    AGENT_REQUIREMENTS = []
+
 
 # Number of seconds to observe the queue before checking the termination
 # event.
@@ -68,6 +78,18 @@ class IsolateServicer(definitions.IsolateServicer):
 
         for environment in environments:
             environment.apply_settings(run_settings)
+
+        primary_environment = environments[0]
+
+        if AGENT_REQUIREMENTS:
+            python_version = getattr(
+                primary_environment, "python_version", active_python()
+            )
+            agent_environ = VirtualPythonEnvironment(
+                requirements=AGENT_REQUIREMENTS,
+                python_version=python_version,
+            )
+            environments.insert(1, agent_environ)
 
         extra_inheritance_paths = []
         if INHERIT_FROM_LOCAL:
