@@ -259,3 +259,33 @@ def test_server_multiple_envs(
     raw_result = run_request(stub, request)
 
     assert from_grpc(raw_result) == "0.6.0 2.8.2"
+
+
+@pytest.mark.parametrize("python_version", ["3.8"])
+def test_agent_requirements_custom_version(
+    stub: definitions.IsolateStub,
+    monkeypatch: Any,
+    python_version: str,
+) -> None:
+    requirements = ["pyjokes==0.6.0"]
+    agent_requirements = ["dill==0.3.5.1", f"{REPO_DIR}[grpc]"]
+    monkeypatch.setattr("isolate.server.server.AGENT_REQUIREMENTS", agent_requirements)
+
+    env_definition = define_environment(
+        "virtualenv",
+        requirements=requirements,
+        python_version=python_version,
+    )
+    request = definitions.BoundFunction(
+        function=to_serialized_object(
+            partial(
+                eval,
+                "__import__('sysconfig').get_python_version(), __import__('pyjokes').__version__",
+            ),
+            method="dill",
+        ),
+        environments=[env_definition],
+    )
+
+    raw_result = run_request(stub, request)
+    assert from_grpc(raw_result) == ("3.8", "0.6.0")
