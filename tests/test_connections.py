@@ -1,4 +1,5 @@
 import operator
+import traceback
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
@@ -143,6 +144,43 @@ class GenericPythonConnectionTests:
             assert conn.run(is_agent)
             assert not is_agent()
         assert not is_agent()
+
+    def test_tracebacks(self):
+        local_env = LocalPythonEnvironment()
+        local_env.apply_settings(
+            local_env.settings.replace(serialization_method="dill")
+        )
+
+        def long_function_chain():
+            def foo():
+                a = 1
+                b = 0
+                c = a / b
+                return c
+
+            def bar():
+                a = str() + str()
+                return 0 + foo() + 1
+
+            def baz():
+                return bar() + 1
+
+            return baz()
+
+        with self.open_connection(local_env, local_env.create()) as conn:
+            with pytest.raises(ZeroDivisionError) as exc:
+                conn.run(long_function_chain)
+
+            exception = "".join(
+                traceback.format_exception(
+                    type(exc.value), exc.value, exc.value.__traceback__
+                )
+            )
+            assert "c = a / b" in exception
+            assert "return 0 + foo() + 1" in exception
+            assert "return bar() + 1" in exception
+            assert "return baz()" in exception
+            assert "conn.run(long_function_chain)" in exception
 
 
 class TestPythonIPC(GenericPythonConnectionTests):

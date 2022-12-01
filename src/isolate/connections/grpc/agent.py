@@ -52,11 +52,14 @@ class AgentServicer(definitions.AgentServicer):
         yield from self.log("Starting the execution of the input function.")
 
         was_it_raised = False
+        stringized_tb = None
         try:
             result = function()
         except BaseException as exc:
             result = exc
             was_it_raised = True
+            num_frames = len(traceback.extract_stack()[:-5])
+            stringized_tb = "".join(traceback.format_exc(limit=-num_frames))
 
         yield from self.log("Completed the execution of the input function.")
 
@@ -79,6 +82,7 @@ class AgentServicer(definitions.AgentServicer):
             method=request.method,
             definition=definition,
             was_it_raised=was_it_raised,
+            stringized_traceback=stringized_tb,
         )
         yield definitions.PartialRunResult(
             result=serialized_obj,

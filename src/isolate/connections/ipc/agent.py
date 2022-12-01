@@ -20,6 +20,7 @@ import importlib
 import os
 import sys
 import time
+import traceback
 from argparse import ArgumentParser
 from contextlib import closing
 from multiprocessing.connection import Client
@@ -109,21 +110,22 @@ def run_client(
 
         result = None
         did_it_raise = False
+        stringized_tb = None
         try:
             result = callable()
         except BaseException as exc:
             result = exc
             did_it_raise = True
+            num_frames = len(traceback.extract_stack()[:-4])
+            stringized_tb = "".join(traceback.format_exc(limit=-num_frames))
         finally:
             try:
-                connection.send((result, did_it_raise))
+                connection.send((result, did_it_raise, stringized_tb))
             except BaseException:
                 if did_it_raise:
                     # If we can't even send it through the connection
                     # still try to dump it to the stderr as the last
                     # resort.
-                    import traceback
-
                     assert isinstance(result, BaseException)
                     traceback.print_exception(
                         type(result),
