@@ -2,7 +2,7 @@
 and the Isolate Server to share."""
 
 import functools
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from isolate.connections.common import load_serialized_object, serialize_object
 from isolate.connections.grpc import definitions
@@ -29,6 +29,7 @@ def _(message: definitions.SerializedObject) -> Any:
         message.method,
         message.definition,
         was_it_raised=message.was_it_raised,
+        stringized_traceback=message.stringized_traceback,
     )
 
 
@@ -53,11 +54,15 @@ def _(obj: Log) -> definitions.Log:
 
 
 def to_serialized_object(
-    obj: Any, method: str, was_it_raised: bool = False
+    obj: Any,
+    method: str,
+    was_it_raised: bool = False,
+    stringized_traceback: Optional[str] = None,
 ) -> definitions.SerializedObject:
     """Convert a Python object into a gRPC message."""
     return definitions.SerializedObject(
         method=method,
         definition=serialize_object(method, obj),
         was_it_raised=was_it_raised,
+        stringized_traceback=stringized_traceback,
     )

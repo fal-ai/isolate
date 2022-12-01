@@ -12,6 +12,7 @@ importlib-metadata = ">=4.4"
 rich = ">=12.0"
 grpcio = ">=1.49"
 protobuf = "*"
+tblib = "^1.7.0"
 
 [tool.poetry.extras]
 grpc = []
