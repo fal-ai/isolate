@@ -289,3 +289,36 @@ def test_agent_requirements_custom_version(
 
     raw_result = run_request(stub, request)
     assert from_grpc(raw_result) == ("3.8", "0.6.0")
+
+
+def test_agent_show_logs_from_agent_requirements(
+    stub: definitions.IsolateStub,
+    monkeypatch: Any,
+) -> None:
+    requirements = ["pyjokes==0.6.0"]
+    agent_requirements = ["$$$$", f"{REPO_DIR}[grpc]"]
+    monkeypatch.setattr("isolate.server.server.AGENT_REQUIREMENTS", agent_requirements)
+
+    env_definition = define_environment(
+        "virtualenv",
+        requirements=requirements,
+    )
+    request = definitions.BoundFunction(
+        function=to_serialized_object(
+            partial(
+                eval,
+                "__import__('sysconfig').get_python_version(), __import__('pyjokes').__version__",
+            ),
+            method="dill",
+        ),
+        environments=[env_definition],
+    )
+
+    build_logs: List[Log] = []
+    with pytest.raises(grpc.RpcError) as exc:
+        run_request(stub, request, build_logs=build_logs)
+
+    assert exc.match("A problem occurred while creating the environment")
+
+    raw_logs = [log.message for log in build_logs]
+    assert "ERROR: Invalid requirement: '$$$$'" in raw_logs
