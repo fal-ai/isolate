@@ -9,7 +9,8 @@ from isolate import prepare_environment
 def fresh_registry(monkeypatch):
     """Temporarily clear the environment registry for this test. Also restores
     back to the initial state once the test is executed."""
-    monkeypatch.setattr("isolate.registry._ENVIRONMENT_REGISTRY", {})
+    monkeypatch.setattr("isolate.registry._ENTRY_POINTS", {})
+    monkeypatch.setattr("isolate.registry._ENVIRONMENTS", {})
 
 
 def test_unknown_environment(fresh_registry):

@@ -11,15 +11,13 @@ if TYPE_CHECKING:
 # time by simply adding an entry point to the `isolate.environment` group.
 _ENTRY_POINT = "isolate.backends"
 
-
-_ENVIRONMENT_REGISTRY: Dict[
-    str, Union[importlib_metadata.EntryPoint, Type["BaseEnvironment"]]
-] = {}
+_ENTRY_POINTS: Dict[str, importlib_metadata.EntryPoint] = {}
+_ENVIRONMENTS: Dict[str, Type["BaseEnvironment"]] = {}
 
 
 def _reload_registry() -> None:
     entry_points = importlib_metadata.entry_points()
-    _ENVIRONMENT_REGISTRY.update(
+    _ENTRY_POINTS.update(
         {
             # We are not immediately loading the backend class here
             # since it might cause importing modules that we won't be
@@ -40,12 +38,12 @@ def prepare_environment(
     """Get the environment for the given `kind` with the given `config`."""
     from isolate.backends.settings import DEFAULT_SETTINGS
 
-    registered_env_cls = _ENVIRONMENT_REGISTRY.get(kind)
-    if not registered_env_cls:
-        raise ValueError(f"Unknown environment: '{kind}'")
+    if kind not in _ENVIRONMENTS:
+        entry_point = _ENTRY_POINTS.get(kind)
+        if not entry_point:
+            raise ValueError(f"Unknown environment: '{kind}'")
 
-    if isinstance(registered_env_cls, importlib_metadata.EntryPoint):
-        _ENVIRONMENT_REGISTRY[kind] = registered_env_cls = registered_env_cls.load()
+        _ENVIRONMENTS[kind] = entry_point.load()
 
     settings = kwargs.pop("context", DEFAULT_SETTINGS)
-    return registered_env_cls.from_config(config=kwargs, settings=settings)
+    return _ENVIRONMENTS[kind].from_config(config=kwargs, settings=settings)
