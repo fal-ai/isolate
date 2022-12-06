@@ -73,6 +73,7 @@ class SerializedObject(google.protobuf.message.Message):
     METHOD_FIELD_NUMBER: builtins.int
     DEFINITION_FIELD_NUMBER: builtins.int
     WAS_IT_RAISED_FIELD_NUMBER: builtins.int
+    STRINGIZED_TRACEBACK_FIELD_NUMBER: builtins.int
     method: builtins.str
     """The serialization method used to serialize the the raw_object. Must be
     present in the environment that is running the agent itself.
@@ -83,24 +84,46 @@ class SerializedObject(google.protobuf.message.Message):
     """A flag indicating whether the given object was raised (e.g. an exception
     that was captured) or not.
     """
+    stringized_traceback: builtins.str
+    """The stringized version of the traceback, if it was raised."""
     def __init__(
         self,
         *,
         method: builtins.str = ...,
         definition: builtins.bytes = ...,
         was_it_raised: builtins.bool = ...,
+        stringized_traceback: builtins.str | None = ...,
     ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_stringized_traceback",
+            b"_stringized_traceback",
+            "stringized_traceback",
+            b"stringized_traceback",
+        ],
+    ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_stringized_traceback",
+            b"_stringized_traceback",
             "definition",
             b"definition",
             "method",
             b"method",
+            "stringized_traceback",
+            b"stringized_traceback",
             "was_it_raised",
             b"was_it_raised",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_stringized_traceback", b"_stringized_traceback"
+        ],
+    ) -> typing_extensions.Literal["stringized_traceback"] | None: ...
 
 global___SerializedObject = SerializedObject
 
