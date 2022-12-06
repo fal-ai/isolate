@@ -89,6 +89,7 @@ class IsolateServicer(definitions.IsolateServicer):
                 requirements=AGENT_REQUIREMENTS,
                 python_version=python_version,
             )
+            agent_environ.apply_settings(run_settings)
             environments.insert(1, agent_environ)
 
         extra_inheritance_paths = []
