@@ -67,8 +67,8 @@ jobs:
           body: ${{ steps.release.outputs.RELEASE_BODY }}
           tag_name: v${{ env.current_version }}
           files: |
-            dist/fal-${{env.current_version}}-py3-none-any.whl
-            dist/fal-${{env.current_version}}.tar.gz
+            dist/isolate-${{env.current_version}}-py3-none-any.whl
+            dist/isolate-${{env.current_version}}.tar.gz
 
       - name: Publish PyPI
         env:

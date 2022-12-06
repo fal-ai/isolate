@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "isolate"
-version = "0.6.1-alpha.0"
+version = "0.7.1-alpha.0"
 readme = "README.md"
 description = "Managed isolated environments for Python"
 authors = ["Features & Labels <hello@fal.ai>"]
@@ -12,6 +12,7 @@ importlib-metadata = ">=4.4"
 rich = ">=12.0"
 grpcio = ">=1.49"
 protobuf = "*"
+tblib = "^1.7.0"
 
 [tool.poetry.extras]
 grpc = []

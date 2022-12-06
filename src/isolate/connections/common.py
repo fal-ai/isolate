@@ -3,7 +3,9 @@ from __future__ import annotations
 import importlib
 import os
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Iterator, cast
+from typing import TYPE_CHECKING, Any, Iterator, Optional, cast
+
+from tblib import Traceback, TracebackParseError
 
 if TYPE_CHECKING:
     from typing import Protocol
@@ -55,6 +57,7 @@ def load_serialized_object(
     raw_object: bytes,
     *,
     was_it_raised: bool = False,
+    stringized_traceback: Optional[str] = None,
 ) -> Any:
     """Load the given serialized object using the given serialization method. If
     anything fails, then a SerializationError will be raised. If the was_it_raised
@@ -70,7 +73,7 @@ def load_serialized_object(
         result = serialization_backend.loads(raw_object)
 
     if was_it_raised:
-        raise result
+        raise prepare_exc(result, stringized_traceback=stringized_traceback)
     else:
         return result
 
@@ -91,3 +94,20 @@ def serialize_object(serialization_method: str, object: Any) -> bytes:
 def is_agent() -> bool:
     """Returns true if the current process is an isolate agent."""
     return os.environ.get(AGENT_SIGNATURE) == "1"
+
+
+def prepare_exc(
+    exc: BaseException,
+    *,
+    stringized_traceback: Optional[str] = None,
+) -> BaseException:
+    if stringized_traceback:
+        try:
+            traceback = Traceback.from_string(stringized_traceback).as_traceback()
+        except TracebackParseError:
+            traceback = None
+    else:
+        traceback = None
+
+    exc.__traceback__ = traceback
+    return exc
