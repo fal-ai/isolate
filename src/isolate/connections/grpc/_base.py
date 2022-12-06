@@ -88,6 +88,7 @@ class GRPCExecutionBase(EnvironmentConnection):
             method=method,
             definition=serialize_object(method, executable),
             was_it_raised=False,
+            stringized_traceback=None,
         )
 
         for partial_result in self._run_through_grpc(function):

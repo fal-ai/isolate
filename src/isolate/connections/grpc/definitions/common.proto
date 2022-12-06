@@ -9,6 +9,8 @@ message SerializedObject {
     // A flag indicating whether the given object was raised (e.g. an exception
     // that was captured) or not.
     bool was_it_raised = 3;
+    // The stringized version of the traceback, if it was raised.
+    optional string stringized_traceback = 4;
 }
 
 message PartialRunResult {

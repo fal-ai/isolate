@@ -24,6 +24,7 @@ from isolate.backends import (
     EnvironmentConnection,
 )
 from isolate.connections._local import PythonExecutionBase, agent_startup
+from isolate.connections.common import prepare_exc
 from isolate.connections.ipc import agent
 from isolate.logs import LogLevel, LogSource
 
@@ -191,11 +192,12 @@ class IsolatedProcessConnection(EnvironmentConnection):
 
         # TODO(fix): handle EOFError that might happen here (e.g. problematic
         # serialization might cause it).
-        result, did_it_raise = connection.recv()
+        result, did_it_raise, stringized_traceback = connection.recv()
 
         if did_it_raise:
-            raise result
+            raise prepare_exc(result, stringized_traceback=stringized_traceback)
         else:
+            assert stringized_traceback is None
             return result
 
 
