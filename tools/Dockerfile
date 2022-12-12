@@ -9,6 +9,22 @@
 FROM python:3.9
 
 RUN apt-get update && apt-get install -y git
+
+#### CONDA ####
+# Will copy from existing Docker image
+COPY --from=continuumio/miniconda3:4.12.0 /opt/conda /opt/conda
+
+ENV PATH=/opt/conda/bin:$PATH
+ENV ISOLATE_CONDA_HOME=/opt/conda/bin
+
+# Usage examples
+RUN set -ex && \
+    conda config --set always_yes yes --set changeps1 no && \
+    conda info -a && \
+    conda config --add channels conda-forge && \
+    conda install --quiet --freeze-installed -c main conda-pack
+
+#### END CONDA ####
 RUN pip install --upgrade pip virtualenv wheel poetry-core
 
 # Since system-level debian does not comply with

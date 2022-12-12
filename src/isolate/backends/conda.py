@@ -4,6 +4,7 @@ import functools
 import os
 import shutil
 import subprocess
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional
@@ -33,6 +34,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     packages: List[str] = field(default_factory=list)
     python_version: Optional[str] = None
+    env_yml_str: Optional[str] = None
 
     @classmethod
     def from_config(
@@ -46,6 +48,8 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     @property
     def key(self) -> str:
+        if self.env_yml_str:
+            return sha256_digest_of(self.env_yml_str)
         return sha256_digest_of(*self._compute_dependencies())
 
     def _compute_dependencies(self) -> List[str]:
@@ -87,28 +91,51 @@ class CondaEnvironment(BaseEnvironment[Path]):
             if env_path.exists():
                 return env_path
 
-            # Since our agent needs Python to be installed (at very least)
-            # we need to make sure that the base environment is created with
-            # the same Python version as the one that is used to run the
-            # isolate agent.
-            dependencies = self._compute_dependencies()
+            if self.env_yml_str:
+                # The new conda environment will come without isolate, unless isolate is specifies
+                # as a dependency in the provided yaml.
+                if not _is_isolate_in_yml(self.env_yml_str):
+                    raise EnvironmentCreationError('Please add `isolate` as a pip dependency')
+                filename = f"{str(uuid.uuid4())}.yaml"
+                with open(filename, "w") as f:
+                    f.write(self.env_yml_str)
+                try:
+                    self._run_conda(
+                        "env",
+                        "create",
+                        "-f",
+                        filename,
+                        "--prefix",
+                        env_path
+                    )
+                except subprocess.SubprocessError as exc:
+                    raise EnvironmentCreationError("Failure during 'conda create'") from exc
 
-            self.log(f"Creating the environment at '{env_path}'")
-            self.log(f"Installing packages: {', '.join(dependencies)}")
+                os.remove(filename)
 
-            try:
-                self._run_conda(
-                    "create",
-                    "--yes",
-                    "--prefix",
-                    env_path,
-                    *dependencies,
-                )
-            except subprocess.SubprocessError as exc:
-                raise EnvironmentCreationError("Failure during 'conda create'") from exc
+            else:
+                # Since our agent needs Python to be installed (at very least)
+                # we need to make sure that the base environment is created with
+                # the same Python version as the one that is used to run the
+                # isolate agent.
+                dependencies = self._compute_dependencies()
 
-        self.log(f"New environment cached at '{env_path}'")
-        return env_path
+                self.log(f"Creating the environment at '{env_path}'")
+                self.log(f"Installing packages: {', '.join(dependencies)}")
+
+                try:
+                    self._run_conda(
+                        "create",
+                        "--yes",
+                        "--prefix",
+                        env_path,
+                        *dependencies,
+                    )
+                except subprocess.SubprocessError as exc:
+                    raise EnvironmentCreationError("Failure during 'conda create'") from exc
+
+            self.log(f"New environment cached at '{env_path}'")
+            return env_path
 
     def destroy(self, connection_key: Path) -> None:
         with self.settings.cache_lock_for(connection_key):
@@ -155,3 +182,8 @@ def _get_conda_executable() -> Path:
             "Could not find conda executable. If conda executable is not available by default, please point isolate "
             " to the path where conda binary is available 'ISOLATE_CONDA_HOME'."
         )
+
+
+def _is_isolate_in_yml(env_yml: str) -> bool:
+    # TODO: make this check more in-depth
+    return '- isolate==' in env_yml or '- isolate\n' in env_yml
