@@ -36,6 +36,13 @@ class CondaEnvironment(BaseEnvironment[Path]):
     python_version: Optional[str] = None
     env_yml_str: Optional[str] = None
 
+    def __post_init__(self):
+        # When using env_yml_str, the new conda environment will come without isolate,
+        # unless isolate is a dependency.
+        message = "isolate not found in environment YAML file. Please add isolate as a pip dependency."
+        if self.env_yml_str and not _is_isolate_in_yml(self.env_yml_str):
+            raise EnvironmentCreationError(message)
+
     @classmethod
     def from_config(
         cls,
@@ -92,10 +99,6 @@ class CondaEnvironment(BaseEnvironment[Path]):
                 return env_path
 
             if self.env_yml_str:
-                # The new conda environment will come without isolate, unless isolate is specifies
-                # as a dependency in the provided yaml.
-                if not _is_isolate_in_yml(self.env_yml_str):
-                    raise EnvironmentCreationError('Please add `isolate` as a pip dependency')
                 filename = f"{str(uuid.uuid4())}.yaml"
                 with open(filename, "w") as f:
                     f.write(self.env_yml_str)
