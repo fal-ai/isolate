@@ -4,8 +4,8 @@ import functools
 import os
 import shutil
 import subprocess
-import yaml
 import tempfile
+import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional
@@ -35,14 +35,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     packages: List[str] = field(default_factory=list)
     python_version: Optional[str] = None
-    env_yml_str: Optional[str] = None
     env_dict: Optional[Dict[str, Any]] = None
-
-    def __post_init__(self):
-        if self.env_dict and self.env_yml_str:
-            raise EnvironmentCreationError("Either env_dict or env_yml_str can be provided, not both!")
-        if self.env_yml_str:
-            self.env_dict = yaml.safe_load(self.env_yml_str)
 
     @classmethod
     def from_config(
@@ -50,6 +43,11 @@ class CondaEnvironment(BaseEnvironment[Path]):
         config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
+        if config.get('env_dict') and config.get('env_yml_str'):
+            raise EnvironmentCreationError("Either env_dict or env_yml_str can be provided, not both!")
+        if config.get('env_yml_str'):
+            config['env_dict'] = yaml.safe_load(config['env_yml_str'])
+            del config['env_yml_str']
         environment = cls(**config)
         environment.apply_settings(settings)
         return environment
@@ -106,22 +104,21 @@ class CondaEnvironment(BaseEnvironment[Path]):
                 return env_path
 
             if self.env_dict:
-                tf = tempfile.NamedTemporaryFile(suffix='.yml')
-                filename = tf.name
                 self.env_dict['dependencies'] = self._compute_dependencies()
-                with open(filename, "w") as f:
-                    yaml.dump(self.env_dict, f)
-                try:
-                    self._run_conda(
-                        "env",
-                        "create",
-                        "-f",
-                        filename,
-                        "--prefix",
-                        env_path
-                    )
-                except subprocess.SubprocessError as exc:
-                    raise EnvironmentCreationError("Failure during 'conda create'") from exc
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.yml') as tf:
+                    yaml.dump(self.env_dict, tf)
+                    tf.flush()
+                    try:
+                        self._run_conda(
+                            "env",
+                            "create",
+                            "-f",
+                            tf.name,
+                            "--prefix",
+                            env_path
+                        )
+                    except subprocess.SubprocessError as exc:
+                        raise EnvironmentCreationError("Failure during 'conda create'") from exc
 
             else:
                 # Since our agent needs Python to be installed (at very least)
