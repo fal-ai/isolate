@@ -4,6 +4,8 @@ import functools
 import os
 import shutil
 import subprocess
+import tempfile
+import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional
@@ -33,6 +35,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     packages: List[str] = field(default_factory=list)
     python_version: Optional[str] = None
+    env_dict: Optional[Dict[str, Any]] = None
 
     @classmethod
     def from_config(
@@ -40,17 +43,30 @@ class CondaEnvironment(BaseEnvironment[Path]):
         config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
+        if config.get('env_dict') and config.get('env_yml_str'):
+            raise EnvironmentCreationError("Either env_dict or env_yml_str can be provided, not both!")
+        if config.get('env_yml_str'):
+            config['env_dict'] = yaml.safe_load(config['env_yml_str'])
+            del config['env_yml_str']
         environment = cls(**config)
         environment.apply_settings(settings)
         return environment
 
     @property
     def key(self) -> str:
+        if self.env_dict:
+            return sha256_digest_of(str(self._compute_dependencies()))
         return sha256_digest_of(*self._compute_dependencies())
 
-    def _compute_dependencies(self) -> List[str]:
-        user_dependencies = self.packages.copy()
+    def _compute_dependencies(self) -> List[Any]:
+        if self.env_dict:
+            user_dependencies = self.env_dict.get('dependencies', []).copy()
+        else:
+            user_dependencies = self.packages.copy()
         for raw_requirement in user_dependencies:
+            # It could be 'pip': [...]
+            if type(raw_requirement) is dict:
+                continue
             # Get rid of all whitespace characters (python = 3.8 becomes python=3.8)
             raw_requirement = raw_requirement.replace(" ", "")
             if not raw_requirement.startswith("python"):
@@ -87,28 +103,46 @@ class CondaEnvironment(BaseEnvironment[Path]):
             if env_path.exists():
                 return env_path
 
-            # Since our agent needs Python to be installed (at very least)
-            # we need to make sure that the base environment is created with
-            # the same Python version as the one that is used to run the
-            # isolate agent.
-            dependencies = self._compute_dependencies()
+            if self.env_dict:
+                self.env_dict['dependencies'] = self._compute_dependencies()
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.yml') as tf:
+                    yaml.dump(self.env_dict, tf)
+                    tf.flush()
+                    try:
+                        self._run_conda(
+                            "env",
+                            "create",
+                            "-f",
+                            tf.name,
+                            "--prefix",
+                            env_path
+                        )
+                    except subprocess.SubprocessError as exc:
+                        raise EnvironmentCreationError("Failure during 'conda create'") from exc
 
-            self.log(f"Creating the environment at '{env_path}'")
-            self.log(f"Installing packages: {', '.join(dependencies)}")
+            else:
+                # Since our agent needs Python to be installed (at very least)
+                # we need to make sure that the base environment is created with
+                # the same Python version as the one that is used to run the
+                # isolate agent.
+                dependencies = self._compute_dependencies()
 
-            try:
-                self._run_conda(
-                    "create",
-                    "--yes",
-                    "--prefix",
-                    env_path,
-                    *dependencies,
-                )
-            except subprocess.SubprocessError as exc:
-                raise EnvironmentCreationError("Failure during 'conda create'") from exc
+                self.log(f"Creating the environment at '{env_path}'")
+                self.log(f"Installing packages: {', '.join(dependencies)}")
 
-        self.log(f"New environment cached at '{env_path}'")
-        return env_path
+                try:
+                    self._run_conda(
+                        "create",
+                        "--yes",
+                        "--prefix",
+                        env_path,
+                        *dependencies,
+                    )
+                except subprocess.SubprocessError as exc:
+                    raise EnvironmentCreationError("Failure during 'conda create'") from exc
+
+            self.log(f"New environment cached at '{env_path}'")
+            return env_path
 
     def destroy(self, connection_key: Path) -> None:
         with self.settings.cache_lock_for(connection_key):
