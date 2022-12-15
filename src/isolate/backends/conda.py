@@ -4,7 +4,8 @@ import functools
 import os
 import shutil
 import subprocess
-import uuid
+import yaml
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional
@@ -35,13 +36,13 @@ class CondaEnvironment(BaseEnvironment[Path]):
     packages: List[str] = field(default_factory=list)
     python_version: Optional[str] = None
     env_yml_str: Optional[str] = None
+    env_dict: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
-        # When using env_yml_str, the new conda environment will come without isolate,
-        # unless isolate is a dependency.
-        message = "isolate not found in environment YAML file. Please add isolate as a pip dependency."
-        if self.env_yml_str and not _is_isolate_in_yml(self.env_yml_str):
-            raise EnvironmentCreationError(message)
+        if self.env_dict and self.env_yml_str:
+            raise EnvironmentCreationError("Either env_dict or env_yml_str can be provided, not both!")
+        if self.env_yml_str:
+            self.env_dict = yaml.safe_load(self.env_yml_str)
 
     @classmethod
     def from_config(
@@ -55,13 +56,19 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     @property
     def key(self) -> str:
-        if self.env_yml_str:
-            return sha256_digest_of(self.env_yml_str)
+        if self.env_dict:
+            return sha256_digest_of(str(self._compute_dependencies()))
         return sha256_digest_of(*self._compute_dependencies())
 
-    def _compute_dependencies(self) -> List[str]:
-        user_dependencies = self.packages.copy()
+    def _compute_dependencies(self) -> List[Any]:
+        if self.env_dict:
+            user_dependencies = self.env_dict.get('dependencies', []).copy()
+        else:
+            user_dependencies = self.packages.copy()
         for raw_requirement in user_dependencies:
+            # It could be 'pip': [...]
+            if type(raw_requirement) is dict:
+                continue
             # Get rid of all whitespace characters (python = 3.8 becomes python=3.8)
             raw_requirement = raw_requirement.replace(" ", "")
             if not raw_requirement.startswith("python"):
@@ -98,10 +105,12 @@ class CondaEnvironment(BaseEnvironment[Path]):
             if env_path.exists():
                 return env_path
 
-            if self.env_yml_str:
-                filename = f"{str(uuid.uuid4())}.yaml"
+            if self.env_dict:
+                tf = tempfile.NamedTemporaryFile(suffix='.yml')
+                filename = tf.name
+                self.env_dict['dependencies'] = self._compute_dependencies()
                 with open(filename, "w") as f:
-                    f.write(self.env_yml_str)
+                    yaml.dump(self.env_dict, f)
                 try:
                     self._run_conda(
                         "env",
@@ -113,8 +122,6 @@ class CondaEnvironment(BaseEnvironment[Path]):
                     )
                 except subprocess.SubprocessError as exc:
                     raise EnvironmentCreationError("Failure during 'conda create'") from exc
-
-                os.remove(filename)
 
             else:
                 # Since our agent needs Python to be installed (at very least)
@@ -185,8 +192,3 @@ def _get_conda_executable() -> Path:
             "Could not find conda executable. If conda executable is not available by default, please point isolate "
             " to the path where conda binary is available 'ISOLATE_CONDA_HOME'."
         )
-
-
-def _is_isolate_in_yml(env_yml: str) -> bool:
-    # TODO: make this check more in-depth
-    return '- isolate==' in env_yml or '- isolate\n' in env_yml

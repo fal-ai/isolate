@@ -10,6 +10,11 @@ FROM python:3.9
 
 RUN apt-get update && apt-get install -y git
 
+RUN mkdir -p /opt
+RUN git clone https://github.com/pyenv/pyenv --branch v2.3.6 --depth=1 /opt/pyenv
+# TODO: Investigate whether we can leverage the compiled pyenv extension.
+ENV ISOLATE_PYENV_EXECUTABLE=/opt/pyenv/bin/pyenv
+
 #### CONDA ####
 # Will copy from existing Docker image
 COPY --from=continuumio/miniconda3:4.12.0 /opt/conda /opt/conda
@@ -38,9 +43,10 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 COPY tools/requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
-COPY . .
-RUN pip install .
+COPY . /isolate
+RUN pip install /isolate[server]
 
 ENV ISOLATE_INHERIT_FROM_LOCAL=1
+ENV AGENT_REQUIREMENTS_TXT=/isolate/tools/agent_requirements.txt
 
 CMD ["python", "-m", "isolate.server.server"]
