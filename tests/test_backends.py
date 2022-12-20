@@ -379,6 +379,15 @@ class TestConda(GenericEnvironmentTests):
         },
         "new-python": {
             "python_version": "3.10",
+        },
+        "env-dict": {
+            "env_dict": {
+                "name": "test",
+                "channels": "defaults",
+                "dependencies": [
+                    {"pip": ["pyjokes==0.5.0"]}
+                ]
+            }
         }
     }
     creation_entry_point = ("subprocess.check_call", subprocess.SubprocessError)

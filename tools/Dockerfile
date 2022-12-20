@@ -15,6 +15,13 @@ RUN git clone https://github.com/pyenv/pyenv --branch v2.3.6 --depth=1 /opt/pyen
 # TODO: Investigate whether we can leverage the compiled pyenv extension.
 ENV ISOLATE_PYENV_EXECUTABLE=/opt/pyenv/bin/pyenv
 
+#### CONDA ####
+ENV ISOLATE_CONDA_HOME=/opt/conda/bin
+ENV CONDA_DIR /opt/conda
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
+    /bin/bash ~/miniconda.sh -b -p /opt/conda
+#### END CONDA ####
+
 RUN pip install --upgrade pip virtualenv wheel poetry-core
 
 # Since system-level debian does not comply with
