@@ -50,5 +50,5 @@ jobs:
     - name: Test
       run: |
         export ISOLATE_PYENV_EXECUTABLE=pyenv/bin/pyenv
-        export AGENT_REQUIREMENTS_TXT=tools/agent_requirements.txt
+        export AGENT_REQUIREMENTS_TXT=tools/test_agent_requirements.txt
         python -m pytest

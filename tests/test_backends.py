@@ -380,10 +380,14 @@ class TestConda(GenericEnvironmentTests):
         "new-python": {
             "python_version": "3.10",
         },
-        "yml-with-isolate": {
-            "env_yml_str": 'name: test\n' + \
-            'channels:\n  - defaults\n' + \
-            'dependencies:\n  - pip:\n    - isolate==0.7.1\n    - pyjokes==0.5.0\n'
+        "env-dict": {
+            "env_dict": {
+                "name": "test",
+                "channels": "defaults",
+                "dependencies": [
+                    {"pip": ["pyjokes==0.5.0"]}
+                ]
+            }
         }
     }
     creation_entry_point = ("subprocess.check_call", subprocess.SubprocessError)
@@ -435,11 +439,6 @@ class TestConda(GenericEnvironmentTests):
             match="Python version can not be specified by packages",
         ):
             environment.create()
-
-    def test_environment_with_yml(self, tmp_path):
-        environment = self.get_project_environment(tmp_path, "yml-with-isolate")
-        connection_key = environment.create()
-        assert self.get_example_version(environment, connection_key) == "0.5.0"
 
 def test_local_python_environment():
     """Since 'local' environment does not support installation of extra dependencies
