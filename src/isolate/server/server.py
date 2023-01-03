@@ -52,7 +52,7 @@ class IsolateServicer(definitions.IsolateServicer):
         environments = []
         for env in request.environments:
             try:
-                environments.append(from_grpc(env))
+                environments.append((env.force, from_grpc(env)))
             except ValueError:
                 return self.abort_with_msg(
                     f"Unknown environment kind: {env.kind}",
@@ -76,10 +76,10 @@ class IsolateServicer(definitions.IsolateServicer):
             serialization_method=request.function.method,
         )
 
-        for environment in environments:
+        for _, environment in environments:
             environment.apply_settings(run_settings)
 
-        primary_environment = environments[0]
+        _, primary_environment = environments[0]
 
         if AGENT_REQUIREMENTS:
             python_version = getattr(
@@ -90,7 +90,7 @@ class IsolateServicer(definitions.IsolateServicer):
                 python_version=python_version,
             )
             agent_environ.apply_settings(run_settings)
-            environments.insert(1, agent_environ)
+            environments.insert(1, (False, agent_environ))
 
         extra_inheritance_paths = []
         if INHERIT_FROM_LOCAL:
@@ -99,8 +99,10 @@ class IsolateServicer(definitions.IsolateServicer):
 
         with ThreadPoolExecutor(max_workers=1) as local_pool:
             environment_paths = []
-            for environment in environments:
-                future = local_pool.submit(environment.create)
+            for should_force_create, environment in environments:
+                future = local_pool.submit(
+                    environment.create, force=should_force_create
+                )
                 yield from self.watch_queue_until_completed(messages, future.done)
                 try:
                     # Assuming that the iterator above only stops yielding once
@@ -115,7 +117,7 @@ class IsolateServicer(definitions.IsolateServicer):
 
             primary_path, *inheritance_paths = environment_paths
             inheritance_paths.extend(extra_inheritance_paths)
-            primary_environment = environments[0]
+            _, primary_environment = environments[0]
 
             with LocalPythonGRPC(
                 primary_environment,

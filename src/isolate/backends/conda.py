@@ -5,10 +5,11 @@ import os
 import shutil
 import subprocess
 import tempfile
-import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional
+
+import yaml
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import active_python, logged_io, sha256_digest_of
@@ -43,11 +44,13 @@ class CondaEnvironment(BaseEnvironment[Path]):
         config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
-        if config.get('env_dict') and config.get('env_yml_str'):
-            raise EnvironmentCreationError("Either env_dict or env_yml_str can be provided, not both!")
-        if config.get('env_yml_str'):
-            config['env_dict'] = yaml.safe_load(config['env_yml_str'])
-            del config['env_yml_str']
+        if config.get("env_dict") and config.get("env_yml_str"):
+            raise EnvironmentCreationError(
+                "Either env_dict or env_yml_str can be provided, not both!"
+            )
+        if config.get("env_yml_str"):
+            config["env_dict"] = yaml.safe_load(config["env_yml_str"])
+            del config["env_yml_str"]
         environment = cls(**config)
         environment.apply_settings(settings)
         return environment
@@ -60,7 +63,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     def _compute_dependencies(self) -> List[Any]:
         if self.env_dict:
-            user_dependencies = self.env_dict.get('dependencies', []).copy()
+            user_dependencies = self.env_dict.get("dependencies", []).copy()
         else:
             user_dependencies = self.packages.copy()
         for raw_requirement in user_dependencies:
@@ -97,28 +100,25 @@ class CondaEnvironment(BaseEnvironment[Path]):
         user_dependencies.append(f"python={target_python}")
         return user_dependencies
 
-    def create(self) -> Path:
+    def create(self, *, force: bool = False) -> Path:
         env_path = self.settings.cache_dir_for(self)
         with self.settings.cache_lock_for(env_path):
-            if env_path.exists():
+            if env_path.exists() and not force:
                 return env_path
 
             if self.env_dict:
-                self.env_dict['dependencies'] = self._compute_dependencies()
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.yml') as tf:
+                self.env_dict["dependencies"] = self._compute_dependencies()
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".yml") as tf:
                     yaml.dump(self.env_dict, tf)
                     tf.flush()
                     try:
                         self._run_conda(
-                            "env",
-                            "create",
-                            "-f",
-                            tf.name,
-                            "--prefix",
-                            env_path
+                            "env", "create", "-f", tf.name, "--prefix", env_path
                         )
                     except subprocess.SubprocessError as exc:
-                        raise EnvironmentCreationError("Failure during 'conda create'") from exc
+                        raise EnvironmentCreationError(
+                            "Failure during 'conda create'"
+                        ) from exc
 
             else:
                 # Since our agent needs Python to be installed (at very least)
@@ -139,7 +139,9 @@ class CondaEnvironment(BaseEnvironment[Path]):
                         *dependencies,
                     )
                 except subprocess.SubprocessError as exc:
-                    raise EnvironmentCreationError("Failure during 'conda create'") from exc
+                    raise EnvironmentCreationError(
+                        "Failure during 'conda create'"
+                    ) from exc
 
             self.log(f"New environment cached at '{env_path}'")
             return env_path

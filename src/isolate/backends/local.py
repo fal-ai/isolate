@@ -29,7 +29,11 @@ class LocalPythonEnvironment(BaseEnvironment[Path]):
     def key(self) -> str:
         return sha256_digest_of(sys.exec_prefix)
 
-    def create(self) -> Path:
+    def create(self, *, force: bool = False) -> Path:
+        if force is True:
+            raise NotImplementedError(
+                "LocalPythonEnvironment cannot be forcibly created"
+            )
         return Path(sys.exec_prefix)
 
     def destroy(self, connection_key: Path) -> None:

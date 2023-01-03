@@ -135,6 +135,23 @@ class GenericEnvironmentTests:
         assert environment.exists()
         assert self.get_example_version(environment, connection_key) == "0.6.0"
 
+    def test_forced_environment_creation(self, tmp_path, monkeypatch):
+        environment = self.get_project_environment(tmp_path, "new-example-project")
+        environment.create()
+
+        # Environment exists at this point, and if we try to create it again
+        # (even if it is not possible to do so, e.g. the directory is read-only)
+        # the create() call will succeed (since it is cached).
+        assert environment.exists()
+        with self.fail_active_creation(monkeypatch):
+            environment.create()  # No problem!
+
+        # But if we force the creation of the environment, then it should
+        # fail since the directory is read-only.
+        with pytest.raises(EnvironmentCreationError):
+            with self.fail_active_creation(monkeypatch):
+                environment.create(force=True)
+
     def test_invalid_project_building(self, tmp_path, monkeypatch):
         environment = self.get_project_environment(tmp_path, "invalid-project")
         with pytest.raises(EnvironmentCreationError):
@@ -384,11 +401,9 @@ class TestConda(GenericEnvironmentTests):
             "env_dict": {
                 "name": "test",
                 "channels": "defaults",
-                "dependencies": [
-                    {"pip": ["pyjokes==0.5.0"]}
-                ]
+                "dependencies": [{"pip": ["pyjokes==0.5.0"]}],
             }
-        }
+        },
     }
     creation_entry_point = ("subprocess.check_call", subprocess.SubprocessError)
 
@@ -439,6 +454,7 @@ class TestConda(GenericEnvironmentTests):
             match="Python version can not be specified by packages",
         ):
             environment.create()
+
 
 def test_local_python_environment():
     """Since 'local' environment does not support installation of extra dependencies

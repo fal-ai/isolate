@@ -37,7 +37,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
     def key(self) -> str:
         return os.path.join("versions", self.python_version)
 
-    def create(self) -> Path:
+    def create(self, *, force: bool = False) -> Path:
         pyenv = _get_pyenv_executable()
         env_path = self.settings.cache_dir_for(self)
         with self.settings.cache_lock_for(env_path):
@@ -47,7 +47,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
             # [0]: https://github.com/pyenv/pyenv#locating-pyenv-provided-python-installations
             pyenv_root = env_path.parent.parent
             prefix = self._try_get_prefix(pyenv, pyenv_root)
-            if prefix is None:
+            if prefix is None or force:
                 self._install_python(pyenv, pyenv_root)
                 prefix = self._try_get_prefix(pyenv, pyenv_root)
                 if not prefix:

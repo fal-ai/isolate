@@ -19,4 +19,6 @@ message EnvironmentDefinition {
     string kind = 1;
     // A free-form definition of environment properties.
     google.protobuf.Struct configuration = 2;
+    // Whether to force-create this environment or not.
+    bool force = 3;
 }
