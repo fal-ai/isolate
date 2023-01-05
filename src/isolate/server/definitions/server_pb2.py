@@ -17,7 +17,7 @@ from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 from isolate.connections.grpc.definitions import common_pb2 as common__pb2
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x0cserver.proto\x1a\x0c\x63ommon.proto\x1a\x1cgoogle/protobuf/struct.proto"b\n\rBoundFunction\x12,\n\x0c\x65nvironments\x18\x01 \x03(\x0b\x32\x16.EnvironmentDefinition\x12#\n\x08\x66unction\x18\x02 \x01(\x0b\x32\x11.SerializedObject"U\n\x15\x45nvironmentDefinition\x12\x0c\n\x04kind\x18\x01 \x01(\t\x12.\n\rconfiguration\x18\x02 \x01(\x0b\x32\x17.google.protobuf.Struct27\n\x07Isolate\x12,\n\x03Run\x12\x0e.BoundFunction\x1a\x11.PartialRunResult"\x00\x30\x01\x62\x06proto3'
+    b'\n\x0cserver.proto\x1a\x0c\x63ommon.proto\x1a\x1cgoogle/protobuf/struct.proto"b\n\rBoundFunction\x12,\n\x0c\x65nvironments\x18\x01 \x03(\x0b\x32\x16.EnvironmentDefinition\x12#\n\x08\x66unction\x18\x02 \x01(\x0b\x32\x11.SerializedObject"d\n\x15\x45nvironmentDefinition\x12\x0c\n\x04kind\x18\x01 \x01(\t\x12.\n\rconfiguration\x18\x02 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\r\n\x05\x66orce\x18\x03 \x01(\x08\x32\x37\n\x07Isolate\x12,\n\x03Run\x12\x0e.BoundFunction\x1a\x11.PartialRunResult"\x00\x30\x01\x62\x06proto3'
 )
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
@@ -28,7 +28,7 @@ if _descriptor._USE_C_DESCRIPTORS == False:
     _BOUNDFUNCTION._serialized_start = 60
     _BOUNDFUNCTION._serialized_end = 158
     _ENVIRONMENTDEFINITION._serialized_start = 160
-    _ENVIRONMENTDEFINITION._serialized_end = 245
-    _ISOLATE._serialized_start = 247
-    _ISOLATE._serialized_end = 302
+    _ENVIRONMENTDEFINITION._serialized_end = 260
+    _ISOLATE._serialized_start = 262
+    _ISOLATE._serialized_end = 317
 # @@protoc_insertion_point(module_scope)

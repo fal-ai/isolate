@@ -57,9 +57,10 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
         and identification purposes."""
         raise NotImplementedError
 
-    def create(self) -> ConnectionKeyType:
+    def create(self, *, force: bool = False) -> ConnectionKeyType:
         """Setup the given environment, and return all the information needed
-        for establishing a connection to it."""
+        for establishing a connection to it. If `force` flag is set, then even
+        if the environment is cached; it will be tried to be re-built."""
         raise NotImplementedError
 
     def destroy(self, connection_key: ConnectionKeyType) -> None:

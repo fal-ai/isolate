@@ -119,12 +119,12 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         else:
             return self._install_python_through_pyenv()
 
-    def create(self) -> Path:
+    def create(self, *, force: bool = False) -> Path:
         from virtualenv import cli_run
 
         venv_path = self.settings.cache_dir_for(self)
         with self.settings.cache_lock_for(venv_path):
-            if venv_path.exists():
+            if venv_path.exists() and not force:
                 return venv_path
 
             self.log(f"Creating the environment at '{venv_path}'")

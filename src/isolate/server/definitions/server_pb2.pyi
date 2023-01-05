@@ -57,16 +57,20 @@ class EnvironmentDefinition(google.protobuf.message.Message):
 
     KIND_FIELD_NUMBER: builtins.int
     CONFIGURATION_FIELD_NUMBER: builtins.int
+    FORCE_FIELD_NUMBER: builtins.int
     kind: builtins.str
     """Kind of the isolate environment."""
     @property
     def configuration(self) -> google.protobuf.struct_pb2.Struct:
         """A free-form definition of environment properties."""
+    force: builtins.bool
+    """Whether to force-create this environment or not."""
     def __init__(
         self,
         *,
         kind: builtins.str = ...,
         configuration: google.protobuf.struct_pb2.Struct | None = ...,
+        force: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["configuration", b"configuration"]
@@ -74,7 +78,7 @@ class EnvironmentDefinition(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "configuration", b"configuration", "kind", b"kind"
+            "configuration", b"configuration", "force", b"force", "kind", b"kind"
         ],
     ) -> None: ...
 

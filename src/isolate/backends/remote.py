@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass
 from typing import Any, ClassVar, Dict, List, Optional
@@ -47,15 +48,24 @@ class IsolateServer(BaseEnvironment[List[EnvironmentDefinition]]):
             json.dumps(self.target_environments),
         )
 
-    def create(self) -> List[EnvironmentDefinition]:
+    def create(self, *, force: bool = False) -> List[EnvironmentDefinition]:
+        if force is True:
+            raise NotImplementedError(
+                "Only individual environments can be forcibly created, please set them up"
+                " manually by using the 'force_create' flag on the environment definition."
+            )
+
         envs = []
         for env in self.target_environments:
             if not env.get("kind") or not env.get("configuration"):
                 raise RuntimeError(f"`kind` or `configuration` key missing in: {env}")
+            configuration = copy.deepcopy(env["configuration"])
+            force_create = configuration.pop("force_create", False)
             envs.append(
                 EnvironmentDefinition(
                     kind=env["kind"],
                     configuration=interface.to_struct(env["configuration"]),
+                    force=force_create,
                 )
             )
         return envs
