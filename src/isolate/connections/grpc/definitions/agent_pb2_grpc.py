@@ -2,6 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
+from isolate.connections.grpc.definitions import agent_pb2 as agent__pb2
 from isolate.connections.grpc.definitions import common_pb2 as common__pb2
 
 
@@ -16,7 +17,7 @@ class AgentStub(object):
         """
         self.Run = channel.unary_stream(
             "/Agent/Run",
-            request_serializer=common__pb2.SerializedObject.SerializeToString,
+            request_serializer=agent__pb2.FunctionCall.SerializeToString,
             response_deserializer=common__pb2.PartialRunResult.FromString,
         )
 
@@ -35,7 +36,7 @@ def add_AgentServicer_to_server(servicer, server):
     rpc_method_handlers = {
         "Run": grpc.unary_stream_rpc_method_handler(
             servicer.Run,
-            request_deserializer=common__pb2.SerializedObject.FromString,
+            request_deserializer=agent__pb2.FunctionCall.FromString,
             response_serializer=common__pb2.PartialRunResult.SerializeToString,
         ),
     }
@@ -64,7 +65,7 @@ class Agent(object):
             request,
             target,
             "/Agent/Run",
-            common__pb2.SerializedObject.SerializeToString,
+            agent__pb2.FunctionCall.SerializeToString,
             common__pb2.PartialRunResult.FromString,
             options,
             channel_credentials,

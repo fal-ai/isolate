@@ -124,11 +124,12 @@ class IsolateServicer(definitions.IsolateServicer):
                 primary_path,
                 extra_inheritance_paths=inheritance_paths,
             ) as connection:
+                function_call = definitions.FunctionCall(function=request.function)
                 future = local_pool.submit(
                     _proxy_to_queue,
                     queue=messages,
                     connection=cast(LocalPythonGRPC, connection),
-                    input=request.function,
+                    input=function_call,
                 )
 
                 # Unlike above; we are not interested in the result value of future
@@ -200,7 +201,7 @@ class IsolateServicer(definitions.IsolateServicer):
 def _proxy_to_queue(
     queue: Queue,
     connection: LocalPythonGRPC,
-    input: definitions.SerializedObject,
+    input: definitions.FunctionCall,
 ) -> None:
     for message in connection._run_through_grpc(input):
         queue.put_nowait(message)
