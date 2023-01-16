@@ -4,5 +4,15 @@ import "common.proto";
 
 service Agent {
     // Start running the given function, and stream results back.
-    rpc Run (SerializedObject) returns (stream PartialRunResult) {}
+    rpc Run (FunctionCall) returns (stream PartialRunResult) {}
+}
+
+message FunctionCall {
+    // The function to execute and return the results to.
+    SerializedObject function = 1;
+    // Optionally the setup function which will be passed
+    // as the first argument to the given function. This
+    // has to be an idempotent step since the result for
+    // this executable will be cached.
+    optional SerializedObject setup_func = 2;
 }

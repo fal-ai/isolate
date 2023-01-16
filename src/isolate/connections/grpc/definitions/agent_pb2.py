@@ -15,7 +15,7 @@ _sym_db = _symbol_database.Default()
 from isolate.connections.grpc.definitions import common_pb2 as common__pb2
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x0b\x61gent.proto\x1a\x0c\x63ommon.proto28\n\x05\x41gent\x12/\n\x03Run\x12\x11.SerializedObject\x1a\x11.PartialRunResult"\x00\x30\x01\x62\x06proto3'
+    b'\n\x0b\x61gent.proto\x1a\x0c\x63ommon.proto"n\n\x0c\x46unctionCall\x12#\n\x08\x66unction\x18\x01 \x01(\x0b\x32\x11.SerializedObject\x12*\n\nsetup_func\x18\x02 \x01(\x0b\x32\x11.SerializedObjectH\x00\x88\x01\x01\x42\r\n\x0b_setup_func24\n\x05\x41gent\x12+\n\x03Run\x12\r.FunctionCall\x1a\x11.PartialRunResult"\x00\x30\x01\x62\x06proto3'
 )
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
@@ -23,6 +23,8 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "agent_pb2", globals())
 if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
-    _AGENT._serialized_start = 29
-    _AGENT._serialized_end = 85
+    _FUNCTIONCALL._serialized_start = 29
+    _FUNCTIONCALL._serialized_end = 139
+    _AGENT._serialized_start = 141
+    _AGENT._serialized_end = 193
 # @@protoc_insertion_point(module_scope)

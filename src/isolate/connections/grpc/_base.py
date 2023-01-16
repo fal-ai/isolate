@@ -33,7 +33,7 @@ class GRPCExecutionBase(EnvironmentConnection):
 
     def _run_through_grpc(
         self,
-        function: definitions.SerializedObject,
+        function: definitions.FunctionCall,
         *,
         max_wait_timeout: float = 10,
     ) -> Iterator[definitions.PartialRunResult]:
@@ -90,8 +90,11 @@ class GRPCExecutionBase(EnvironmentConnection):
             was_it_raised=False,
             stringized_traceback=None,
         )
+        function_call = definitions.FunctionCall(
+            function=function,
+        )
 
-        for partial_result in self._run_through_grpc(function):
+        for partial_result in self._run_through_grpc(function_call):
             for raw_log in partial_result.logs:
                 log = from_grpc(raw_log)
                 self.log(log.message, level=log.level, source=log.source)
