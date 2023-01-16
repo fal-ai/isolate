@@ -9,7 +9,7 @@ import time
 from contextlib import contextmanager, suppress
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional, Tuple
+from typing import Callable, Iterator, Optional, Tuple, Union
 
 # For ensuring that the lock is created and not forgotten
 # (e.g. the process which acquires it crashes, so it is never
@@ -167,11 +167,18 @@ def logged_io(
 
 
 @lru_cache(maxsize=None)
-def sha256_digest_of(*unique_fields: str, _join_char: str = "\n") -> str:
+def sha256_digest_of(*unique_fields: Union[str, bytes]) -> str:
     """Return the SHA256 digest that corresponds to the combined version
     of 'unique_fields. The order is preserved."""
 
-    inner_text = _join_char.join(unique_fields).encode()
+    def _normalize(text: Union[str, bytes]) -> bytes:
+        if isinstance(text, str):
+            return text.encode()
+        else:
+            return text
+
+    join_char = b"\n"
+    inner_text = join_char.join(map(_normalize, unique_fields))
     return hashlib.sha256(inner_text).hexdigest()
 
 

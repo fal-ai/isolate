@@ -536,7 +536,9 @@ def test_isolate_server_logs(isolate_server):
     environment.apply_settings(IsolateSettings(log_hook=collected_logs.append))
 
     with environment.connect() as connection:
-        connection.run(partial(eval, "print('hello!!!')"))
+        connection.run(
+            partial(eval, "print('hello!!!') or __import__('time').sleep(0.5)")
+        )
 
     assert "hello!!!" in [log.message for log in collected_logs]
 

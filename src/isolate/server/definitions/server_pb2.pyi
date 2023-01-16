@@ -24,6 +24,7 @@ class BoundFunction(google.protobuf.message.Message):
 
     ENVIRONMENTS_FIELD_NUMBER: builtins.int
     FUNCTION_FIELD_NUMBER: builtins.int
+    SETUP_FUNC_FIELD_NUMBER: builtins.int
     @property
     def environments(
         self,
@@ -32,22 +33,43 @@ class BoundFunction(google.protobuf.message.Message):
     ]: ...
     @property
     def function(self) -> common_pb2.SerializedObject: ...
+    @property
+    def setup_func(self) -> common_pb2.SerializedObject: ...
     def __init__(
         self,
         *,
         environments: collections.abc.Iterable[global___EnvironmentDefinition]
         | None = ...,
         function: common_pb2.SerializedObject | None = ...,
+        setup_func: common_pb2.SerializedObject | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["function", b"function"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_setup_func",
+            b"_setup_func",
+            "function",
+            b"function",
+            "setup_func",
+            b"setup_func",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "environments", b"environments", "function", b"function"
+            "_setup_func",
+            b"_setup_func",
+            "environments",
+            b"environments",
+            "function",
+            b"function",
+            "setup_func",
+            b"setup_func",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_setup_func", b"_setup_func"]
+    ) -> typing_extensions.Literal["setup_func"] | None: ...
 
 global___BoundFunction = BoundFunction
 

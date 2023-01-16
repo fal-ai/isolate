@@ -1,1 +1,1 @@
-from isolate.server.server import IsolateServicer
+from isolate.server.server import BridgeManager, IsolateServicer

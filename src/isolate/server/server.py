@@ -1,17 +1,26 @@
+from __future__ import annotations
+
 import os
+import threading
 import traceback
 from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
+from pathlib import Path
 from queue import Empty as QueueEmpty
 from queue import Queue
-from typing import Callable, Iterator, cast
+from typing import Any, Callable, Dict, Iterator, List, Tuple, cast
 
 import grpc
 from grpc import ServicerContext, StatusCode
 
-from isolate.backends import EnvironmentCreationError, IsolateSettings
+from isolate.backends import (
+    BaseEnvironment,
+    EnvironmentCreationError,
+    IsolateSettings,
+)
 from isolate.backends.common import active_python
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.virtualenv import VirtualPythonEnvironment
@@ -40,7 +49,61 @@ _Q_WAIT_DELAY = 0.1
 
 
 @dataclass
+class BridgeManager:
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+    stack: ExitStack = field(default_factory=ExitStack)
+    connections: Dict[
+        Tuple[Any, ...],
+        Tuple[LocalPythonGRPC, List[definitions.AgentStub]],
+    ] = field(default_factory=dict)
+
+    @contextmanager
+    def establish(
+        self,
+        environment: BaseEnvironment,
+        environment_path: Path,
+        extra_inheritance_paths: List[Path],
+    ) -> Iterator[definitions.AgentStub]:
+        cache_hint = (environment_path, *extra_inheritance_paths)
+        with self._lock:
+            if cache_hint in self.connections:
+                connection, bridges = self.connections[cache_hint]
+                try:
+                    bridge = bridges.pop()
+                except IndexError:
+                    bridge = self.stack.enter_context(connection._establish_bridge())
+            else:
+                connection = self.stack.enter_context(
+                    LocalPythonGRPC(
+                        environment,
+                        environment_path,
+                        extra_inheritance_paths=extra_inheritance_paths,
+                    )
+                )  # type: ignore
+                bridge = self.stack.enter_context(connection._establish_bridge())
+                self.connections[cache_hint] = (connection, [])
+
+        try:
+            yield bridge
+        finally:
+            # If the bridge is not broken, put it back into the pool.
+            # is_channel_reusable = bridge._channel._state == grpc.ChannelConnectivity.READY
+            is_channel_reusable = True
+            if is_channel_reusable:
+                with self._lock:
+                    self.connections[cache_hint][1].append(bridge)
+                print("Caching the existing bridge!")
+
+    def __enter__(self) -> BridgeManager:
+        return self
+
+    def __exit__(self, *exc_info: Any) -> None:
+        self.stack.__exit__(*exc_info)
+
+
+@dataclass
 class IsolateServicer(definitions.IsolateServicer):
+    bridge_manager: BridgeManager
     default_settings: IsolateSettings = field(default_factory=IsolateSettings)
 
     def Run(
@@ -119,16 +182,22 @@ class IsolateServicer(definitions.IsolateServicer):
             inheritance_paths.extend(extra_inheritance_paths)
             _, primary_environment = environments[0]
 
-            with LocalPythonGRPC(
+            with self.bridge_manager.establish(
                 primary_environment,
                 primary_path,
                 extra_inheritance_paths=inheritance_paths,
-            ) as connection:
-                function_call = definitions.FunctionCall(function=request.function)
+            ) as bridge:
+                function_call = definitions.FunctionCall(
+                    function=request.function,
+                    setup_func=request.setup_func,
+                )
+                if not request.HasField("setup_func"):
+                    function_call.ClearField("setup_func")
+
                 future = local_pool.submit(
                     _proxy_to_queue,
                     queue=messages,
-                    connection=cast(LocalPythonGRPC, connection),
+                    bridge=bridge,
                     input=function_call,
                 )
 
@@ -153,7 +222,7 @@ class IsolateServicer(definitions.IsolateServicer):
                         )
                     else:
                         return self.abort_with_msg(
-                            f"An unexpected error occurred.",
+                            f"An unexpected error occurred: {exception}.",
                             context,
                             code=StatusCode.UNKNOWN,
                         )
@@ -200,10 +269,10 @@ class IsolateServicer(definitions.IsolateServicer):
 
 def _proxy_to_queue(
     queue: Queue,
-    connection: LocalPythonGRPC,
+    bridge: definitions.AgentStub,
     input: definitions.FunctionCall,
 ) -> None:
-    for message in connection._run_through_grpc(input):
+    for message in bridge.Run(input):
         queue.put_nowait(message)
 
 
@@ -219,13 +288,14 @@ def _add_log_to_queue(messages: Queue, log: Log) -> None:
 
 def main() -> None:
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREADS))
-    definitions.register_isolate(IsolateServicer(), server)
+    with BridgeManager() as bridge_manager:
+        definitions.register_isolate(IsolateServicer(bridge_manager), server)
 
-    server.add_insecure_port(f"[::]:50001")
-    print("Started listening at localhost:50001")
+        server.add_insecure_port(f"[::]:50001")
+        print("Started listening at localhost:50001")
 
-    server.start()
-    server.wait_for_termination()
+        server.start()
+        server.wait_for_termination()
 
 
 if __name__ == "__main__":

@@ -31,20 +31,32 @@ class GRPCExecutionBase(EnvironmentConnection):
         the required credentials to connect to it."""
         raise NotImplementedError
 
-    def _run_through_grpc(
+    @contextmanager
+    def _establish_bridge(
         self,
-        function: definitions.FunctionCall,
         *,
-        max_wait_timeout: float = 10,
-    ) -> Iterator[definitions.PartialRunResult]:
-        """Starts a new agent process, sends the given 'function' to the agent and
-        awaits until the result is received. This function takes and returns raw gRPC
-        messages (use `run()` to actually execute Python functions and receive Python
-        objects).
+        max_wait_timeout: float = 10.0,
+    ) -> Iterator[definitions.AgentStub]:
+        with self.start_agent() as (address, credentials):
+            with grpc.secure_channel(address, credentials) as channel:
+                channel_status = grpc.channel_ready_future(channel)
+                try:
+                    channel_status.result(timeout=max_wait_timeout)
+                except grpc.FutureTimeoutError:
+                    raise AgentError(
+                        f"Couldn't connect to the gRPC server in the agent (listening at {address}) "
+                        "in time."
+                    )
+                stub = definitions.AgentStub(channel)
+                stub._channel = channel  # type: ignore
+                yield stub
 
-        If the gRPC server is not accessible at the passed maximum timeout, an
-        AgentError will be raised."""
-
+    def run(
+        self,
+        executable: BasicCallable,
+        *args: Any,
+        **kwargs: Any,
+    ) -> CallResultType:
         # Implementation details
         # ======================
         #
@@ -63,26 +75,6 @@ class GRPCExecutionBase(EnvironmentConnection):
         #                   using the same serialization method.
         #  8. [controller]: Receive the result back and return it.
 
-        with self.start_agent() as (address, credentials):
-            with grpc.secure_channel(address, credentials) as channel:
-                channel_status = grpc.channel_ready_future(channel)
-                try:
-                    channel_status.result(timeout=max_wait_timeout)
-                except grpc.FutureTimeoutError:
-                    raise AgentError(
-                        f"Couldn't connect to the gRPC server in the agent (listening at {address}) "
-                        "in time."
-                    )
-
-                agent = definitions.AgentStub(channel)
-                yield from agent.Run(function)
-
-    def run(
-        self,
-        executable: BasicCallable,
-        *args: Any,
-        **kwargs: Any,
-    ) -> CallResultType:
         method = self.environment.settings.serialization_method
         function = definitions.SerializedObject(
             method=method,
@@ -94,18 +86,19 @@ class GRPCExecutionBase(EnvironmentConnection):
             function=function,
         )
 
-        for partial_result in self._run_through_grpc(function_call):
-            for raw_log in partial_result.logs:
-                log = from_grpc(raw_log)
-                self.log(log.message, level=log.level, source=log.source)
+        with self._establish_bridge() as bridge:
+            for partial_result in bridge.Run(function_call):
+                for raw_log in partial_result.logs:
+                    log = from_grpc(raw_log)
+                    self.log(log.message, level=log.level, source=log.source)
 
-            if partial_result.is_complete:
-                if not partial_result.result:
-                    raise AgentError(
-                        "The agent didn't return a result, but it should have."
-                    )
+                if partial_result.is_complete:
+                    if not partial_result.result:
+                        raise AgentError(
+                            "The agent didn't return a result, but it should have."
+                        )
 
-                return cast(CallResultType, from_grpc(partial_result.result))
+                    return cast(CallResultType, from_grpc(partial_result.result))
 
         raise AgentError(
             "No result object was received from the agent (it never set is_complete to True)."
