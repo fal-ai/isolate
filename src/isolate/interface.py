@@ -5,7 +5,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from functools import lru_cache, partial
+from functools import lru_cache, partial, wraps
 from typing import (
     Any,
     Callable,
@@ -27,6 +27,9 @@ from rich.text import Text
 
 import isolate
 from isolate.backends import BaseEnvironment
+from isolate.backends.virtualenv import VirtualPythonEnvironment, PythonIPC
+from isolate.backends.conda import CondaEnvironment
+from isolate.backends.remote import IsolateServer
 from isolate.backends.settings import IsolateSettings
 from isolate.logs import Log, LogLevel, LogSource
 
@@ -56,6 +59,77 @@ def _decide_default_backend():
         f"{', '.join(map(repr, _SERIALIZATION_OPTIONS))}"
     )
     return "pickle"
+
+
+def _add_serializer(kind: str, **config: Any) -> Any:
+    # Adds serializer (usually dill) to user config, so that the user doesn't
+    # worry about it.
+    default_pkgs = []
+    serializer = _decide_default_backend()
+
+    if serializer != "pickle":
+        default_pkgs.append(
+            (serializer, importlib_metadata.version(serializer))
+        )
+
+    if kind == "virtualenv":
+        requirements = config.setdefault("requirements", [])
+        requirements.extend(f"{name}=={version}" for name, version in default_pkgs)
+        return config
+    elif kind == "conda":
+        packages = config.setdefault("packages", [])
+        packages.extend(f"{name}={version}" for name, version in default_pkgs)
+        return config
+    else:
+        raise NotImplementedError(f"Unknown environment kind: {kind}")
+
+
+def isolated(kind: str, **config: Any):
+    REGISTERED_ENVIRONMENTS: Dict[str, BaseEnvironment] = {
+        "conda": CondaEnvironment,
+        "virtualenv": VirtualPythonEnvironment
+    }
+
+    serializer = _decide_default_backend()
+
+    settings = IsolateSettings(serialization_method=serializer)
+
+    env_class = REGISTERED_ENVIRONMENTS.get(kind)
+
+    config = _add_serializer(kind, **config)
+
+    if not env_class:
+        raise NotImplementedError(f"Unknown environment kind: {kind}")
+
+    def fn_outer(fn):
+        @wraps(fn)
+        def fn_inner(*args, **kwargs):
+            env = env_class.from_config(
+                config, settings=settings)
+            with PythonIPC(env, env.create()) as connection:
+                result = connection.run(partial(fn, *args, **kwargs))
+                return result
+
+        def _run_on(host: str, *args, **kwargs):
+            definition = {
+                "kind": kind,
+                "configuration": config
+            }
+
+            env = IsolateServer.from_config({
+                "host": host,
+                "target_environments": [definition]
+            }, settings=settings)
+            key = env.create()
+            with env.open_connection(key) as connection:
+                res = connection.run(partial(fn, *args, **kwargs))
+                return res
+
+        fn_inner.on = _run_on
+
+        return fn_inner
+
+    return fn_outer
 
 
 def Template(kind: str, **config: Any) -> _EnvironmentBuilder:

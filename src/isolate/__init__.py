@@ -4,5 +4,6 @@ from isolate.interface import (
     LocalBox,
     RemoteBox,
     Template,
+    isolated,
 )
 from isolate.registry import prepare_environment
