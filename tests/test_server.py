@@ -1,3 +1,4 @@
+import copy
 import textwrap
 from concurrent import futures
 from functools import partial
@@ -11,7 +12,7 @@ from isolate.backends.settings import IsolateSettings
 from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions
 from isolate.server.interface import from_grpc, to_grpc, to_serialized_object
-from isolate.server.server import IsolateServicer
+from isolate.server.server import BridgeManager, IsolateServicer
 
 REPO_DIR = Path(__file__).parent.parent
 assert (
@@ -28,14 +29,15 @@ def inherit_from_local(monkeypatch: Any, value: bool = True) -> None:
 def stub(tmp_path):
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
     test_settings = IsolateSettings(cache_dir=tmp_path / "cache")
-    definitions.register_isolate(IsolateServicer(test_settings), server)
-    host, port = "localhost", server.add_insecure_port(f"[::]:0")
-    server.start()
+    with BridgeManager() as bridge:
+        definitions.register_isolate(IsolateServicer(bridge, test_settings), server)
+        host, port = "localhost", server.add_insecure_port(f"[::]:0")
+        server.start()
 
-    try:
-        yield definitions.IsolateStub(grpc.insecure_channel(f"{host}:{port}"))
-    finally:
-        server.stop(None)
+        try:
+            yield definitions.IsolateStub(grpc.insecure_channel(f"{host}:{port}"))
+        finally:
+            server.stop(None)
 
 
 def define_environment(kind: str, **kwargs: Any) -> definitions.EnvironmentDefinition:
@@ -322,3 +324,46 @@ def test_agent_show_logs_from_agent_requirements(
 
     raw_logs = [log.message for log in build_logs]
     assert "ERROR: Invalid requirement: '$$$$'" in raw_logs
+
+
+def test_bridge_connection_reuse(
+    stub: definitions.IsolateStub, monkeypatch: Any
+) -> None:
+    inherit_from_local(monkeypatch)
+
+    first_env = define_environment(
+        "virtualenv",
+        requirements=["pyjokes==0.6.0"],
+    )
+    request = definitions.BoundFunction(
+        setup_func=to_serialized_object(
+            lambda: __import__("os").getpid(), method="cloudpickle"
+        ),
+        function=to_serialized_object(
+            lambda process_pid: process_pid, method="cloudpickle"
+        ),
+        environments=[first_env],
+    )
+
+    initial_process_pid = from_grpc(run_request(stub, request))
+    secondary_process_pid = from_grpc(run_request(stub, request))
+
+    # Both of the functions should run in the same agent process
+    assert initial_process_pid == secondary_process_pid
+
+    # But if we run a third function that has a different environment
+    # then its process should be different
+    second_env = define_environment(
+        "virtualenv",
+        requirements=["pyjokes==0.5.0"],
+    )
+    request_2 = copy.deepcopy(request)
+    request_2.environments.remove(first_env)
+    request_2.environments.append(second_env)
+
+    third_process_pid = from_grpc(run_request(stub, request_2))
+    assert third_process_pid != initial_process_pid
+
+    # As long as the environments are same, they are cached
+    fourth_process_pid = from_grpc(run_request(stub, request_2))
+    assert fourth_process_pid == third_process_pid

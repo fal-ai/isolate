@@ -12,6 +12,7 @@ service Isolate {
 message BoundFunction {
     repeated EnvironmentDefinition environments = 1;
     SerializedObject function = 2;
+    optional SerializedObject setup_func = 3;
 }
 
 message EnvironmentDefinition {

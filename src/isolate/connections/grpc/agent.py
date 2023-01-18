@@ -46,7 +46,8 @@ class AgentServicer(definitions.AgentServicer):
         extra_args = []
         if request.HasField("setup_func"):
             cache_key = sha256_digest_of(
-                request.setup_func.method, request.setup_func.definition
+                request.setup_func.definition,
+                request.setup_func.method,
             )
             if cache_key not in self._run_cache:
                 try:
@@ -85,7 +86,10 @@ class AgentServicer(definitions.AgentServicer):
                 extra_args=extra_args,
             )
             yield from self.send_object(
-                request.function.method, result, was_it_raised, stringized_tb
+                request.function.method,
+                result,
+                was_it_raised,
+                stringized_tb,
             )
         except AbortException as exc:
             return self.abort_with_msg(context, exc.message)
@@ -177,8 +181,8 @@ class AgentServicer(definitions.AgentServicer):
 
     def abort_with_msg(
         self,
-        message: str,
         context: ServicerContext,
+        message: str,
         *,
         code: StatusCode = StatusCode.INVALID_ARGUMENT,
     ) -> None:
