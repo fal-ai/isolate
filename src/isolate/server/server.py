@@ -54,7 +54,7 @@ class BridgeManager:
     stack: ExitStack = field(default_factory=ExitStack)
     connections: Dict[
         Tuple[Any, ...],
-        Tuple[LocalPythonGRPC, List[definitions.AgentStub]],
+        Tuple[LocalPythonGRPC, List[tuple[definitions.AgentStub, Queue]]],
     ] = field(default_factory=dict)
 
     @contextmanager
@@ -63,13 +63,14 @@ class BridgeManager:
         environment: BaseEnvironment,
         environment_path: Path,
         extra_inheritance_paths: List[Path],
-    ) -> Iterator[definitions.AgentStub]:
+        queue: Queue,
+    ) -> Iterator[Tuple[definitions.AgentStub, Queue]]:
         cache_hint = (environment_path, *extra_inheritance_paths)
         with self._lock:
             if cache_hint in self.connections:
                 connection, bridges = self.connections[cache_hint]
                 try:
-                    bridge = bridges.pop()
+                    bridge, queue = bridges.pop()
                 except IndexError:
                     bridge = self.stack.enter_context(connection._establish_bridge())
             else:
@@ -84,15 +85,14 @@ class BridgeManager:
                 self.connections[cache_hint] = (connection, [])
 
         try:
-            yield bridge
+            yield bridge, queue
         finally:
             # If the bridge is not broken, put it back into the pool.
             # is_channel_reusable = bridge._channel._state == grpc.ChannelConnectivity.READY
             is_channel_reusable = True
             if is_channel_reusable:
                 with self._lock:
-                    self.connections[cache_hint][1].append(bridge)
-                print("Caching the existing bridge!")
+                    self.connections[cache_hint][1].append((bridge, queue))
 
     def __enter__(self) -> BridgeManager:
         return self
@@ -186,7 +186,8 @@ class IsolateServicer(definitions.IsolateServicer):
                 primary_environment,
                 primary_path,
                 extra_inheritance_paths=inheritance_paths,
-            ) as bridge:
+                queue=messages,
+            ) as (bridge, queue):
                 function_call = definitions.FunctionCall(
                     function=request.function,
                     setup_func=request.setup_func,
@@ -196,7 +197,7 @@ class IsolateServicer(definitions.IsolateServicer):
 
                 future = local_pool.submit(
                     _proxy_to_queue,
-                    queue=messages,
+                    queue=queue,
                     bridge=bridge,
                     input=function_call,
                 )
@@ -204,7 +205,7 @@ class IsolateServicer(definitions.IsolateServicer):
                 # Unlike above; we are not interested in the result value of future
                 # here, since it will be already transferred to other side without
                 # us even seeing (through the queue).
-                yield from self.watch_queue_until_completed(messages, future.done)
+                yield from self.watch_queue_until_completed(queue, future.done)
 
                 # But we still have to check whether there were any errors raised
                 # during the execution, and handle them accordingly.
