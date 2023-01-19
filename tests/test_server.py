@@ -1,5 +1,6 @@
 import copy
 import textwrap
+import time
 from concurrent import futures
 from functools import partial
 from pathlib import Path
@@ -367,3 +368,38 @@ def test_bridge_connection_reuse(
     # As long as the environments are same, they are cached
     fourth_process_pid = from_grpc(run_request(stub, request_2))
     assert fourth_process_pid == third_process_pid
+
+
+def test_bridge_connection_reuse_logs(
+    stub: definitions.IsolateStub, monkeypatch: Any
+) -> None:
+    inherit_from_local(monkeypatch)
+
+    first_env = define_environment(
+        "virtualenv",
+        requirements=["pyjokes==0.6.0"],
+    )
+    request = definitions.BoundFunction(
+        setup_func=to_serialized_object(
+            lambda: print("setup") or __import__("time").sleep(0.4),
+            method="cloudpickle",
+        ),
+        function=to_serialized_object(
+            lambda _: print("run") or __import__("time").sleep(0.4),
+            method="cloudpickle",
+        ),
+        environments=[first_env],
+    )
+
+    logs: List[Log] = []
+    run_request(stub, request, user_logs=logs)
+    run_request(stub, request, user_logs=logs)
+    run_request(stub, request, user_logs=logs)
+
+    str_logs = [log.message for log in logs]
+    assert str_logs == [
+        "setup",
+        "run",
+        "run",
+        "run",
+    ]
