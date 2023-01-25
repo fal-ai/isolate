@@ -1,6 +1,5 @@
 import copy
 import textwrap
-import time
 from concurrent import futures
 from functools import partial
 from pathlib import Path
@@ -86,6 +85,31 @@ def run_request(
         return cast(definitions.SerializedObject, return_value)
 
 
+def run_function(stub, function, *args, **kwargs):
+    import __main__
+    import dill
+
+    dill.settings["recurse"] = True
+
+    # Make it seem like it originated from __main__
+    setattr(__main__, function.__name__, function)
+    function.__module__ = "__main__"
+    function.__qualname__ = f"__main__.{function.__name__}"
+
+    basic_function = partial(function, *args, **kwargs)
+    environment = define_environment("virtualenv", requirements=[])
+    request = definitions.BoundFunction(
+        function=to_serialized_object(basic_function, method="dill"),
+        environments=[environment],
+    )
+
+    user_logs: List[Log] = []
+    result = run_request(stub, request, user_logs=user_logs)
+
+    raw_user_logs = [log.message for log in user_logs if log.message]
+    return from_grpc(result), raw_user_logs
+
+
 @pytest.mark.parametrize("inherit_local", [True, False])
 def test_server_basic_communication(
     stub: definitions.IsolateStub,
@@ -160,11 +184,9 @@ def test_user_logs_immediate(stub: definitions.IsolateStub, monkeypatch: Any) ->
                 exec,
                 textwrap.dedent(
                     """
-                import sys, pyjokes, time
+                import sys, pyjokes
                 print(pyjokes.__version__)
-                time.sleep(0.1)
                 print("error error!", file=sys.stderr)
-                time.sleep(0.1)
                 """
                 ),
             ),
@@ -381,11 +403,11 @@ def test_bridge_connection_reuse_logs(
     )
     request = definitions.BoundFunction(
         setup_func=to_serialized_object(
-            lambda: print("setup") or __import__("time").sleep(0.4),
+            lambda: print("setup"),
             method="cloudpickle",
         ),
         function=to_serialized_object(
-            lambda _: print("run") or __import__("time").sleep(0.4),
+            lambda _: print("run"),
             method="cloudpickle",
         ),
         environments=[first_env],
@@ -396,10 +418,31 @@ def test_bridge_connection_reuse_logs(
     run_request(stub, request, user_logs=logs)
     run_request(stub, request, user_logs=logs)
 
-    str_logs = [log.message for log in logs]
+    str_logs = [log.message for log in logs if log.message]
     assert str_logs == [
         "setup",
         "run",
         "run",
         "run",
     ]
+
+
+def print_logs_no_delay(num_lines, should_flush):
+    for i in range(num_lines):
+        print(i, flush=should_flush)
+
+    return num_lines
+
+
+@pytest.mark.parametrize("num_lines", [0, 1, 10, 100, 1000])
+@pytest.mark.parametrize("should_flush", [True, False])
+def test_receive_complete_logs(
+    stub: definitions.IsolateStub,
+    monkeypatch: Any,
+    num_lines: int,
+    should_flush: bool,
+) -> None:
+    inherit_from_local(monkeypatch)
+    result, logs = run_function(stub, print_logs_no_delay, num_lines, should_flush)
+    assert result == num_lines
+    assert logs == [str(i) for i in range(num_lines)]
