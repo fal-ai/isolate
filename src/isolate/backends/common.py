@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
+import select
 import shutil
 import sysconfig
 import threading
@@ -9,7 +11,7 @@ import time
 from contextlib import contextmanager, suppress
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Iterator, Optional, Tuple, Union
+from typing import Callable, Dict, Iterator, Optional, Tuple, Union
 
 # For ensuring that the lock is created and not forgotten
 # (e.g. the process which acquires it crashes, so it is never
@@ -83,38 +85,70 @@ def get_executable_path(search_path: Path, executable_name: str) -> Path:
     return Path(executable_path)
 
 
-_MESSAGE_STREAM_DELAY = 0.1
+_CHECK_FOR_TERMINATION_DELAY = 0.05
+HookT = Callable[[str], None]
 
 
-def _observe_reader(
-    reading_fd: int,
+def _io_observer(
+    hooks: Dict[int, HookT],
     termination_event: threading.Event,
-    hook: Callable[[str], None],
 ) -> threading.Thread:
-    """Starts a new thread that reads from the specified file descriptor
-    ('reading_fd') and calls the 'hook' for each line until the EOF is
-    reached.
+    """Starts a new thread that reads from the specified file descriptors
+    and calls the bound hook function for each line until the EOF is reached
+    or the termination event is set.
 
     Caller is responsible for joining the thread.
     """
 
-    assert not os.get_blocking(reading_fd), "reading_fd must be non-blocking"
+    followed_fds = list(hooks.keys())
+    for fd in followed_fds:
+        if os.get_blocking(fd):
+            raise NotImplementedError(
+                "All the hooked file descriptors must be non-blocking."
+            )
+
+    def forward_lines(fd: int) -> None:
+        hook = hooks[fd]
+        with open(fd, closefd=False) as stream:
+            # TODO: we probably should pass the real line endings
+            raw_data = stream.read()
+            if not raw_data:
+                return  # Nothing to read
+
+            for line in raw_data.splitlines():
+                hook(line)
 
     def _reader():
-        with open(reading_fd) as stream:
-            while not termination_event.wait(_MESSAGE_STREAM_DELAY):
-                line = stream.readline()
-                if not line:
-                    continue
+        while not termination_event.is_set():
+            # The observed file descriptors may be closed by the
+            # underlying process at any given time. So before we
+            # make a select call, we need to check if the file
+            # descriptors are still valid and remove the ones
+            # that are not.
+            for fd in followed_fds.copy():
+                try:
+                    os.fstat(fd)
+                except OSError as exc:
+                    if exc.errno == errno.EBADF:
+                        followed_fds.remove(fd)
 
-                # TODO: probably only strip the last newline, or
-                # do not strip anything at all.
-                hook(line.rstrip())
+            if not followed_fds:
+                # All the file descriptors are closed, so we can
+                # stop the thread.
+                return
 
-            # Once the termination is requested, read everything
-            # that is left in the stream.
-            for line in stream.readlines():
-                hook(line.rstrip())
+            ready, _, _ = select.select(
+                # rlist=
+                followed_fds,
+                # wlist=
+                [],
+                # xlist=
+                [],
+                # timeout=
+                _CHECK_FOR_TERMINATION_DELAY,
+            )
+            for fd in ready:
+                forward_lines(fd)
 
     observer_thread = threading.Thread(target=_reader)
     observer_thread.start()
@@ -134,34 +168,33 @@ def _unblocked_pipe() -> Tuple[int, int]:
 
 @contextmanager
 def logged_io(
-    stdout_hook: Callable[[str], None],
-    stderr_hook: Optional[Callable[[str], None]] = None,
+    stdout_hook: HookT,
+    stderr_hook: Optional[HookT] = None,
 ) -> Iterator[Tuple[int, int]]:
     """Open two new streams (for stdout and stderr, respectively) and start relaying all
     the output from them to the given hooks."""
 
-    termination_event = threading.Event()
-
     stdout_reader_fd, stdout_writer_fd = _unblocked_pipe()
     stderr_reader_fd, stderr_writer_fd = _unblocked_pipe()
 
-    stdout_observer = _observe_reader(
-        stdout_reader_fd,
-        termination_event,
-        hook=stdout_hook,
-    )
-    stderr_observer = _observe_reader(
-        stderr_reader_fd,
-        termination_event,
-        hook=stderr_hook or stdout_hook,
+    termination_event = threading.Event()
+    io_observer = _io_observer(
+        hooks={
+            stdout_reader_fd: stdout_hook,
+            stderr_reader_fd: stderr_hook or stdout_hook,
+        },
+        termination_event=termination_event,
     )
     try:
         yield stdout_writer_fd, stderr_writer_fd
     finally:
         termination_event.set()
         try:
-            stdout_observer.join(timeout=_MESSAGE_STREAM_DELAY)
-            stderr_observer.join(timeout=_MESSAGE_STREAM_DELAY)
+            # The observer thread checks the termination event in every
+            # _CHECK_FOR_TERMINATION_DELAY seconds. We need to wait at least
+            # more than that to make sure that it has a chance to terminate
+            # properly.
+            io_observer.join(timeout=_CHECK_FOR_TERMINATION_DELAY * 3)
         except TimeoutError:
             raise RuntimeError("Log observers did not terminate in time.")
 
