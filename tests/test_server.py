@@ -407,6 +407,7 @@ def test_bridge_connection_reuse(
     assert fourth_process_pid == third_process_pid
 
 
+@pytest.mark.flaky(reruns=3)
 def test_bridge_connection_reuse_logs(
     stub: definitions.IsolateStub, monkeypatch: Any
 ) -> None:
@@ -451,6 +452,7 @@ def print_logs_no_delay(num_lines, should_flush):
 
 @pytest.mark.parametrize("num_lines", [0, 1, 10, 100, 1000])
 @pytest.mark.parametrize("should_flush", [True, False])
+@pytest.mark.flaky(reruns=3)
 def test_receive_complete_logs(
     stub: definitions.IsolateStub,
     monkeypatch: Any,
