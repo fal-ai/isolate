@@ -25,6 +25,7 @@ from isolate.backends.common import active_python
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 from isolate.connections.grpc import AgentError, LocalPythonGRPC
+from isolate.connections.grpc.configuration import get_default_options
 from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions
 from isolate.server.interface import from_grpc, to_grpc
@@ -288,7 +289,10 @@ def _add_log_to_queue(messages: Queue, log: Log) -> None:
 
 
 def main() -> None:
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREADS))
+    server = grpc.server(
+        futures.ThreadPoolExecutor(max_workers=MAX_THREADS),
+        options=get_default_options(),
+    )
     with BridgeManager() as bridge_manager:
         definitions.register_isolate(IsolateServicer(bridge_manager), server)
 

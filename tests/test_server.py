@@ -1,6 +1,7 @@
 import copy
 import textwrap
 from concurrent import futures
+from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 from typing import Any, List, Optional, cast
@@ -9,6 +10,7 @@ import grpc
 import pytest
 
 from isolate.backends.settings import IsolateSettings
+from isolate.connections.grpc.configuration import get_default_options
 from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions
 from isolate.server.interface import from_grpc, to_grpc, to_serialized_object
@@ -25,9 +27,11 @@ def inherit_from_local(monkeypatch: Any, value: bool = True) -> None:
     monkeypatch.setattr("isolate.server.server.INHERIT_FROM_LOCAL", value)
 
 
-@pytest.fixture
-def stub(tmp_path):
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+@contextmanager
+def make_server(tmp_path):
+    server = grpc.server(
+        futures.ThreadPoolExecutor(max_workers=1), options=get_default_options()
+    )
     test_settings = IsolateSettings(cache_dir=tmp_path / "cache")
     with BridgeManager() as bridge:
         definitions.register_isolate(IsolateServicer(bridge, test_settings), server)
@@ -35,9 +39,20 @@ def stub(tmp_path):
         server.start()
 
         try:
-            yield definitions.IsolateStub(grpc.insecure_channel(f"{host}:{port}"))
+            yield definitions.IsolateStub(
+                grpc.insecure_channel(
+                    f"{host}:{port}",
+                    options=get_default_options(),
+                )
+            )
         finally:
             server.stop(None)
+
+
+@pytest.fixture
+def stub(tmp_path):
+    with make_server(tmp_path) as stub:
+        yield stub
 
 
 def define_environment(kind: str, **kwargs: Any) -> definitions.EnvironmentDefinition:
@@ -446,3 +461,26 @@ def test_receive_complete_logs(
     result, logs = run_function(stub, print_logs_no_delay, num_lines, should_flush)
     assert result == num_lines
     assert logs == [str(i) for i in range(num_lines)]
+
+
+def take_buffer(buffer):
+    return buffer
+
+
+def test_grpc_option_configuration(tmp_path, monkeypatch):
+    inherit_from_local(monkeypatch)
+    with monkeypatch.context() as ctx:
+        ctx.setenv("ISOLATE_GRPC_CALL_MAX_SEND_MESSAGE_LENGTH", "100")
+        ctx.setenv("ISOLATE_GRPC_CALL_MAX_RECEIVE_MESSAGE_LENGTH", "100")
+
+        with pytest.raises(grpc.RpcError, match="Sent message larger than max"):
+            with make_server(tmp_path) as stub:
+                run_function(stub, take_buffer, b"0" * 200)
+
+    with monkeypatch.context() as ctx:
+        ctx.setenv("ISOLATE_GRPC_CALL_MAX_SEND_MESSAGE_LENGTH", "5000")
+        ctx.setenv("ISOLATE_GRPC_CALL_MAX_RECEIVE_MESSAGE_LENGTH", "5000")
+
+        with make_server(tmp_path) as stub:
+            result, _ = run_function(stub, take_buffer, b"0" * 200)
+            assert result == b"0" * 200

@@ -14,6 +14,7 @@ from isolate.backends import (
 from isolate.connections._local import PythonExecutionBase, agent_startup
 from isolate.connections.common import serialize_object
 from isolate.connections.grpc import agent, definitions
+from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc, to_grpc
 from isolate.logs import Log, LogLevel, LogSource
 
@@ -38,7 +39,11 @@ class GRPCExecutionBase(EnvironmentConnection):
         max_wait_timeout: float = 10.0,
     ) -> Iterator[definitions.AgentStub]:
         with self.start_agent() as (address, credentials):
-            with grpc.secure_channel(address, credentials) as channel:
+            with grpc.secure_channel(
+                address,
+                credentials,
+                options=get_default_options(),
+            ) as channel:
                 channel_status = grpc.channel_ready_future(channel)
                 try:
                     channel_status.result(timeout=max_wait_timeout)
