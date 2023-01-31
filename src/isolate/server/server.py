@@ -173,11 +173,8 @@ class IsolateServicer(definitions.IsolateServicer):
                     # the future is completed, the timeout here should be redundant
                     # but it is just in case.
                     environment_paths.append(future.result(timeout=0.1))
-                except EnvironmentCreationError:
-                    return self.abort_with_msg(
-                        f"A problem occurred while creating the environment.",
-                        context,
-                    )
+                except EnvironmentCreationError as e:
+                    return self.abort_with_msg(f"{e}", context)
 
             primary_path, *inheritance_paths = environment_paths
             inheritance_paths.extend(extra_inheritance_paths)
