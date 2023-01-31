@@ -168,7 +168,7 @@ def test_server_builder_error(stub: definitions.IsolateStub, monkeypatch: Any) -
     with pytest.raises(grpc.RpcError) as exc:
         run_request(stub, request, build_logs=build_logs)
 
-    assert exc.match("A problem occurred while creating the environment")
+    assert "Failure during 'pip install': Command" in exc.value.details()
 
     raw_logs = [log.message for log in build_logs]
     assert "ERROR: Invalid requirement: '$$$$'" in raw_logs
@@ -343,7 +343,7 @@ def test_agent_show_logs_from_agent_requirements(
     with pytest.raises(grpc.RpcError) as exc:
         run_request(stub, request, build_logs=build_logs)
 
-    assert exc.match("A problem occurred while creating the environment")
+    assert "Failure during 'pip install': Command" in exc.value.details()
 
     raw_logs = [log.message for log in build_logs]
     assert "ERROR: Invalid requirement: '$$$$'" in raw_logs
