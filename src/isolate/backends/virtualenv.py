@@ -84,7 +84,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                     stderr=stderr,
                 )
             except subprocess.SubprocessError as exc:
-                raise EnvironmentCreationError("Failure during 'pip install'.") from exc
+                raise EnvironmentCreationError(f"Failure during 'pip install': {exc}")
 
     def _install_python_through_pyenv(self) -> str:
         from isolate.backends.pyenv import PyenvEnvironment
@@ -137,8 +137,8 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                 cli_run(args)
             except (RuntimeError, OSError) as exc:
                 raise EnvironmentCreationError(
-                    f"Failed to create the environment at '{venv_path}'"
-                ) from exc
+                    f"Failed to create the environment at '{venv_path}': {exc}"
+                )
 
             self.install_requirements(venv_path)
 

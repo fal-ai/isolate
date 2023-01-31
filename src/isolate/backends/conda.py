@@ -117,8 +117,8 @@ class CondaEnvironment(BaseEnvironment[Path]):
                         )
                     except subprocess.SubprocessError as exc:
                         raise EnvironmentCreationError(
-                            "Failure during 'conda create'"
-                        ) from exc
+                            f"Failure during 'conda create': {exc}"
+                        )
 
             else:
                 # Since our agent needs Python to be installed (at very least)
@@ -140,8 +140,8 @@ class CondaEnvironment(BaseEnvironment[Path]):
                     )
                 except subprocess.SubprocessError as exc:
                     raise EnvironmentCreationError(
-                        "Failure during 'conda create'"
-                    ) from exc
+                        f"Failure during 'conda create': {exc}"
+                    )
 
             self.log(f"New environment cached at '{env_path}'")
             return env_path
