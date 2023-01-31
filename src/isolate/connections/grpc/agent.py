@@ -23,6 +23,7 @@ from grpc import ServicerContext, StatusCode
 from isolate.backends.common import sha256_digest_of
 from isolate.connections.common import SerializationError, serialize_object
 from isolate.connections.grpc import definitions
+from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc, to_grpc
 from isolate.logs import Log, LogLevel, LogSource
 
@@ -197,6 +198,7 @@ def create_server(address: str) -> grpc.Server:
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=1),
         maximum_concurrent_rpcs=1,
+        options=get_default_options(),
     )
 
     # Local server credentials allow us to ensure that the
