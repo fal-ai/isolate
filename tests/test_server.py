@@ -15,7 +15,7 @@ from isolate.connections.grpc.configuration import get_default_options
 from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions, health
 from isolate.server.health_server import HealthServicer
-from isolate.server.interface import from_grpc, to_grpc, to_serialized_object
+from isolate.server.interface import from_grpc, to_serialized_object
 from isolate.server.server import BridgeManager, IsolateServicer
 
 REPO_DIR = Path(__file__).parent.parent
@@ -517,3 +517,73 @@ def test_health_check(health_stub: health.HealthStub) -> None:
         health.HealthCheckRequest(service="")
     )
     assert resp.status == health.HealthCheckResponse.SERVING
+
+
+def check_machine():
+    import os
+
+    return os.getpid()
+
+
+def kill_machine():
+    import os
+
+    os._exit(1)
+
+
+def get_pid_as_exc():
+    import os
+
+    raise ValueError(os.getpid())
+
+
+def test_bridge_caching_when_undeerlying_channel_fails(
+    stub: definitions.IsolateStub, monkeypatch: Any
+) -> None:
+    import os
+    import time
+
+    inherit_from_local(monkeypatch)
+    pid_1, _ = run_function(stub, check_machine)
+    pid_2, _ = run_function(stub, check_machine)
+    assert pid_1 == pid_2  # Same bridge
+
+    # Now send some faulty code that breaks the
+    # running agent and thus invalidatathing the
+    # bridge
+    with pytest.raises(grpc.RpcError):
+        run_function(stub, kill_machine)
+
+    # Now we should get a new bridge
+    pid_3, _ = run_function(stub, check_machine)
+    assert pid_1 != pid_3
+
+    # Even if there is a normal exception, the bridge
+    # should be reused (since we can capture it and it
+    # does not affect it badly).
+    with pytest.raises(ValueError) as exc_info:
+        run_function(stub, get_pid_as_exc)
+
+    [pid_4] = exc_info.value.args
+    assert pid_3 == pid_4
+
+    # Ensure that outside factors are also accounted for
+    # and the bridge is not reused
+    os.kill(pid_4, 9)
+
+    # And channels are kept fresh for a while (according
+    # to gRPC spec they might fall into idle when there is
+    # no exchange between client and server for a while but
+    # that doesn't seem to happen to us? If it did, we would
+    # add keepalive pings to the channel but not sure if we need
+    # it now).
+    pid_5 = run_function(stub, check_machine)
+    assert pid_4 != pid_5
+
+    time.sleep(10)  # I've tried up to 90, and it seems to work fine?
+    # using 10 as it is the default keepalive time
+    # which would mean the channel would normally be
+    # fallen into the idle status?
+
+    pid_6 = run_function(stub, check_machine)
+    assert pid_5 == pid_6

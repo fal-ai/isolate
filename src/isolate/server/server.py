@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import threading
 import traceback
+from collections import defaultdict
 from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
@@ -51,56 +52,102 @@ _Q_WAIT_DELAY = 0.1
 
 
 @dataclass
+class RunnerAgent:
+    stub: definitions.AgentStub
+    message_queue: Queue
+    _bound_context: ExitStack
+    _channel_state_history: list[grpc.ChannelConnectivity] = field(default_factory=list)
+
+    def __post_init__(self):
+        def switch_state(connectivity_update: grpc.ChannelConnectivity) -> None:
+            self._channel_state_history.append(connectivity_update)
+
+        self.channel.subscribe(switch_state)
+
+    @property
+    def channel(self) -> grpc.Channel:
+        return self.stub._channel  # type: ignore
+
+    @property
+    def is_accessible(self) -> bool:
+        try:
+            last_known_state = self._channel_state_history[-1]
+        except IndexError:
+            last_known_state = None
+
+        return last_known_state is grpc.ChannelConnectivity.READY
+
+    def check_connectivity(self) -> bool:
+        # Check whether the server is ready.
+        # TODO: This is more of a hack rather than a guaranteed health check,
+        # we might have to introduce the proper protocol to the agents as well
+        # to make sure that they are ready to receive requests.
+        return self.is_accessible
+
+    def terminate(self) -> None:
+        self._bound_context.close()
+
+
+@dataclass
 class BridgeManager:
-    _lock: threading.Lock = field(default_factory=threading.Lock)
-    stack: ExitStack = field(default_factory=ExitStack)
-    connections: Dict[
-        Tuple[Any, ...],
-        Tuple[LocalPythonGRPC, List[tuple[definitions.AgentStub, Queue]]],
-    ] = field(default_factory=dict)
+    _agent_access_lock: threading.Lock = field(default_factory=threading.Lock)
+    _agents: Dict[Tuple[Any, ...], List[RunnerAgent]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    _stack: ExitStack = field(default_factory=ExitStack)
 
     @contextmanager
     def establish(
         self,
-        environment: BaseEnvironment,
-        environment_path: Path,
-        extra_inheritance_paths: List[Path],
+        connection: LocalPythonGRPC,
         queue: Queue,
     ) -> Iterator[Tuple[definitions.AgentStub, Queue]]:
-        cache_hint = (environment_path, *extra_inheritance_paths)
-        with self._lock:
-            if cache_hint in self.connections:
-                connection, bridges = self.connections[cache_hint]
-                try:
-                    bridge, queue = bridges.pop()
-                except IndexError:
-                    bridge = self.stack.enter_context(connection._establish_bridge())
-            else:
-                connection = self.stack.enter_context(
-                    LocalPythonGRPC(
-                        environment,
-                        environment_path,
-                        extra_inheritance_paths=extra_inheritance_paths,
-                    )
-                )  # type: ignore
-                bridge = self.stack.enter_context(connection._establish_bridge())
-                self.connections[cache_hint] = (connection, [])
+        agent = self._allocate_new_agent(connection, queue)
 
         try:
-            yield bridge, queue
+            yield agent.stub, agent.message_queue
         finally:
-            # If the bridge is not broken, put it back into the pool.
-            # is_channel_reusable = bridge._channel._state == grpc.ChannelConnectivity.READY
-            is_channel_reusable = True
-            if is_channel_reusable:
-                with self._lock:
-                    self.connections[cache_hint][1].append((bridge, queue))
+            self._cache_agent(connection, agent)
+
+    def _cache_agent(
+        self,
+        connection: LocalPythonGRPC,
+        agent: RunnerAgent,
+    ) -> None:
+        with self._agent_access_lock:
+            self._agents[self._identify(connection)].append(agent)
+
+    def _allocate_new_agent(
+        self,
+        connection: LocalPythonGRPC,
+        queue: Queue,
+    ) -> RunnerAgent:
+        with self._agent_access_lock:
+            available_agents = self._agents[self._identify(connection)]
+            while available_agents:
+                agent = available_agents.pop()
+                if agent.check_connectivity():
+                    return agent
+                else:
+                    agent.terminate()
+
+        bound_context = ExitStack()
+        stub = bound_context.enter_context(connection._establish_bridge())
+        return RunnerAgent(stub, queue, bound_context)
+
+    def _identify(self, connection: LocalPythonGRPC) -> Tuple[Any, ...]:
+        return (
+            connection.environment_path,
+            *connection.extra_inheritance_paths,
+        )
 
     def __enter__(self) -> BridgeManager:
         return self
 
     def __exit__(self, *exc_info: Any) -> None:
-        self.stack.__exit__(*exc_info)
+        for agents in self._agents.values():
+            for agent in agents:
+                agent.terminate()
 
 
 @dataclass
@@ -181,12 +228,16 @@ class IsolateServicer(definitions.IsolateServicer):
             inheritance_paths.extend(extra_inheritance_paths)
             _, primary_environment = environments[0]
 
-            with self.bridge_manager.establish(
+            connection = LocalPythonGRPC(
                 primary_environment,
                 primary_path,
                 extra_inheritance_paths=inheritance_paths,
-                queue=messages,
-            ) as (bridge, queue):
+            )
+
+            with self.bridge_manager.establish(connection, queue=messages) as (
+                bridge,
+                queue,
+            ):
                 function_call = definitions.FunctionCall(
                     function=request.function,
                     setup_func=request.setup_func,
