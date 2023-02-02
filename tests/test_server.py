@@ -2,6 +2,7 @@ import copy
 import textwrap
 from concurrent import futures
 from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Any, List, Optional, cast
@@ -12,7 +13,8 @@ import pytest
 from isolate.backends.settings import IsolateSettings
 from isolate.connections.grpc.configuration import get_default_options
 from isolate.logs import Log, LogLevel, LogSource
-from isolate.server import definitions
+from isolate.server import definitions, health
+from isolate.server.health_server import HealthServicer
 from isolate.server.interface import from_grpc, to_grpc, to_serialized_object
 from isolate.server.server import BridgeManager, IsolateServicer
 
@@ -27,6 +29,12 @@ def inherit_from_local(monkeypatch: Any, value: bool = True) -> None:
     monkeypatch.setattr("isolate.server.server.INHERIT_FROM_LOCAL", value)
 
 
+@dataclass
+class Stubs:
+    isolate_stub: definitions.IsolateStub
+    health_stub: health.HealthStub
+
+
 @contextmanager
 def make_server(tmp_path):
     server = grpc.server(
@@ -35,24 +43,40 @@ def make_server(tmp_path):
     test_settings = IsolateSettings(cache_dir=tmp_path / "cache")
     with BridgeManager() as bridge:
         definitions.register_isolate(IsolateServicer(bridge, test_settings), server)
+        health.register_health(HealthServicer(), server)
         host, port = "localhost", server.add_insecure_port(f"[::]:0")
         server.start()
 
         try:
-            yield definitions.IsolateStub(
+            isolate_stub = definitions.IsolateStub(
                 grpc.insecure_channel(
                     f"{host}:{port}",
                     options=get_default_options(),
                 )
             )
+
+            health_stub = health.HealthStub(
+                grpc.insecure_channel(
+                    f"{host}:{port}",
+                    options=get_default_options(),
+                )
+            )
+
+            yield Stubs(isolate_stub=isolate_stub, health_stub=health_stub)
         finally:
             server.stop(None)
 
 
 @pytest.fixture
 def stub(tmp_path):
-    with make_server(tmp_path) as stub:
-        yield stub
+    with make_server(tmp_path) as stubs:
+        yield stubs.isolate_stub
+
+
+@pytest.fixture
+def health_stub(tmp_path):
+    with make_server(tmp_path) as stubs:
+        yield stubs.health_stub
 
 
 def define_environment(kind: str, **kwargs: Any) -> definitions.EnvironmentDefinition:
@@ -476,13 +500,20 @@ def test_grpc_option_configuration(tmp_path, monkeypatch):
         ctx.setenv("ISOLATE_GRPC_CALL_MAX_RECEIVE_MESSAGE_LENGTH", "100")
 
         with pytest.raises(grpc.RpcError, match="Sent message larger than max"):
-            with make_server(tmp_path) as stub:
-                run_function(stub, take_buffer, b"0" * 200)
+            with make_server(tmp_path) as stubs:
+                run_function(stubs.isolate_stub, take_buffer, b"0" * 200)
 
     with monkeypatch.context() as ctx:
         ctx.setenv("ISOLATE_GRPC_CALL_MAX_SEND_MESSAGE_LENGTH", "5000")
         ctx.setenv("ISOLATE_GRPC_CALL_MAX_RECEIVE_MESSAGE_LENGTH", "5000")
 
-        with make_server(tmp_path) as stub:
-            result, _ = run_function(stub, take_buffer, b"0" * 200)
+        with make_server(tmp_path) as stubs:
+            result, _ = run_function(stubs.isolate_stub, take_buffer, b"0" * 200)
             assert result == b"0" * 200
+
+
+def test_health_check(health_stub: health.HealthStub) -> None:
+    resp: health.HealthCheckResponse = health_stub.Check(
+        health.HealthCheckRequest(service="")
+    )
+    assert resp.status == health.HealthCheckResponse.SERVING

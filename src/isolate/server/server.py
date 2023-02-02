@@ -27,7 +27,8 @@ from isolate.backends.virtualenv import VirtualPythonEnvironment
 from isolate.connections.grpc import AgentError, LocalPythonGRPC
 from isolate.connections.grpc.configuration import get_default_options
 from isolate.logs import Log, LogLevel, LogSource
-from isolate.server import definitions
+from isolate.server import definitions, health
+from isolate.server.health_server import HealthServicer
 from isolate.server.interface import from_grpc, to_grpc
 
 # Whether to inherit all the packages from the current environment or not.
@@ -292,6 +293,7 @@ def main() -> None:
     )
     with BridgeManager() as bridge_manager:
         definitions.register_isolate(IsolateServicer(bridge_manager), server)
+        health.register_health(HealthServicer(), server)
 
         server.add_insecure_port(f"[::]:50001")
         print("Started listening at localhost:50001")
