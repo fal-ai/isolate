@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+import copy
 import functools
 import os
+import secrets
 import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional
-
-import yaml
+from typing import Any, ClassVar, Dict, List, Optional, Union
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import active_python, logged_io, sha256_digest_of
@@ -22,7 +22,7 @@ _CONDA_COMMAND = os.environ.get("CONDA_EXE", "conda")
 _ISOLATE_CONDA_HOME = os.getenv("ISOLATE_CONDA_HOME")
 
 # Conda accepts the following version specifiers: =, ==, >=, <=, >, <, !=
-_CONDA_VERSION_IDENTIFIER_CHARS = (
+_POSSIBLE_CONDA_VERSION_IDENTIFIERS = (
     "=",
     "<",
     ">",
@@ -34,9 +34,8 @@ _CONDA_VERSION_IDENTIFIER_CHARS = (
 class CondaEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "conda"
 
-    packages: List[str] = field(default_factory=list)
+    environment_definition: Dict[str, Any] = field(default_factory=dict)
     python_version: Optional[str] = None
-    env_dict: Optional[Dict[str, Any]] = None
 
     @classmethod
     def from_config(
@@ -44,61 +43,64 @@ class CondaEnvironment(BaseEnvironment[Path]):
         config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
-        if config.get("env_dict") and config.get("env_yml_str"):
-            raise EnvironmentCreationError(
-                "Either env_dict or env_yml_str can be provided, not both!"
+        processing_config = copy.deepcopy(config)
+        processing_config.setdefault("python_version", active_python())
+
+        if "env_dict" in processing_config:
+            definition = processing_config.pop("env_dict")
+        elif "env_yml_str" in processing_config:
+            import yaml
+
+            definition = yaml.safe_load(processing_config.pop("env_yml_str"))
+        elif "packages" in processing_config:
+            definition = {
+                "dependencies": processing_config.pop("packages"),
+            }
+        else:
+            raise ValueError(
+                "Either 'env_dict', 'env_yml_str' or 'packages' must be specified"
             )
-        if config.get("env_yml_str"):
-            config["env_dict"] = yaml.safe_load(config["env_yml_str"])
-            del config["env_yml_str"]
-        environment = cls(**config)
+
+        dependencies = definition.setdefault("dependencies", [])
+        if _depends_on(dependencies, "python"):
+            raise ValueError(
+                "Python version can not be specified by the environment but rather ",
+                " it needs to be passed as `python_version` option to the environment.",
+            )
+
+        dependencies.append(f"python={processing_config['python_version']}")
+
+        # Extend pip dependencies and channels if they are specified.
+        if "pip" in processing_config:
+            if not _depends_on(dependencies, "pip"):
+                dependencies.append("pip")
+
+            try:
+                dependency_group = next(
+                    dependency
+                    for dependency in dependencies
+                    if isinstance(dependency, dict) and "pip" in dependency
+                )
+            except StopIteration:
+                dependency_group = {"pip": []}
+                dependencies.append(dependency_group)
+
+            dependency_group["pip"].extend(processing_config.pop("pip"))
+
+        if "channels" in processing_config:
+            definition.setdefault("channels", [])
+            definition["channels"].extend(processing_config.pop("channels"))
+
+        environment = cls(
+            environment_definition=definition,
+            **processing_config,
+        )
         environment.apply_settings(settings)
         return environment
 
     @property
     def key(self) -> str:
-        if self.env_dict:
-            return sha256_digest_of(str(self._compute_dependencies()))
-        return sha256_digest_of(*self._compute_dependencies())
-
-    def _compute_dependencies(self) -> List[Any]:
-        if self.env_dict:
-            user_dependencies = self.env_dict.get("dependencies", []).copy()
-        else:
-            user_dependencies = self.packages.copy()
-        for raw_requirement in user_dependencies:
-            # It could be 'pip': [...]
-            if type(raw_requirement) is dict:
-                continue
-            # Get rid of all whitespace characters (python = 3.8 becomes python=3.8)
-            raw_requirement = raw_requirement.replace(" ", "")
-            if not raw_requirement.startswith("python"):
-                continue
-
-            # Ensure that the package is either python or python followed
-            # by a version specifier. Examples:
-            #  - python # OK
-            #  - python=3.8 # OK
-            #  - python>=3.8 # OK
-            #  - python-user-toolkit # NOT OK
-            #  - pythonhelp!=1.0 # NOT OK
-
-            python_suffix = raw_requirement[len("python") :]
-            if (
-                python_suffix
-                and python_suffix[0] not in _CONDA_VERSION_IDENTIFIER_CHARS
-            ):
-                continue
-
-            raise EnvironmentCreationError(
-                "Python version can not be specified by packages (it needs to be passed as `python_version` option)"
-            )
-
-        # Now that we verified that the user did not specify the Python version
-        # we can add it by ourselves
-        target_python = self.python_version or active_python()
-        user_dependencies.append(f"python={target_python}")
-        return user_dependencies
+        return sha256_digest_of(repr(self.environment_definition))
 
     def create(self, *, force: bool = False) -> Path:
         env_path = self.settings.cache_dir_for(self)
@@ -106,37 +108,15 @@ class CondaEnvironment(BaseEnvironment[Path]):
             if env_path.exists() and not force:
                 return env_path
 
-            if self.env_dict:
-                self.env_dict["dependencies"] = self._compute_dependencies()
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".yml") as tf:
-                    yaml.dump(self.env_dict, tf)
-                    tf.flush()
-                    try:
-                        self._run_conda(
-                            "env", "create", "-f", tf.name, "--prefix", env_path
-                        )
-                    except subprocess.SubprocessError as exc:
-                        raise EnvironmentCreationError(
-                            f"Failure during 'conda create': {exc}"
-                        )
+            self.log(f"Creating the environment at '{env_path}'")
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".yml") as tf:
+                import yaml
 
-            else:
-                # Since our agent needs Python to be installed (at very least)
-                # we need to make sure that the base environment is created with
-                # the same Python version as the one that is used to run the
-                # isolate agent.
-                dependencies = self._compute_dependencies()
-
-                self.log(f"Creating the environment at '{env_path}'")
-                self.log(f"Installing packages: {', '.join(dependencies)}")
-
+                yaml.dump(self.environment_definition, tf)
+                tf.flush()
                 try:
                     self._run_conda(
-                        "create",
-                        "--yes",
-                        "--prefix",
-                        env_path,
-                        *dependencies,
+                        "env", "create", "--force", "--prefix", env_path, "-f", tf.name
                     )
                 except subprocess.SubprocessError as exc:
                     raise EnvironmentCreationError(
@@ -191,3 +171,33 @@ def _get_conda_executable() -> Path:
             "Could not find conda executable. If conda executable is not available by default, please point isolate "
             " to the path where conda binary is available 'ISOLATE_CONDA_HOME'."
         )
+
+
+def _depends_on(
+    dependencies: List[Union[str, Dict[str, List[str]]]],
+    package_name: str,
+) -> bool:
+    for dependency in dependencies:
+        if isinstance(dependency, dict):
+            # It is a dependency group like pip: [...]
+            continue
+
+        # Get rid of all whitespace characters (python = 3.8 becomes python=3.8)
+        package = dependency.replace(" ", "")
+        if not package.startswith(package_name):
+            continue
+
+        # Ensure that the package name matches perfectly and not only
+        # at the prefix level. Examples:
+        #  - python # OK
+        #  - python=3.8 # OK
+        #  - python>=3.8 # OK
+        #  - python-user-toolkit # NOT OK
+        #  - pythonhelp!=1.0 # NOT OK
+        suffix = package[len(package_name) :]
+        if suffix and suffix[0] not in _POSSIBLE_CONDA_VERSION_IDENTIFIERS:
+            continue
+
+        return True
+    else:
+        return False

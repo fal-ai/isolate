@@ -1,6 +1,7 @@
 import re
 import subprocess
 import sys
+import textwrap
 from contextlib import contextmanager
 from functools import partial
 from os import environ
@@ -393,9 +394,11 @@ class TestConda(GenericEnvironmentTests):
         },
         "old-python": {
             "python_version": "3.7",
+            "packages": [],
         },
         "new-python": {
             "python_version": "3.10",
+            "packages": [],
         },
         "env-dict": {
             "env_dict": {
@@ -442,18 +445,68 @@ class TestConda(GenericEnvironmentTests):
     def test_fail_when_user_overwrites_python(
         self, tmp_path, user_packages, python_version
     ):
-        environment = self.get_environment(
-            tmp_path,
-            {
-                "packages": user_packages,
-                "python_version": python_version,
-            },
-        )
         with pytest.raises(
-            EnvironmentCreationError,
-            match="Python version can not be specified by packages",
+            ValueError,
+            match="Python version can not be specified by the environment",
         ):
-            environment.create()
+            self.get_environment(
+                tmp_path,
+                {
+                    "packages": user_packages,
+                    "python_version": python_version,
+                },
+            )
+
+    @pytest.mark.parametrize(
+        "configuration",
+        [
+            {
+                "env_dict": {
+                    "name": "test",
+                    "channels": "defaults",
+                    "dependencies": ["a", "b"],
+                }
+            },
+            {
+                "env_dict": {
+                    "name": "test",
+                    "channels": "defaults",
+                    "dependencies": ["a", "b", "pip", {"pip": ["c", "d"]}],
+                }
+            },
+            {
+                "env_yml_str": textwrap.dedent(
+                    """
+                name: test
+                channels:
+                    - defaults
+                    - conda-forge
+                """
+                )
+            },
+            {
+                "packages": ["a", "piped", "b"],
+            },
+        ],
+    )
+    def test_add_pip_dependencies(self, tmp_path, configuration):
+        environment = self.get_environment(
+            tmp_path, {**configuration, "pip": ["agent"]}
+        )
+        all_deps = environment.environment_definition["dependencies"]
+        assert "pip" in all_deps  # Ensurue pip is added as a dependency
+        assert (
+            all_deps.count("pip") == 1
+        )  # And it does not appear twice (when the environment already supplies itr)
+
+        dep_groups = [
+            dependency
+            for dependency in all_deps
+            if isinstance(dependency, dict) and "pip" in dependency
+        ]
+        assert len(dep_groups) == 1
+        pip_dep = dep_groups[0]["pip"]
+        assert "agent" in pip_dep  # And pip dependency is added
 
 
 def test_local_python_environment():
@@ -657,7 +710,7 @@ def test_isolate_server_multiple_envs(isolate_server):
     ],
 )
 def test_wrong_options(kind, config):
-    with pytest.raises(TypeError):
+    with pytest.raises((TypeError, ValueError)):
         isolate.prepare_environment(kind, **config)
 
 
