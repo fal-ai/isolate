@@ -695,6 +695,18 @@ def test_isolate_server_multiple_envs(isolate_server):
             },
         ),
         (
+            "conda",
+            {
+                "packages": [
+                    "pyjokes=1.0.0",
+                ],
+                "env_dict": {
+                    "name": "test",
+                    "dependencies": ["pyjokes=2.0.0"],
+                },
+            },
+        ),
+        (
             "isolate-server",
             {
                 "host": "localhost",
