@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import functools
 import os
-import secrets
 import shutil
 import subprocess
 import tempfile
@@ -12,7 +11,12 @@ from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Union
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
-from isolate.backends.common import active_python, logged_io, sha256_digest_of
+from isolate.backends.common import (
+    active_python,
+    logged_io,
+    optional_import,
+    sha256_digest_of,
+)
 from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
 from isolate.connections import PythonIPC
 
@@ -49,7 +53,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
         if "env_dict" in processing_config:
             definition = processing_config.pop("env_dict")
         elif "env_yml_str" in processing_config:
-            import yaml
+            yaml = optional_import("yaml")
 
             definition = yaml.safe_load(processing_config.pop("env_yml_str"))
         elif "packages" in processing_config:
@@ -110,10 +114,10 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
             self.log(f"Creating the environment at '{env_path}'")
             with tempfile.NamedTemporaryFile(mode="w", suffix=".yml") as tf:
-                import yaml
-
+                yaml = optional_import("yaml")
                 yaml.dump(self.environment_definition, tf)
                 tf.flush()
+
                 try:
                     self._run_conda(
                         "env", "create", "--force", "--prefix", env_path, "-f", tf.name

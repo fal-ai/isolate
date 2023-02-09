@@ -12,6 +12,7 @@ from isolate.backends.common import (
     active_python,
     get_executable_path,
     logged_io,
+    optional_import,
     sha256_digest_of,
 )
 from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
@@ -101,11 +102,10 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         return str(get_executable_path(pyenv.create(), "python"))
 
     def _decide_python(self) -> str:
-        from virtualenv.discovery import builtin
-
         from isolate.backends.pyenv import _get_pyenv_executable
 
-        interpreter = builtin.get_interpreter(self.python_version, ())
+        builtin_discovery = optional_import("virtualenv.discovery.builtin")
+        interpreter = builtin_discovery.get_interpreter(self.python_version, ())
         if interpreter is not None:
             return interpreter.executable
 
@@ -120,7 +120,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             return self._install_python_through_pyenv()
 
     def create(self, *, force: bool = False) -> Path:
-        from virtualenv import cli_run
+        virtualenv = optional_import("virtualenv")
 
         venv_path = self.settings.cache_dir_for(self)
         with self.settings.cache_lock_for(venv_path):
@@ -134,7 +134,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                 args.append(f"--python={self._decide_python()}")
 
             try:
-                cli_run(args)
+                virtualenv.cli_run(args)
             except (RuntimeError, OSError) as exc:
                 raise EnvironmentCreationError(
                     f"Failed to create the environment at '{venv_path}': {exc}"

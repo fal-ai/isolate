@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING, Any, Dict, Type, Union
 
-import importlib_metadata
+if sys.version_info >= (3, 10):
+    import importlib.metadata as importlib_metadata
+else:
+    import importlib_metadata
 
 if TYPE_CHECKING:
     from isolate.backends import BaseEnvironment
@@ -40,7 +44,7 @@ def prepare_environment(
 
     if kind not in _ENVIRONMENTS:
         entry_point = _ENTRY_POINTS.get(kind)
-        if not entry_point:
+        if entry_point is None:
             raise ValueError(f"Unknown environment: '{kind}'")
 
         _ENVIRONMENTS[kind] = entry_point.load()
