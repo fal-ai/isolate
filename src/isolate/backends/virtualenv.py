@@ -18,6 +18,9 @@ from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
 from isolate.connections import PythonIPC
 
 
+FORCE_PYTHON_COPY = os.getenv("ISOLATE_FORCE_PYTHON_COPY") == "1"
+
+
 @dataclass
 class VirtualPythonEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "virtualenv"
@@ -132,7 +135,8 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             args = [str(venv_path)]
             if self.python_version:
                 args.append(f"--python={self._decide_python()}")
-
+                if FORCE_PYTHON_COPY:
+                    args.append("--always-copy")
             try:
                 cli_run(args)
             except (RuntimeError, OSError) as exc:
