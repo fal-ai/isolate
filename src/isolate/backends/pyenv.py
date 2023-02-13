@@ -15,6 +15,12 @@ from isolate.connections import PythonIPC
 
 _PYENV_EXECUTABLE_NAME = "pyenv"
 _PYENV_EXECUTABLE_PATH = os.environ.get("ISOLATE_PYENV_EXECUTABLE")
+_PYENV_ROOT = os.environ.get("ISOLATE_PYENV_ROOT")
+
+if _PYENV_ROOT:
+    _PYENV_ROOT_PATH = Path(_PYENV_ROOT)
+else:
+    _PYENV_ROOT_PATH = None
 
 
 @dataclass
@@ -45,7 +51,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
             # use versions/$version as the key and $root as the base directory (for pyenv).
             #
             # [0]: https://github.com/pyenv/pyenv#locating-pyenv-provided-python-installations
-            pyenv_root = env_path.parent.parent
+            pyenv_root = _PYENV_ROOT_PATH or env_path.parent.parent
             prefix = self._try_get_prefix(pyenv, pyenv_root)
             if prefix is None or force:
                 self._install_python(pyenv, pyenv_root)
@@ -98,7 +104,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
             if not connection_key.exists():
                 return None
 
-            pyenv_root = connection_key.parent.parent
+            pyenv_root = _PYENV_ROOT_PATH or connection_key.parent.parent
             with logged_io(self.log) as (stdout, stderr):
                 subprocess.check_call(
                     [pyenv, "uninstall", "-f", connection_key.name],
@@ -111,7 +117,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
         pyenv = _get_pyenv_executable()
         cache_dir = self.settings.cache_dir_for(self)
         with self.settings.cache_lock_for(cache_dir):
-            pyenv_root = cache_dir.parent.parent
+            pyenv_root = _PYENV_ROOT_PATH or cache_dir.parent.parent
             prefix = self._try_get_prefix(pyenv, pyenv_root)
             return prefix is not None
 
