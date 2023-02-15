@@ -1,3 +1,4 @@
+import sys
 from unittest.mock import create_autospec, patch
 
 import pytest
@@ -22,18 +23,23 @@ def test_environment_discovery(fresh_registry):
     # This test currently depends on too-much internals, but
     # can be improved later on.
 
-    from importlib_metadata import EntryPoint, EntryPoints
-
-    from isolate.registry import _ENTRY_POINT, _reload_registry
+    from isolate.registry import (
+        _ENTRY_POINT,
+        _reload_registry,
+        importlib_metadata,
+    )
 
     fake_ep = create_autospec(
-        EntryPoint,
+        importlib_metadata.EntryPoint,
     )
     fake_ep.name = "fake"
     fake_ep.value = "isolate.backends._base.BaseEnvironment"
-    fake_ep.group = "isolate.environments"
+    fake_ep.group = "isolate.backends"
 
-    with patch("importlib_metadata.entry_points", return_value=EntryPoints([fake_ep])):
+    with patch(
+        f"isolate.registry.importlib_metadata.entry_points",
+        return_value=importlib_metadata.EntryPoints([fake_ep]),
+    ):
         _reload_registry()
 
         environment = prepare_environment("fake")

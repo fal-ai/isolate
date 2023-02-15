@@ -162,10 +162,7 @@ def test_server_basic_communication(
         # deserialize the given function, so they need to be installed
         # when we are not inheriting the local environment.
         requirements.append("dill==0.3.5.1")
-
-        # TODO: apparently [server] doesn't work but [grpc] does work (not sure why
-        # needs further investigation, probably poetry related).
-        requirements.append(f"{REPO_DIR}[grpc]")
+        requirements.append(f"{REPO_DIR}")
 
     env_definition = define_environment("virtualenv", requirements=requirements)
     request = definitions.BoundFunction(
@@ -587,3 +584,26 @@ def test_bridge_caching_when_undeerlying_channel_fails(
 
     pid_6 = run_function(stub, check_machine)
     assert pid_5 == pid_6
+
+
+def test_server_minimum_viable_proto_version(stub: definitions.IsolateStub) -> None:
+    # The agent process needs dill (and isolate) to actually
+    # deserialize the given function, so they need to be installed
+    # when we are not inheriting the local environment.
+
+    # protobuf<3 (the 2.x series) seems to use Python 2 only?
+    requirements = ["protobuf>3,<4"]
+    requirements.append("dill==0.3.5.1")
+    requirements.append(f"{REPO_DIR}")
+
+    env_definition = define_environment("virtualenv", requirements=requirements)
+    request = definitions.BoundFunction(
+        function=to_serialized_object(
+            partial(eval, "1+2"),
+            method="dill",
+        ),
+        environments=[env_definition],
+    )
+
+    raw_result = run_request(stub, request)
+    assert from_grpc(raw_result) == 3
