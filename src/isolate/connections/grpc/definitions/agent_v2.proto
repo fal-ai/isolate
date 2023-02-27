@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+import "common.proto";
+
+service AgentV2 {
+    // Create a new task.
+    rpc CreateTask (CreateTaskRequest) returns (CreateTaskResponse) {}
+    // Check the status of a task.
+    rpc CheckTask (CheckTaskRequest) returns (CheckTaskResponse) {}
+    // Try to cancel a task, if it is running. If it is running, there is
+    // nothing we can do to stop it (so the server has to choose either to
+    // kill the entire agent or to let the task run to completion).
+    rpc CancelTask (CancelTaskRequest) returns (CancelTaskResponse) {}
+    // The current status of the task queue.
+    rpc AgentStatus (AgentStatusRequest) returns (AgentStatusResponse) {}
+}
+
+message CreateTaskRequest {
+    // The function to run.
+    SerializedObject function = 1;
+}
+
+message CreateTaskResponse {
+    // The task that was created.
+    string task_id = 1;
+}
+
+message CheckTaskRequest {
+    // The task to check.
+    string task_id = 1;
+}
+
+enum TaskStatus {
+    QUEUED = 0;
+    RUNNING = 1;
+    COMPLETED = 2;
+}
+
+message CheckTaskResponse {
+    // The status of the task.
+    TaskStatus status = 1;
+    // The result of the task, if it is completed.
+    optional SerializedObject result = 2;
+}
+
+message CancelTaskRequest {
+    // The task to cancel.
+    string task_id = 1;
+}
+
+message CancelTaskResponse {
+    // Whether the task was cancelled or not (only when it was running).
+    bool did_cancel = 1;
+}
+
+message AgentStatusRequest {
+    // For future use.
+}
+
+message AgentStatusResponse {
+    // The number of tasks in the queue.
+    int32 num_queued = 1;
+    // If there is currently a running task, then 0. Otherwise, the number of
+    // seconds passed since the last task was completed.
+    float idle_for = 2;
+}
+
