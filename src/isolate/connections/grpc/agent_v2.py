@@ -186,7 +186,7 @@ class AgentV2Servicer(proto.AgentV2Servicer):
         elif self.active_task and self.active_task.id == request.task_id:
             return proto.CheckTaskResponse(status=proto.TaskStatus.RUNNING)
         else:
-            queued_tasks = [task.id for task in self.task_queue.queue]
+            queued_tasks = self.tasks.keys()
             assert request.task_id in queued_tasks
             return proto.CheckTaskResponse(status=proto.TaskStatus.QUEUED)
 
@@ -274,7 +274,7 @@ def main() -> int:
 
     parser = ArgumentParser()
     parser.add_argument(
-        "--address",
+        "address",
         default="localhost:50051",
         help="The address to listen on.",
     )
