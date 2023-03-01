@@ -2,3 +2,4 @@ pytest
 cloudpickle>=2.2.0
 dill>=0.3.5.1
 pytest-rerunfailures
+pytest-grpc
