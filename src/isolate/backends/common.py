@@ -11,6 +11,7 @@ import time
 from contextlib import contextmanager, suppress
 from functools import lru_cache
 from pathlib import Path
+from types import ModuleType
 from typing import Callable, Dict, Iterator, Optional, Tuple, Union
 
 # For ensuring that the lock is created and not forgotten
@@ -220,3 +221,20 @@ def active_python() -> str:
     and re-creating this environment. Currently only covers major and
     minor versions (like 3.9); patch versions are ignored (like 3.9.4)."""
     return sysconfig.get_python_version()
+
+
+def optional_import(module_name: str) -> ModuleType:
+    """Try to import the given module, and fail if it is not available
+    with an informative error message that includes the installations
+    instructions."""
+
+    import importlib
+
+    try:
+        return importlib.import_module(module_name)
+    except ImportError as exc:
+        raise ImportError(
+            "isolate must be installed with the 'build' extras for "
+            f"accessing {module_name!r} import functionality. Please try: "
+            f"'$ pip install \"isolate[build]\"' to install it."
+        ) from exc
