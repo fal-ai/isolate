@@ -38,36 +38,24 @@ class LogSource(str, Enum):
 class LogLevel(Enum):
     """Represents the log level."""
 
-    TRACE = "trace"
-    DEBUG = "debug"
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
+    TRACE = 0
+    DEBUG = 10
+    INFO = 20
+    WARNING = 30
+    ERROR = 40
 
     # For user scripts
-    STDOUT = "stdout"
-    STDERR = "stderr"
-
-    @property
-    def score(self) -> int:
-        scores: dict[LogLevel, int] = {
-            LogLevel.STDERR: 110,
-            LogLevel.STDOUT: 100,
-            LogLevel.ERROR: 40,
-            LogLevel.WARNING: 30,
-            LogLevel.INFO: 20,
-            LogLevel.DEBUG: 10,
-            LogLevel.TRACE: 0,
-        }
-        return scores[self]
+    STDOUT = 100
+    STDERR = 110
 
     def __lt__(self, other: LogLevel) -> bool:
         if self.__class__ is other.__class__:
-            return self.score < other.score
+            return self.value < other.value
         return NotImplemented
 
     def __str__(self) -> str:
-        return self.value
+        return self.name.lower()
+
 
 @dataclass
 class Log:
