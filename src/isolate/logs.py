@@ -5,6 +5,7 @@ import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from enum import Enum
+from functools import total_ordering
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Dict, Iterator, NewType, Optional
 
@@ -33,18 +34,27 @@ class LogSource(str, Enum):
     USER = "user"
 
 
-class LogLevel(str, Enum):
+@total_ordering
+class LogLevel(Enum):
     """Represents the log level."""
 
-    TRACE = "trace"
-    DEBUG = "debug"
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
+    TRACE = 0
+    DEBUG = 10
+    INFO = 20
+    WARNING = 30
+    ERROR = 40
 
     # For user scripts
-    STDOUT = "stdout"
-    STDERR = "stderr"
+    STDOUT = 100
+    STDERR = 110
+
+    def __lt__(self, other: LogLevel) -> bool:
+        if self.__class__ is other.__class__:
+            return self.value < other.value
+        return NotImplemented
+
+    def __str__(self) -> str:
+        return self.name.lower()
 
 
 @dataclass
