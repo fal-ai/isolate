@@ -36,7 +36,7 @@ def _(message: definitions.SerializedObject) -> Any:
 @from_grpc.register
 def _(message: definitions.Log) -> Log:
     source = LogSource(definitions.LogSource.Name(message.source).lower())
-    level = LogLevel(definitions.LogLevel.Name(message.level).lower())
+    level = LogLevel[definitions.LogLevel.Name(message.level).upper()]
     return Log(
         message=message.message,
         source=source,
