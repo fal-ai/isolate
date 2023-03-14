@@ -191,10 +191,10 @@ class GenericEnvironmentTests:
             assert py_version.startswith("Python 3")
 
     def test_self_installed_executable_running(self, tmp_path):
-        environment = self.get_project_environment(tmp_path, "dbt-core")
+        environment = self.get_project_environment(tmp_path, "black")
         with environment.connect() as connection:
-            dbt_version = self._run_cmd(connection, "dbt", "--version")
-            assert "installed: 1.3.1" in dbt_version
+            black_version = self._run_cmd(connection, "black", "--version")
+            assert "black, 22.12.0" in black_version
 
     def test_custom_python_version(self, tmp_path):
         for python_type, python_version in [
@@ -225,8 +225,8 @@ class TestVirtualenv(GenericEnvironmentTests):
         "example-binary": {
             "requirements": [],
         },
-        "dbt-core": {
-            "requirements": ["dbt-core==1.3.1"],
+        "black": {
+            "requirements": ["black==22.12.0"],
         },
         "old-python": {
             "python_version": "3.7",
@@ -389,8 +389,8 @@ class TestConda(GenericEnvironmentTests):
         "example-binary": {
             "packages": [],
         },
-        "dbt-core": {
-            "packages": ["dbt-core=1.3.1"],
+        "black": {
+            "packages": ["black=22.12.0"],
         },
         "old-python": {
             "python_version": "3.7",
