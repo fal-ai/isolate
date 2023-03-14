@@ -4,14 +4,16 @@ import functools
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, Optional
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
-from isolate.backends.common import active_python, logged_io, sha256_digest_of
+from isolate.backends.common import logged_io
 from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
 from isolate.connections import PythonIPC
+from isolate.logs import LogLevel
 
 _PYENV_EXECUTABLE_NAME = "pyenv"
 _PYENV_EXECUTABLE_PATH = os.environ.get("ISOLATE_PYENV_EXECUTABLE")
@@ -77,7 +79,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
         return Path(prefix.strip())
 
     def _install_python(self, pyenv: Path, root_path: Path) -> None:
-        with logged_io(self.log) as (stdout, stderr):
+        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
             try:
                 subprocess.check_call(
                     [pyenv, "install", "--skip-existing", self.python_version],

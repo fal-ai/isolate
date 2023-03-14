@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Union
 
@@ -19,6 +20,7 @@ from isolate.backends.common import (
 )
 from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
 from isolate.connections import PythonIPC
+from isolate.logs import LogLevel
 
 # Specify the path where the conda binary might reside in (or
 # mamba, if it is the preferred one).
@@ -147,7 +149,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     def _run_conda(self, *args: Any) -> None:
         conda_executable = _get_conda_executable()
-        with logged_io(self.log) as (stdout, stderr):
+        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
             subprocess.check_call(
                 [conda_executable, *args],
                 stdout=stdout,
