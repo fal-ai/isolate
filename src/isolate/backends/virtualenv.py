@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Union
 
@@ -17,6 +18,7 @@ from isolate.backends.common import (
 )
 from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
 from isolate.connections import PythonIPC
+from isolate.logs import LogLevel
 
 
 @dataclass
@@ -77,7 +79,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         for extra_index_url in self.extra_index_urls:
             pip_cmd.extend(["--extra-index-url", extra_index_url])
 
-        with logged_io(self.log) as (stdout, stderr):
+        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
             try:
                 subprocess.check_call(
                     pip_cmd,
