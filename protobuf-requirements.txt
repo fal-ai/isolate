@@ -1,0 +1,8 @@
+# Pre-commit
+pre-commit
+pyyaml
+
+# Protobuf
+refactor
+grpcio-tools
+mypy-protobuf
