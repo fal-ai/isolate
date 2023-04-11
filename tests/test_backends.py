@@ -190,7 +190,7 @@ class GenericEnvironmentTests:
             py_version = self._run_cmd(connection, "python", "--version")
             assert py_version.startswith("Python 3")
 
-    @pytest.mark.skip(reason="need to fix conda error on Python 3.7")
+    @pytest.mark.xfail(reason="need to fix conda error on python 3.7")
     def test_self_installed_executable_running(self, tmp_path):
         environment = self.get_project_environment(tmp_path, "black")
         with environment.connect() as connection:
