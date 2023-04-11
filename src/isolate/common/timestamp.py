@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -12,4 +12,4 @@ def from_datetime(time: datetime) -> Timestamp:
 
 
 def to_datetime(timestamp: Timestamp) -> datetime:
-    return timestamp.ToDatetime()
+    return timestamp.ToDatetime(tzinfo=timezone.utc)
