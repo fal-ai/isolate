@@ -101,12 +101,12 @@ class IsolatedProcessConnection(EnvironmentConnection):
         """Start the agent process."""
         raise NotImplementedError
 
-    def run(
+    def run(  # type: ignore[return-value]
         self,
         executable: BasicCallable,
         *args: Any,
         **kwargs: Any,
-    ) -> CallResultType:
+    ) -> CallResultType:  # type: ignore[type-var]
         """Spawn an agent process using the given environment, run the given
         `executable` in that process, and return the result object back."""
 
@@ -164,7 +164,7 @@ class IsolatedProcessConnection(EnvironmentConnection):
         self,
         process: subprocess.Popen,
         connection: Connection,
-    ) -> CallResultType:
+    ) -> CallResultType:  # type: ignore[type-var]
         """Take the given process, and poll until either it exits or returns
         a result object."""
 

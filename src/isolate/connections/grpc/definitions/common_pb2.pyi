@@ -8,6 +8,7 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
+import google.protobuf.timestamp_pb2
 import sys
 import typing
 
@@ -187,20 +188,34 @@ class Log(google.protobuf.message.Message):
     MESSAGE_FIELD_NUMBER: builtins.int
     SOURCE_FIELD_NUMBER: builtins.int
     LEVEL_FIELD_NUMBER: builtins.int
+    TIMESTAMP_FIELD_NUMBER: builtins.int
     message: builtins.str
     source: global___LogSource.ValueType
     level: global___LogLevel.ValueType
+    @property
+    def timestamp(self) -> google.protobuf.timestamp_pb2.Timestamp: ...
     def __init__(
         self,
         *,
         message: builtins.str = ...,
         source: global___LogSource.ValueType = ...,
         level: global___LogLevel.ValueType = ...,
+        timestamp: google.protobuf.timestamp_pb2.Timestamp | None = ...,
     ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["timestamp", b"timestamp"]
+    ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "level", b"level", "message", b"message", "source", b"source"
+            "level",
+            b"level",
+            "message",
+            b"message",
+            "source",
+            b"source",
+            "timestamp",
+            b"timestamp",
         ],
     ) -> None: ...
 
