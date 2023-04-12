@@ -61,7 +61,7 @@ class GRPCExecutionBase(EnvironmentConnection):
         executable: BasicCallable,
         *args: Any,
         **kwargs: Any,
-    ) -> CallResultType:
+    ) -> CallResultType:  # type: ignore[type-var]
         # Implementation details
         # ======================
         #

@@ -4,6 +4,7 @@ import shutil
 import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from datetime import datetime, timezone
 from enum import Enum
 from functools import total_ordering
 from pathlib import Path
@@ -65,9 +66,10 @@ class Log:
     source: LogSource
     level: LogLevel = LogLevel.INFO
     bound_env: Optional[BaseEnvironment] = field(default=None, repr=False)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __str__(self) -> str:
-        parts = []
+        parts = [self.timestamp.strftime("%m/%d/%Y %H:%M:%S")]
         if self.bound_env:
             parts.append(f"[{self.bound_env.key[:6]}]")
         else:

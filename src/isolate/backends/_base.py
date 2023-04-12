@@ -117,7 +117,7 @@ class EnvironmentConnection:
         executable: BasicCallable,
         *args: Any,
         **kwargs: Any,
-    ) -> CallResultType:
+    ) -> CallResultType:  # type: ignore[type-var]
         """Run the given executable inside the environment, and return the result.
         If the executable raises an exception, then it will be raised directly."""
         raise NotImplementedError

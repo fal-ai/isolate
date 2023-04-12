@@ -4,6 +4,7 @@ and the Isolate Server to share."""
 import functools
 from typing import TYPE_CHECKING, Any, Optional
 
+from isolate.common import timestamp
 from isolate.connections.common import load_serialized_object, serialize_object
 from isolate.connections.grpc import definitions
 from isolate.logs import Log, LogLevel, LogSource
@@ -41,6 +42,7 @@ def _(message: definitions.Log) -> Log:
         message=message.message,
         source=source,
         level=level,
+        timestamp=timestamp.to_datetime(message.timestamp),
     )
 
 
@@ -50,6 +52,7 @@ def _(obj: Log) -> definitions.Log:
         message=obj.message,
         source=definitions.LogSource.Value(obj.source.name.upper()),
         level=definitions.LogLevel.Value(obj.level.name.upper()),
+        timestamp=timestamp.from_datetime(obj.timestamp),
     )
 
 
