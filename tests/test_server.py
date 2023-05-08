@@ -124,7 +124,7 @@ def run_request(
         return cast(definitions.SerializedObject, return_value)
 
 
-def run_function(stub, function, *args, **kwargs):
+def run_function(stub, function, *args, log_handler=None, **kwargs):
     import __main__
     import dill
 
@@ -142,7 +142,7 @@ def run_function(stub, function, *args, **kwargs):
         environments=[environment],
     )
 
-    user_logs: List[Log] = []
+    user_logs: List[Log] = [] if log_handler is None else log_handler
     result = run_request(stub, request, user_logs=user_logs)
 
     raw_user_logs = [log.message for log in user_logs if log.message]
@@ -607,3 +607,43 @@ def test_server_minimum_viable_proto_version(stub: definitions.IsolateStub) -> N
 
     raw_result = run_request(stub, request)
     assert from_grpc(raw_result) == 3
+
+
+def send_unserializable_object():
+    import sys
+
+    return sys._getframe()
+
+
+def raise_unserializable_object():
+    import sys
+
+    raise Exception("relevant information", sys._getframe())
+
+
+def test_server_proper_error_delegation(
+    stub: definitions.IsolateStub, monkeypatch: Any
+) -> None:
+    inherit_from_local(monkeypatch)
+
+    user_logs = []
+    with pytest.raises(grpc.RpcError) as exc_info:
+        run_function(stub, send_unserializable_object, log_handler=user_logs)
+
+    assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+    assert (
+        exc_info.value.details()
+        == "Error while serializing the execution result (object of type <class 'frame'>)."
+    )
+    assert not user_logs
+
+    user_logs = []
+    with pytest.raises(grpc.RpcError) as exc_info:
+        run_function(stub, raise_unserializable_object, log_handler=user_logs)
+
+    assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+    assert (
+        exc_info.value.details()
+        == "Error while serializing the execution result (object of type <class 'Exception'>)."
+    )
+    assert "relevant information" in "\n".join(log.message for log in user_logs)
