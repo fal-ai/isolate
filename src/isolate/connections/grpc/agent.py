@@ -142,14 +142,17 @@ class AgentServicer(definitions.AgentServicer):
         serialization_method: str,
         result: object,
         was_it_raised: bool,
-        stringized_tb: str,
+        stringized_tb: str | None,
     ) -> Generator[definitions.PartialRunResult, None, Any]:
         try:
             definition = serialize_object(serialization_method, result)
         except SerializationError:
-            yield from self.log(traceback.format_exc(), level=LogLevel.ERROR)
+            if stringized_tb:
+                yield from self.log(
+                    stringized_tb, source=LogSource.USER, level=LogLevel.STDERR
+                )
             raise AbortException(
-                "The result of the input function could not be serialized."
+                f"Error while serializing the execution result (object of type {type(result)})."
             )
         except BaseException:
             yield from self.log(traceback.format_exc(), level=LogLevel.ERROR)

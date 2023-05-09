@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import os
+from dataclasses import dataclass
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Iterator, Optional, cast
 
@@ -21,8 +22,11 @@ if TYPE_CHECKING:
 AGENT_SIGNATURE = "IS_ISOLATE_AGENT"
 
 
+@dataclass
 class SerializationError(Exception):
     """An error that happened during the serialization process."""
+
+    message: str
 
 
 @contextmanager

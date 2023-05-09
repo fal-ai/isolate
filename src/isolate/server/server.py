@@ -261,6 +261,17 @@ class IsolateServicer(definitions.IsolateServicer):
                 # during the execution, and handle them accordingly.
                 exception = future.exception(timeout=0.1)
                 if exception is not None:
+                    # If this is an RPC error, propagate it as is without any
+                    # further processing.
+                    if isinstance(exception, grpc.RpcError):
+                        return self.abort_with_msg(
+                            exception.details(),
+                            context,
+                            code=exception.code(),
+                        )
+
+                    # Otherwise this is a bug in the agent itself, so needs
+                    # to be propagated with more details.
                     for line in traceback.format_exception(
                         type(exception), exception, exception.__traceback__
                     ):
@@ -282,7 +293,8 @@ class IsolateServicer(definitions.IsolateServicer):
         self, queue: Queue, is_completed: Callable[[], bool]
     ) -> Iterator[definitions.PartialRunResult]:
         """Watch the given queue until the is_completed function returns True. Note that even
-        if the function is completed, this function might not finish until the queue is empty."""
+        if the function is completed, this function might not finish until the queue is empty.
+        """
         while not is_completed():
             try:
                 yield queue.get(timeout=_Q_WAIT_DELAY)
