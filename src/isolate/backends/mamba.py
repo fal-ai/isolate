@@ -122,7 +122,7 @@ class MambaEnvironment(BaseEnvironment[Path]):
 
                 try:
                     self._run_mamba(
-                        "env", "create", "--prefix", env_path, "-f", tf.name
+                        "env", "create", "--yes", "--prefix", env_path, "-f", tf.name
                     )
                 except subprocess.SubprocessError as exc:
                     raise EnvironmentCreationError(
@@ -146,6 +146,10 @@ class MambaEnvironment(BaseEnvironment[Path]):
                 "--prefix",
                 connection_key,
             )
+
+            # Unlike conda, mamba leaves a metafile inside the cache_dir, so we have to
+            # manually remove it.
+            os.system(f"rm -rf {self.settings.cache_dir_for(self)}")
 
     def _run_mamba(self, *args: Any) -> None:
         mamba_executable = _get_mamba_executable()
