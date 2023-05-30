@@ -42,6 +42,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     environment_definition: Dict[str, Any] = field(default_factory=dict)
     python_version: Optional[str] = None
+    tags: List[str] = field(default_factory=list)
 
     @classmethod
     def from_config(
@@ -106,7 +107,11 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     @property
     def key(self) -> str:
-        return sha256_digest_of(repr(self.environment_definition))
+        return sha256_digest_of(
+            repr(self.environment_definition),
+            self.python_version,
+            *self.tags,
+        )
 
     def create(self, *, force: bool = False) -> Path:
         env_path = self.settings.cache_dir_for(self)

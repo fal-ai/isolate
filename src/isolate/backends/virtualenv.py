@@ -29,6 +29,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
     constraints_file: Optional[os.PathLike] = None
     python_version: Optional[str] = None
     extra_index_urls: List[str] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
 
     @classmethod
     def from_config(
@@ -54,6 +55,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             *self.requirements,
             *constraints,
             *self.extra_index_urls,
+            *self.tags,
         )
 
     def install_requirements(self, path: Path) -> None:
