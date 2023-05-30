@@ -110,7 +110,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
         return sha256_digest_of(
             repr(self.environment_definition),
             self.python_version,
-            *self.tags,
+            *sorted(self.tags),
         )
 
     def create(self, *, force: bool = False) -> Path:

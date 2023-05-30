@@ -55,7 +55,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             *self.requirements,
             *constraints,
             *self.extra_index_urls,
-            *self.tags,
+            *sorted(self.tags),
         )
 
     def install_requirements(self, path: Path) -> None:

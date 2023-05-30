@@ -356,6 +356,24 @@ class TestVirtualenv(GenericEnvironmentTests):
         ):
             environment.create()
 
+    def test_tags_in_key(self, tmp_path, monkeypatch):
+        # Disable pyenv to prevent auto-installation
+        monkeypatch.setattr(
+            "isolate.backends.pyenv._get_pyenv_executable", lambda: 1 / 0
+        )
+
+        constraints = self.configs['old-example-project']
+        tagged = constraints.copy()
+        tagged['tags'] = ['tag1', 'tag2']
+        tagged_environment = self.get_environment(tmp_path, tagged)
+
+        no_tagged_environment = self.get_environment(tmp_path, constraints)
+        assert tagged_environment.key != no_tagged_environment.key, "Tagged environment should have different key"
+
+        tagged["tags"] = ["tag2", "tag1"]
+        tagged_environment_2 = self.get_environment(tmp_path, tagged)
+        assert tagged_environment.key == tagged_environment_2.key, "Tag order should not matter"
+
 
 # Since conda is an external dependency, we'll skip tests using it
 # if it is not installed.
@@ -509,6 +527,18 @@ class TestConda(GenericEnvironmentTests):
         pip_dep = dep_groups[0]["pip"]
         assert "agent" in pip_dep  # And pip dependency is added
 
+    def test_tags_in_key(self, tmp_path):
+        constraints = self.configs['old-example-project']
+        tagged = constraints.copy()
+        tagged['tags'] = ['tag1', 'tag2']
+        tagged_environment = self.get_environment(tmp_path, tagged)
+
+        no_tagged_environment = self.get_environment(tmp_path, constraints)
+        assert tagged_environment.key != no_tagged_environment.key, "Tagged environment should have different key"
+
+        tagged["tags"] = ["tag2", "tag1"]
+        tagged_environment_2 = self.get_environment(tmp_path, tagged)
+        assert tagged_environment.key == tagged_environment_2.key, "Tag order should not matter"
 
 def test_local_python_environment():
     """Since 'local' environment does not support installation of extra dependencies
