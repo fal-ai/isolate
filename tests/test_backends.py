@@ -13,8 +13,7 @@ import pytest
 import isolate
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import sha256_digest_of
-from isolate.backends.conda import CondaEnvironment, _get_conda_executable
-from isolate.backends.mamba import MambaEnvironment, _get_mamba_executable
+from isolate.backends.conda import CondaEnvironment, _get_executable
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.pyenv import PyenvEnvironment, _get_pyenv_executable
 from isolate.backends.remote import IsolateServer
@@ -379,7 +378,7 @@ class TestVirtualenv(GenericEnvironmentTests):
 # Since conda is an external dependency, we'll skip tests using it
 # if it is not installed.
 try:
-    _get_conda_executable()
+    _get_executable("conda")
 except FileNotFoundError:
     IS_CONDA_AVAILABLE = False
 else:
@@ -388,14 +387,14 @@ else:
 # Since conda is an external dependency, we'll skip tests using it
 # if it is not installed.
 try:
-    _get_mamba_executable()
+    _get_executable("mamba")
 except FileNotFoundError:
     IS_MAMBA_AVAILABLE = False
 else:
     IS_MAMBA_AVAILABLE = True
 
 
-@pytest.mark.skipif(not IS_CONDA_AVAILABLE, reason="Conda is not available")
+@pytest.mark.skipif(not IS_MAMBA_AVAILABLE, reason="Mamba is not available")
 class TestConda(GenericEnvironmentTests):
 
     backend_cls = CondaEnvironment
@@ -550,149 +549,6 @@ class TestConda(GenericEnvironmentTests):
         tagged_environment_2 = self.get_environment(tmp_path, tagged)
         assert tagged_environment.key == tagged_environment_2.key, "Tag order should not matter"
 
-@pytest.mark.skipif(not IS_MAMBA_AVAILABLE, reason="Mamba is not available")
-class TestMamba(GenericEnvironmentTests):
-
-    backend_cls = MambaEnvironment
-    configs = {
-        "empty": {
-            "packages": [],
-        },
-        "old-example-project": {
-            "packages": ["pyjokes=0.5.0"],
-        },
-        "new-example-project": {
-            "packages": ["pyjokes=0.6.0"],
-        },
-        "invalid-project": {
-            "requirements": ["pyjokes=999.999.999"],
-        },
-        "r": {
-            "packages": ["r-base=4.2.2"],
-        },
-        "example-binary": {
-            "packages": [],
-        },
-        "black": {
-            "packages": ["black=22.12.0"],
-        },
-        "old-python": {
-            "python_version": "3.7",
-            "packages": [],
-        },
-        "new-python": {
-            "python_version": "3.10",
-            "packages": [],
-        },
-        "env-dict": {
-            "env_dict": {
-                "name": "test",
-                "channels": "defaults",
-                "dependencies": [{"pip": ["pyjokes==0.5.0"]}],
-            }
-        },
-    }
-    creation_entry_point = ("subprocess.check_call", subprocess.SubprocessError)
-
-    def test_invalid_project_building(self):
-        pytest.xfail(
-            "For a weird reason, installing an invalid package on mamba does "
-            "not make it exit with an error code."
-        )
-
-    def test_mamba_binary_execution(self, tmp_path):
-        environment = self.get_project_environment(tmp_path, "r")
-        environment_path = environment.create()
-        r_binary = environment_path / "bin" / "R"
-        assert r_binary.exists()
-
-        output = subprocess.check_output([r_binary, "--version"], text=True)
-        assert "R version 4.2.2" in output
-
-    @pytest.mark.parametrize(
-        "user_packages",
-        [
-            ["python"],
-            ["python=3.7"],
-            ["python>=3.7"],
-            ["python=3.7.*"],
-            ["python=3.7.10"],
-            ["python != 3.7"],
-            ["python> 3.7"],
-            ["python <3.7"],
-            ["pyjokes", "python>=3.7", "emoji"],
-            ["python<=3.7", "emoji"],
-            ["pyjokes", "python==3.7"],
-        ],
-    )
-    @pytest.mark.parametrize("python_version", [None, "3.9"])
-    def test_fail_when_user_overwrites_python(
-        self, tmp_path, user_packages, python_version
-    ):
-        with pytest.raises(
-            ValueError,
-            match="Python version can not be specified by the environment",
-        ):
-            self.get_environment(
-                tmp_path,
-                {
-                    "packages": user_packages,
-                    "python_version": python_version,
-                },
-            )
-
-    @pytest.mark.parametrize(
-        "configuration",
-        [
-            {
-                "env_dict": {
-                    "name": "test",
-                    "channels": "defaults",
-                    "dependencies": ["a", "b"],
-                }
-            },
-            {
-                "env_dict": {
-                    "name": "test",
-                    "channels": "defaults",
-                    "dependencies": ["a", "b", "pip", {"pip": ["c", "d"]}],
-                }
-            },
-            {
-                "env_yml_str": textwrap.dedent(
-                    """
-                name: test
-                channels:
-                    - defaults
-                    - conda-forge
-                """
-                )
-            },
-            {
-                "packages": ["a", "piped", "b"],
-            },
-        ],
-    )
-    def test_add_pip_dependencies(self, tmp_path, configuration):
-        environment = self.get_environment(
-            tmp_path, {**configuration, "pip": ["agent"]}
-        )
-        all_deps = environment.environment_definition["dependencies"]
-        assert "pip" in all_deps  # Ensurue pip is added as a dependency
-        assert (
-            all_deps.count("pip") == 1
-        )  # And it does not appear twice (when the environment already supplies itr)
-
-        dep_groups = [
-            dependency
-            for dependency in all_deps
-            if isinstance(dependency, dict) and "pip" in dependency
-        ]
-        assert len(dep_groups) == 1
-        pip_dep = dep_groups[0]["pip"]
-        assert "agent" in pip_dep  # And pip dependency is added
-
-
 def test_local_python_environment():
     """Since 'local' environment does not support installation of extra dependencies
     unlike virtualenv/conda, we can't use the generic test suite for it."""
@@ -758,26 +614,6 @@ def test_isolate_server_on_conda(isolate_server):
             == "0.6.0"
         )
 
-
-def test_isolate_server_on_mamba(isolate_server):
-    environment_2 = IsolateServer(
-        host=isolate_server,
-        target_environments=[
-            {
-                "kind": "mamba",
-                "configuration": {
-                    "packages": [
-                        "pyjokes=0.6.0",
-                    ]
-                },
-            }
-        ],
-    )
-    with environment_2.connect() as connection:
-        assert (
-            connection.run(partial(eval, "__import__('pyjokes').__version__"))
-            == "0.6.0"
-        )
 
 def test_isolate_server_logs(isolate_server):
     collected_logs = []
