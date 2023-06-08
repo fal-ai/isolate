@@ -28,14 +28,6 @@ jobs:
       with:
         python-version: ${{ matrix.python }}
 
-    - name: Install conda
-      uses: s-weigand/setup-conda@v1
-      with:
-        activate-conda: false
-        python-version: ${{ matrix.python }}
-        # PyJokes is available on conda-forge
-        conda-channels: anaconda, conda-forge
-
     - name: Install mamba
       uses: mamba-org/setup-micromamba@v1
       with:

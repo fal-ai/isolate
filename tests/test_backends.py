@@ -378,7 +378,7 @@ class TestVirtualenv(GenericEnvironmentTests):
 # Since mamba is an external dependency, we'll skip tests using it
 # if it is not installed.
 try:
-    _get_executable("mamba")
+    _get_executable("micromamba")
 except FileNotFoundError:
     IS_MAMBA_AVAILABLE = False
 else:

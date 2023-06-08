@@ -125,6 +125,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
         return sha256_digest_of(
             repr(self.environment_definition),
             self.python_version,
+            self._exec_command,
             *sorted(self.tags),
         )
 
@@ -166,7 +167,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
         self._run_conda("remove","--yes","--all","--prefix", connection_key)
 
     def _run_conda(self, *args: Any) -> None:
-        conda_executable = _get_executable(self._exec_home, self._exec_command)
+        conda_executable = _get_executable(self._exec_command, self._exec_home)
         with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
             subprocess.check_call(
                 [conda_executable, *args],
@@ -183,7 +184,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
 
 @functools.lru_cache(1)
-def _get_executable(home: str, command: str) -> Path:
+def _get_executable(command: str, home: str | None = None) -> Path:
     for path in [home, None]:
         conda_path = shutil.which(command, path=path)
         if conda_path is not None:

@@ -31,7 +31,6 @@ build = ["virtualenv", "PyYAML"]
 [tool.poetry.plugins."isolate.backends"]
 "virtualenv" = "isolate.backends.virtualenv:VirtualPythonEnvironment"
 "conda" = "isolate.backends.conda:CondaEnvironment"
-"mamba" = "isolate.backends.mamba:MambaEnvironment"
 "local" = "isolate.backends.local:LocalPythonEnvironment"
 "isolate-server" = "isolate.backends.remote:IsolateServer"
 "pyenv" = "isolate.backends.pyenv:PyenvEnvironment"
