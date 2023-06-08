@@ -161,7 +161,10 @@ class CondaEnvironment(BaseEnvironment[Path]):
             self._run_destroy(str(connection_key))
 
     def _run_create(self, env_path: str, env_name: str) -> None:
-        self._run_conda("env", "create", "--force", "--prefix", env_path, "-f", env_name)
+        if self._exec_command == "conda":
+            self._run_conda("env", "create", "--force", "--prefix", env_path, "-f", env_name)
+        else:
+            self._run_conda("env", "create", "--prefix", env_path, "-f", env_name)
 
     def _run_destroy(self, connection_key: str) -> None:
         self._run_conda("remove","--yes","--all","--prefix", connection_key)
