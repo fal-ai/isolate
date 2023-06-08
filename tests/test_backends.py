@@ -13,7 +13,7 @@ import pytest
 import isolate
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import sha256_digest_of
-from isolate.backends.conda import CondaEnvironment, _get_conda_executable
+from isolate.backends.conda import CondaEnvironment, _get_executable
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.pyenv import PyenvEnvironment, _get_pyenv_executable
 from isolate.backends.remote import IsolateServer
@@ -375,17 +375,17 @@ class TestVirtualenv(GenericEnvironmentTests):
         assert tagged_environment.key == tagged_environment_2.key, "Tag order should not matter"
 
 
-# Since conda is an external dependency, we'll skip tests using it
+# Since mamba is an external dependency, we'll skip tests using it
 # if it is not installed.
 try:
-    _get_conda_executable()
+    _get_executable("micromamba")
 except FileNotFoundError:
-    IS_CONDA_AVAILABLE = False
+    IS_MAMBA_AVAILABLE = False
 else:
-    IS_CONDA_AVAILABLE = True
+    IS_MAMBA_AVAILABLE = True
 
 
-@pytest.mark.skipif(not IS_CONDA_AVAILABLE, reason="Conda is not available")
+@pytest.mark.skipif(not IS_MAMBA_AVAILABLE, reason="Mamba is not available")
 class TestConda(GenericEnvironmentTests):
 
     backend_cls = CondaEnvironment

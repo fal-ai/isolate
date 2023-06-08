@@ -22,6 +22,15 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86
     /bin/bash ~/miniconda.sh -b -p /opt/conda
 #### END CONDA ####
 
+#### MAMBA ####
+ENV ISOLATE_MAMBA_HOME=/opt/mamba/bin
+ENV CONDA_DIR /opt/mamba
+RUN mkdir -p /opt/mamba/bin
+RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj -C /opt/mamba/bin/ --strip-components=1 bin/micromamba
+RUN /opt/mamba/bin/micromamba config append channels conda-forge
+RUN /opt/mamba/bin/micromamba config append channels pytorch
+#### END MAMBA ####
+
 RUN pip install --upgrade pip virtualenv wheel poetry-core
 
 # Since system-level debian does not comply with
@@ -36,7 +45,7 @@ COPY tools/requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
 COPY . /isolate
-RUN pip install /isolate[server]
+RUN pip install /isolate[server,build]
 
 ENV ISOLATE_INHERIT_FROM_LOCAL=1
 ENV AGENT_REQUIREMENTS_TXT=/isolate/tools/agent_requirements.txt
