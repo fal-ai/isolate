@@ -55,10 +55,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
         processing_config = copy.deepcopy(config)
         processing_config.setdefault("python_version", active_python())
 
-        if "resolver" in processing_config:
-            resolver = processing_config.pop("resolver")
-        else:
-            resolver = "mamba"
+        resolver = processing_config.pop("resolver", _ISOLATE_DEFAULT_RESOLVER)
 
         if "env_dict" in processing_config:
             definition = processing_config.pop("env_dict")
