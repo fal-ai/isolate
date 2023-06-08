@@ -375,16 +375,7 @@ class TestVirtualenv(GenericEnvironmentTests):
         assert tagged_environment.key == tagged_environment_2.key, "Tag order should not matter"
 
 
-# Since conda is an external dependency, we'll skip tests using it
-# if it is not installed.
-try:
-    _get_executable("conda")
-except FileNotFoundError:
-    IS_CONDA_AVAILABLE = False
-else:
-    IS_CONDA_AVAILABLE = True
-
-# Since conda is an external dependency, we'll skip tests using it
+# Since mamba is an external dependency, we'll skip tests using it
 # if it is not installed.
 try:
     _get_executable("mamba")

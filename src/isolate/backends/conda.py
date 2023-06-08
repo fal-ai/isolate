@@ -27,6 +27,7 @@ _CONDA_COMMAND = os.environ.get("CONDA_EXE", "conda")
 _MAMBA_COMMAND = os.environ.get("MAMBA_EXE", "micromamba")
 _ISOLATE_CONDA_HOME = os.getenv("ISOLATE_CONDA_HOME")
 _ISOLATE_MAMBA_HOME = os.getenv("ISOLATE_MAMBA_HOME")
+_ISOLATE_DEFAULT_RESOLVER = os.getenv("ISOLATE_DEFAULT_RESOLVER", "mamba")
 
 # Conda accepts the following version specifiers: =, ==, >=, <=, >, <, !=
 _POSSIBLE_CONDA_VERSION_IDENTIFIERS = (
@@ -40,11 +41,13 @@ _POSSIBLE_CONDA_VERSION_IDENTIFIERS = (
 @dataclass
 class CondaEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "conda"
-    resolver: str = "mamba"
 
     environment_definition: Dict[str, Any] = field(default_factory=dict)
     python_version: Optional[str] = None
     tags: List[str] = field(default_factory=list)
+    _exec_home: Optional[str] = _ISOLATE_MAMBA_HOME
+    _exec_command: Optional[str] = _MAMBA_COMMAND
+
 
     @classmethod
     def from_config(
@@ -54,9 +57,15 @@ class CondaEnvironment(BaseEnvironment[Path]):
     ) -> BaseEnvironment:
         processing_config = copy.deepcopy(config)
         processing_config.setdefault("python_version", active_python())
-
         resolver = processing_config.pop("resolver", _ISOLATE_DEFAULT_RESOLVER)
-
+        if resolver == "conda":
+            _exec_home = _ISOLATE_CONDA_HOME
+            _exec_command = _CONDA_COMMAND
+        elif resolver == "mamba":
+            _exec_home = _ISOLATE_MAMBA_HOME
+            _exec_command = _MAMBA_COMMAND
+        else:
+            raise Exception(f"Conda resolver of type {resolver} is not supported")
         if "env_dict" in processing_config:
             definition = processing_config.pop("env_dict")
         elif "env_yml_str" in processing_config:
@@ -104,7 +113,8 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
         environment = cls(
             environment_definition=definition,
-            resolver=resolver,
+            _exec_home=_exec_home,
+            _exec_command=_exec_command,
             **processing_config,
         )
         environment.apply_settings(settings)
@@ -156,23 +166,13 @@ class CondaEnvironment(BaseEnvironment[Path]):
         self._run_conda("remove","--yes","--all","--prefix", connection_key)
 
     def _run_conda(self, *args: Any) -> None:
-        conda_executable = _get_executable("conda")
+        conda_executable = _get_executable(self._exec_home, self._exec_command)
         with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
             subprocess.check_call(
                 [conda_executable, *args],
                 stdout=stdout,
                 stderr=stderr,
             )
-
-    def _run_mamba(self, *args: Any) -> None:
-        mamba_executable = _get_executable("mamba")
-        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
-            subprocess.check_call(
-                [mamba_executable, *args],
-                stdout=stdout,
-                stderr=stderr,
-            )
-
 
     def exists(self) -> bool:
         path = self.settings.cache_dir_for(self)
@@ -183,15 +183,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
 
 @functools.lru_cache(1)
-def _get_executable(exec_type: str) -> Path:
-    if exec_type == "conda":
-        home = _ISOLATE_CONDA_HOME
-        command = _CONDA_COMMAND
-    elif exec_type == "mamba":
-        home = _ISOLATE_MAMBA_HOME
-        command = _MAMBA_COMMAND
-    else:
-        raise Exception(f"Executable of type {exec_type} is not supported")
+def _get_executable(home: str, command: str) -> Path:
     for path in [home, None]:
         conda_path = shutil.which(command, path=path)
         if conda_path is not None:
