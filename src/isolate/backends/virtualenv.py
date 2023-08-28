@@ -127,9 +127,15 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         virtualenv = optional_import("virtualenv")
 
         venv_path = self.settings.cache_dir_for(self)
+        completion_marker = self.settings.completion_marker_for(venv_path)
         with self.settings.cache_lock_for(venv_path):
-            if venv_path.exists() and not force:
-                return venv_path
+            if not force:
+                is_cached = venv_path.exists()
+                if self.settings.strict_cache:
+                    is_cached &= completion_marker.exists()
+
+                if is_cached:
+                    return venv_path
 
             self.log(f"Creating the environment at '{venv_path}'")
 
@@ -145,6 +151,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                 )
 
             self.install_requirements(venv_path)
+            completion_marker.touch()
 
         self.log(f"New environment cached at '{venv_path}'")
         return venv_path

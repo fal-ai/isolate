@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 from contextlib import contextmanager
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
     from isolate.backends import BaseEnvironment
 
 _SYSTEM_TEMP_DIR = Path(tempfile.gettempdir())
+_STRICT_CACHE = os.getenv("ISOLATE_STRICT_CACHE", "0") == "1"
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,7 @@ class IsolateSettings:
     cache_dir: Path = Path(user_cache_dir("isolate", "isolate"))
     serialization_method: str = "pickle"
     log_hook: Callable[[Log], None] = print
+    strict_cache: bool = _STRICT_CACHE
 
     def log(self, log: Log) -> None:
         self.log_hook(log)
@@ -81,6 +84,9 @@ class IsolateSettings:
         environment_base_path = self.cache_dir / backend_name
         environment_base_path.mkdir(exist_ok=True, parents=True)
         return environment_base_path / backend.key
+
+    def completion_marker_for(self, path: Path) -> Path:
+        return path / ".isolate.completed"
 
     replace = replace
 
