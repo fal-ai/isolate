@@ -32,6 +32,8 @@ from isolate.server import definitions, health
 from isolate.server.health_server import HealthServicer
 from isolate.server.interface import from_grpc, to_grpc
 
+MAX_GRPC_WAIT_TIMEOUT = float(os.getenv("ISOLATE_MAX_GRPC_WAIT_TIMEOUT", 10.0))
+
 # Whether to inherit all the packages from the current environment or not.
 INHERIT_FROM_LOCAL = os.getenv("ISOLATE_INHERIT_FROM_LOCAL") == "1"
 
@@ -132,7 +134,7 @@ class BridgeManager:
                     agent.terminate()
 
         bound_context = ExitStack()
-        stub = bound_context.enter_context(connection._establish_bridge())
+        stub = bound_context.enter_context(connection._establish_bridge(max_wait_timeout=MAX_GRPC_WAIT_TIMEOUT))
         return RunnerAgent(stub, queue, bound_context)
 
     def _identify(self, connection: LocalPythonGRPC) -> Tuple[Any, ...]:
