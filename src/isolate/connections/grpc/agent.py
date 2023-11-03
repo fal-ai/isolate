@@ -112,9 +112,11 @@ class AgentServicer(definitions.AgentServicer):
             # depickling is basically involves code execution from the *user*.
             function = from_grpc(function)
         except SerializationError:
-            yield from self.log(traceback.format_exc())
+            trace = traceback.format_exc()
+            yield from self.log(trace)
             raise AbortException(
-                f"The {function_kind} function could not be deserialized."
+                f"The {function_kind} function could not be deserialized.\n"
+                f"{trace}"
             )
 
         if not callable(function):
