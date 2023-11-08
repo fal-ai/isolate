@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from functools import partial
 from os import environ
 from pathlib import Path
+import time
 from typing import Any, Dict, List, Type
 
 import pytest
@@ -108,6 +109,8 @@ class GenericEnvironmentTests:
         # We can also see that if we destroy it, both the original one and the duplicate
         # one will be gone.
         environment_1.destroy(connection_key_1)
+
+        time.sleep(0.1)
 
         assert not environment_1.exists()
         assert not dup_environment_1.exists()
