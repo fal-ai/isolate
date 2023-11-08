@@ -109,8 +109,8 @@ class GenericEnvironmentTests:
         # one will be gone.
         environment_1.destroy(connection_key_1)
 
-        assert not dup_environment_1.exists()
         assert not environment_1.exists()
+        assert not dup_environment_1.exists()
 
         connection_key_1 = environment_1.create()
         dup_connection_key_1 = dup_environment_1.create()
