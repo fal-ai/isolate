@@ -31,6 +31,7 @@ jobs:
     - name: Install mamba
       uses: mamba-org/setup-micromamba@v1
       with:
+        environment-name: ci
         create-args: >-
           python=${{ matrix.python }}
         condarc: |
