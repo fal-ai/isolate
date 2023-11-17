@@ -161,7 +161,7 @@ def test_server_basic_communication(
         # The agent process needs dill (and isolate) to actually
         # deserialize the given function, so they need to be installed
         # when we are not inheriting the local environment.
-        requirements.append("dill==0.3.5.1")
+        requirements.append("dill==0.3.6")
         requirements.append(f"{REPO_DIR}")
 
     env_definition = define_environment("virtualenv", requirements=requirements)
@@ -296,7 +296,7 @@ def test_server_multiple_envs(
         # The agent process needs dill (and isolate) to actually
         # deserialize the given function, so they need to be installed
         # when we are not inheriting the local environment.
-        requirements.append("dill==0.3.5.1")
+        requirements.append("dill==0.3.6")
 
         # TODO: apparently [server] doesn't work but [grpc] does work (not sure why
         # needs further investigation, probably poetry related).
@@ -329,7 +329,7 @@ def test_agent_requirements_custom_version(
     python_version: str,
 ) -> None:
     requirements = ["pyjokes==0.6.0"]
-    agent_requirements = ["dill==0.3.5.1", f"{REPO_DIR}[grpc]"]
+    agent_requirements = ["dill==0.3.6", f"{REPO_DIR}[grpc]"]
     monkeypatch.setattr("isolate.server.server.AGENT_REQUIREMENTS", agent_requirements)
 
     env_definition = define_environment(
@@ -593,7 +593,7 @@ def test_server_minimum_viable_proto_version(stub: definitions.IsolateStub) -> N
 
     # protobuf<3 (the 2.x series) seems to use Python 2 only?
     requirements = ["protobuf>3,<4"]
-    requirements.append("dill==0.3.5.1")
+    requirements.append("dill==0.3.6")
     requirements.append(f"{REPO_DIR}")
 
     env_definition = define_environment("virtualenv", requirements=requirements)
