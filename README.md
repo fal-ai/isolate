@@ -1,7 +1,5 @@
 # Isolate
 
-> :warning: **Isolate** is still very young, and none of the APIs should be considered stable.
-
 Run any Python function, with any dependencies, in any machine you want. Isolate offers a
 pluggable end-to-end solution for building, managing, and using isolated environments (virtualenv,
 conda, remote, and more).
