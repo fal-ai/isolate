@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import importlib
 import os
-from dataclasses import dataclass
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Iterator, Optional, cast
 
 from tblib import Traceback, TracebackParseError

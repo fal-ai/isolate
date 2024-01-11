@@ -20,6 +20,11 @@ class IsolateStub(object):
             request_serializer=server__pb2.BoundFunction.SerializeToString,
             response_deserializer=common__pb2.PartialRunResult.FromString,
         )
+        self.Submit = channel.unary_unary(
+            "/Isolate/Submit",
+            request_serializer=server__pb2.SubmitRequest.SerializeToString,
+            response_deserializer=server__pb2.SubmitResponse.FromString,
+        )
 
 
 class IsolateServicer(object):
@@ -33,6 +38,12 @@ class IsolateServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def Submit(self, request, context):
+        """Submit a function to be run with callbacks for the logs and the result."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_IsolateServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -40,6 +51,11 @@ def add_IsolateServicer_to_server(servicer, server):
             servicer.Run,
             request_deserializer=server__pb2.BoundFunction.FromString,
             response_serializer=common__pb2.PartialRunResult.SerializeToString,
+        ),
+        "Submit": grpc.unary_unary_rpc_method_handler(
+            servicer.Submit,
+            request_deserializer=server__pb2.SubmitRequest.FromString,
+            response_serializer=server__pb2.SubmitResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -71,6 +87,35 @@ class Isolate(object):
             "/Isolate/Run",
             server__pb2.BoundFunction.SerializeToString,
             common__pb2.PartialRunResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+        )
+
+    @staticmethod
+    def Submit(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/Isolate/Submit",
+            server__pb2.SubmitRequest.SerializeToString,
+            server__pb2.SubmitResponse.FromString,
             options,
             channel_credentials,
             insecure,

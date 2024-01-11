@@ -48,7 +48,6 @@ class CondaEnvironment(BaseEnvironment[Path]):
     _exec_home: Optional[str] = _ISOLATE_MAMBA_HOME
     _exec_command: Optional[str] = _MAMBA_COMMAND
 
-
     @classmethod
     def from_config(
         cls,
@@ -162,12 +161,14 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     def _run_create(self, env_path: str, env_name: str) -> None:
         if self._exec_command == "conda":
-            self._run_conda("env", "create", "--force", "--prefix", env_path, "-f", env_name)
+            self._run_conda(
+                "env", "create", "--force", "--prefix", env_path, "-f", env_name
+            )
         else:
             self._run_conda("env", "create", "--prefix", env_path, "-f", env_name)
 
     def _run_destroy(self, connection_key: str) -> None:
-        self._run_conda("remove","--yes","--all","--prefix", connection_key)
+        self._run_conda("remove", "--yes", "--all", "--prefix", connection_key)
 
     def _run_conda(self, *args: Any) -> None:
         conda_executable = _get_executable(self._exec_command, self._exec_home)
