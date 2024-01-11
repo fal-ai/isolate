@@ -13,6 +13,7 @@ from functools import partial
 from queue import Empty as QueueEmpty
 from queue import Queue
 from typing import Any, Callable, Iterator, cast
+from urllib.request import Request, urlopen
 
 import grpc
 from grpc import ServicerContext, StatusCode
@@ -51,6 +52,16 @@ else:
 # Number of seconds to observe the queue before checking the termination
 # event.
 _Q_WAIT_DELAY = 0.1
+RUNNER_THREAD_POOL = futures.ThreadPoolExecutor(max_workers=MAX_THREADS)
+
+
+class GRPCException(Exception):
+    def __init__(self, message: str, code: StatusCode = StatusCode.INVALID_ARGUMENT):
+        super().__init__(message)
+        self.code = code
+
+    def __str__(self) -> str:
+        return f"{self.code.name}: {super().__str__()}"
 
 
 @dataclass
@@ -158,38 +169,31 @@ class BridgeManager:
 class IsolateServicer(definitions.IsolateServicer):
     bridge_manager: BridgeManager
     default_settings: IsolateSettings = field(default_factory=IsolateSettings)
+    background_tasks: set[futures.Future] = field(default_factory=set)
 
-    def Run(
-        self,
-        request: definitions.BoundFunction,
-        context: ServicerContext,
+    def run_function(
+        self, bound_function: definitions.BoundFunction
     ) -> Iterator[definitions.PartialRunResult]:
         messages: Queue[definitions.PartialRunResult] = Queue()
         environments = []
-        for env in request.environments:
+        for env in bound_function.environments:
             try:
                 environments.append((env.force, from_grpc(env)))
             except ValueError:
-                return self.abort_with_msg(
-                    f"Unknown environment kind: {env.kind}",
-                    context,
-                )
+                raise GRPCException(f"Unknown environment kind: {env.kind}")
             except TypeError as exc:
-                return self.abort_with_msg(
-                    f"Invalid environment parameter: {str(exc)}.",
-                    context,
-                )
+                raise GRPCException(f"Invalid environment: {str(exc)}")
 
         if not environments:
-            return self.abort_with_msg(
-                "At least one environment must be specified for a run!",
-                context,
+            raise GRPCException(
+                "At least one environment must be specified.",
+                StatusCode.INVALID_ARGUMENT,
             )
 
         run_settings = replace(
             self.default_settings,
             log_hook=partial(_add_log_to_queue, messages),
-            serialization_method=request.function.method,
+            serialization_method=bound_function.function.method,
         )
 
         for _, environment in environments:
@@ -226,7 +230,7 @@ class IsolateServicer(definitions.IsolateServicer):
                     # but it is just in case.
                     environment_paths.append(future.result(timeout=0.1))
                 except EnvironmentCreationError as e:
-                    return self.abort_with_msg(f"{e}", context)
+                    raise GRPCException(f"{e}", StatusCode.INVALID_ARGUMENT)
 
             primary_path, *inheritance_paths = environment_paths
             inheritance_paths.extend(extra_inheritance_paths)
@@ -243,10 +247,10 @@ class IsolateServicer(definitions.IsolateServicer):
                 queue,
             ):
                 function_call = definitions.FunctionCall(
-                    function=request.function,
-                    setup_func=request.setup_func,
+                    function=bound_function.function,
+                    setup_func=bound_function.setup_func,
                 )
-                if not request.HasField("setup_func"):
+                if not bound_function.HasField("setup_func"):
                     function_call.ClearField("setup_func")
 
                 future = local_pool.submit(
@@ -268,10 +272,9 @@ class IsolateServicer(definitions.IsolateServicer):
                     # If this is an RPC error, propagate it as is without any
                     # further processing.
                     if isinstance(exception, grpc.RpcError):
-                        return self.abort_with_msg(
-                            exception.details(),
-                            context,
-                            code=exception.code(),
+                        raise GRPCException(
+                            f"{exception}",
+                            exception.code(),
                         )
 
                     # Otherwise this is a bug in the agent itself, so needs
@@ -280,18 +283,115 @@ class IsolateServicer(definitions.IsolateServicer):
                         type(exception), exception, exception.__traceback__
                     ):
                         yield from self.log(line, level=LogLevel.ERROR)
+
                     if isinstance(exception, AgentError):
-                        return self.abort_with_msg(
-                            str(exception),
-                            context,
-                            code=StatusCode.ABORTED,
-                        )
+                        raise GRPCException(str(exception), StatusCode.ABORTED)
                     else:
-                        return self.abort_with_msg(
+                        raise GRPCException(
                             f"An unexpected error occurred: {exception}.",
-                            context,
-                            code=StatusCode.UNKNOWN,
+                            StatusCode.UNKNOWN,
                         )
+
+    def run_function_in_background(
+        self,
+        bound_function: definitions.BoundFunction,
+        queue: Queue[definitions.PartialRunResult],
+    ) -> None:
+        try:
+            for message in self.run_function(bound_function):
+                queue.put_nowait(message)
+        except GRPCException as exc:
+            result = definitions.PartialRunResult(
+                is_complete=True,
+                logs=[
+                    definitions.Log(
+                        message=f"{exc}",
+                        level=definitions.LogLevel.ERROR,
+                        source=definitions.LogSource.BRIDGE,
+                    )
+                ],
+            )
+            queue.put_nowait(result)
+
+    def emit_messages(
+        self,
+        queue: Queue[definitions.PartialRunResult],
+        done_event: threading.Event,
+        callback: str,
+    ) -> None:
+        while not done_event.is_set():
+            # Try to send as many messages as possible in one go, since each
+            # individual message will incur a fixed overhead.
+            try:
+                messages = [queue.get(timeout=0.1)]
+            except QueueEmpty:
+                continue
+
+            while not queue.empty():
+                try:
+                    messages.append(queue.get_nowait())
+                except QueueEmpty:
+                    break
+
+            message = definitions.PartialRunResults(results=messages)
+            request = Request(
+                callback,
+                message.SerializeToString(),
+            )
+            request.add_header("Content-Type", "application/octet-stream")
+            try:
+                with urlopen(request) as response:
+                    if response.status != 200:
+                        print(
+                            "Failed to send message to callback, status: ",
+                            response.status,
+                        )
+            except Exception as e:
+                print("Failed to send message to callback: ", e)
+
+    def Submit(
+        self,
+        request: definitions.SubmitRequest,
+        context: ServicerContext,
+    ) -> definitions.SubmitResponse:
+        def done_callback(future: futures.Future) -> None:
+            self.background_tasks.remove(future)
+            done_event.set()
+
+        message_queue: Queue[definitions.PartialRunResult] = Queue()
+        done_event: threading.Event = threading.Event()
+        emit_future = RUNNER_THREAD_POOL.submit(
+            self.emit_messages,
+            message_queue,
+            done_event,
+            request.callback,
+        )
+        self.background_tasks.add(emit_future)
+        emit_future.add_done_callback(done_callback)
+
+        run_future = RUNNER_THREAD_POOL.submit(
+            self.run_function_in_background,
+            request.function,
+            message_queue,
+        )
+        self.background_tasks.add(run_future)
+        run_future.add_done_callback(done_callback)
+
+        return definitions.SubmitResponse()
+
+    def Run(
+        self,
+        request: definitions.BoundFunction,
+        context: ServicerContext,
+    ) -> Iterator[definitions.PartialRunResult]:
+        try:
+            yield from self.run_function(request)
+        except GRPCException as exc:
+            return self.abort_with_msg(
+                f"{exc}",
+                context,
+                code=exc.code,
+            )
 
     def watch_queue_until_completed(
         self, queue: Queue, is_completed: Callable[[], bool]
@@ -366,7 +466,7 @@ def _add_log_to_queue(messages: Queue, log: Log) -> None:
 
 def main() -> None:
     server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=MAX_THREADS),
+        RUNNER_THREAD_POOL,
         options=get_default_options(),
     )
     with BridgeManager() as bridge_manager:

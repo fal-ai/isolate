@@ -7,6 +7,9 @@ service Isolate {
     // Run the given function on the specified environment. Streams logs
     // and the result originating from that function.
     rpc Run (BoundFunction) returns (stream PartialRunResult) {}
+
+    // Submit a function to be run with callbacks for the logs and the result.
+    rpc Submit (SubmitRequest) returns (SubmitResponse) {}
 }
 
 message BoundFunction {
@@ -22,4 +25,22 @@ message EnvironmentDefinition {
     google.protobuf.Struct configuration = 2;
     // Whether to force-create this environment or not.
     bool force = 3;
+}
+
+message SubmitRequest {
+    // The function to run.
+    BoundFunction function = 1;
+
+    // The HTTP callback to call with every partial result. It will be a POST request
+    // with serialized PartialRunResult(s) as the body.
+    string callback = 2;
+}
+
+message SubmitResponse {
+    // Reserved for future use.
+}
+
+message PartialRunResults {
+    // The results of the function.
+    repeated PartialRunResult results = 1;
 }

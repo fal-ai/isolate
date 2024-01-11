@@ -1,4 +1,5 @@
 import copy
+import queue
 import textwrap
 from concurrent import futures
 from contextlib import contextmanager
@@ -29,6 +30,12 @@ def inherit_from_local(monkeypatch: Any, value: bool = True) -> None:
 
 
 @dataclass
+class ServerInfo:
+    host: str
+    messages: queue.Queue
+
+
+@dataclass
 class Stubs:
     isolate_stub: definitions.IsolateStub
     health_stub: health.HealthStub
@@ -41,7 +48,8 @@ def make_server(tmp_path):
     )
     test_settings = IsolateSettings(cache_dir=tmp_path / "cache")
     with BridgeManager() as bridge:
-        definitions.register_isolate(IsolateServicer(bridge, test_settings), server)
+        servicer = IsolateServicer(bridge, test_settings)
+        definitions.register_isolate(servicer, server)
         health.register_health(HealthServicer(), server)
         host, port = "localhost", server.add_insecure_port("[::]:0")
         server.start()
@@ -64,6 +72,11 @@ def make_server(tmp_path):
             yield Stubs(isolate_stub=isolate_stub, health_stub=health_stub)
         finally:
             server.stop(None)
+            for task in servicer.background_tasks:
+                if task.done():
+                    task.result()
+                else:
+                    print("leaking background task", task)
 
 
 @pytest.fixture
@@ -76,6 +89,30 @@ def stub(tmp_path):
 def health_stub(tmp_path):
     with make_server(tmp_path) as stubs:
         yield stubs.health_stub
+
+
+@pytest.fixture
+def http_server():
+    import http.server
+
+    responses = queue.Queue()
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            raw_body = self.rfile.read(int(self.headers["Content-Length"]))
+            response = definitions.PartialRunResults.FromString(raw_body)
+            responses.put(response)
+            self.send_response(200)
+            self.end_headers()
+
+    server = http.server.HTTPServer(("localhost", 0), Handler)
+    with futures.ThreadPoolExecutor(max_workers=1) as executor:
+        host, port = server.server_address
+
+        future = executor.submit(server.serve_forever)
+        yield ServerInfo(f"http://{host}:{port}", responses)
+        server.shutdown()
+        future.result()
 
 
 def define_environment(kind: str, **kwargs: Any) -> definitions.EnvironmentDefinition:
@@ -123,7 +160,7 @@ def run_request(
         return cast(definitions.SerializedObject, return_value)
 
 
-def run_function(stub, function, *args, log_handler=None, **kwargs):
+def prepare_request(function, *args, **kwargs):
     import dill
 
     import __main__
@@ -137,10 +174,14 @@ def run_function(stub, function, *args, log_handler=None, **kwargs):
 
     basic_function = partial(function, *args, **kwargs)
     environment = define_environment("virtualenv", requirements=[])
-    request = definitions.BoundFunction(
+    return definitions.BoundFunction(
         function=to_serialized_object(basic_function, method="dill"),
         environments=[environment],
     )
+
+
+def run_function(stub, function, *args, log_handler=None, **kwargs):
+    request = prepare_request(function, *args, **kwargs)
 
     user_logs: List[Log] = [] if log_handler is None else log_handler
     result = run_request(stub, request, user_logs=user_logs)
@@ -526,6 +567,17 @@ def test_health_check(health_stub: health.HealthStub) -> None:
     assert resp.status == health.HealthCheckResponse.SERVING
 
 
+def imitate_server():
+    import time
+
+    for _ in range(10):
+        time.sleep(0.1)
+        print("still alive")
+
+    print("completed")
+    return 1
+
+
 def check_machine():
     import os
 
@@ -657,3 +709,37 @@ def test_server_proper_error_delegation(
         "(object of type <class 'Exception'>)."
     )
     assert "relevant information" in "\n".join(log.message for log in user_logs)
+
+
+def test_server_submit(
+    stub: definitions.IsolateStub,
+    monkeypatch: Any,
+    http_server: ServerInfo,
+) -> None:
+    inherit_from_local(monkeypatch)
+
+    request = definitions.SubmitRequest(
+        function=prepare_request(imitate_server),
+        callback=http_server.host,
+    )
+    stub.Submit(request)
+
+    partial_results: list[definitions.PartialRunResult] = []
+    while not any(pr.is_complete for pr in partial_results):
+        try:
+            message = http_server.messages.get(timeout=10)
+        except queue.Empty:
+            raise ValueError("No message received from the server within 5 seconds")
+
+        partial_results.extend(message.results)
+        for message in message.results:
+            print(message)
+
+    logs = [
+        log.message
+        for partial_result in partial_results
+        for log in partial_result.logs
+        if log.source is definitions.LogSource.USER
+    ]
+    assert "\n".join(logs) == "\n".join(["still alive"] * 10 + ["completed"])
+    assert from_grpc(partial_results[-1].result) == 1

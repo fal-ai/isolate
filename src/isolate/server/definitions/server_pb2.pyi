@@ -105,3 +105,69 @@ class EnvironmentDefinition(google.protobuf.message.Message):
     ) -> None: ...
 
 global___EnvironmentDefinition = EnvironmentDefinition
+
+@typing_extensions.final
+class SubmitRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FUNCTION_FIELD_NUMBER: builtins.int
+    CALLBACK_FIELD_NUMBER: builtins.int
+    @property
+    def function(self) -> global___BoundFunction:
+        """The function to run."""
+    callback: builtins.str
+    """The HTTP callback to call with every partial result. It will be a POST request
+    with serialized PartialRunResult(s) as the body.
+    """
+    def __init__(
+        self,
+        *,
+        function: global___BoundFunction | None = ...,
+        callback: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["function", b"function"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "callback", b"callback", "function", b"function"
+        ],
+    ) -> None: ...
+
+global___SubmitRequest = SubmitRequest
+
+@typing_extensions.final
+class SubmitResponse(google.protobuf.message.Message):
+    """Reserved for future use."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+
+global___SubmitResponse = SubmitResponse
+
+@typing_extensions.final
+class PartialRunResults(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RESULTS_FIELD_NUMBER: builtins.int
+    @property
+    def results(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        common_pb2.PartialRunResult
+    ]:
+        """The results of the function."""
+    def __init__(
+        self,
+        *,
+        results: collections.abc.Iterable[common_pb2.PartialRunResult] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["results", b"results"]
+    ) -> None: ...
+
+global___PartialRunResults = PartialRunResults
