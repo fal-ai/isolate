@@ -71,7 +71,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             *self.extra_index_urls,
             *sorted(self.tags),
             # This is backwards compatible with environments not using
-            # the 'pip_cmd' field.
+            # the 'resolver' field.
             *extras,
         )
 
