@@ -50,6 +50,10 @@ jobs:
       run: |
         python -m pip install -r dev-requirements.txt
         python -m pip install -e ".[build]"
+
+    - name: Install uv
+      if: ${{ matrix.python != '3.7' }}
+      run: |
         python -m pip install uv
 
     - name: Test
