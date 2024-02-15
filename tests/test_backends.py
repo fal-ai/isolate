@@ -1,3 +1,4 @@
+import shlex
 import subprocess
 import sys
 import textwrap
@@ -10,8 +11,8 @@ import pytest
 
 import isolate
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
-from isolate.backends.common import sha256_digest_of
-from isolate.backends.conda import CondaEnvironment, _get_executable
+from isolate.backends.common import get_executable, sha256_digest_of
+from isolate.backends.conda import CondaEnvironment
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.pyenv import PyenvEnvironment, _get_pyenv_executable
 from isolate.backends.remote import IsolateServer
@@ -80,7 +81,9 @@ class GenericEnvironmentTests:
         with pytest.raises(ModuleNotFoundError):
             self.get_example_version(environment, connection_key)
 
-    @pytest.mark.skip(reason="This test fails on the 'both the original one and the duplicate one will be gone' section")
+    @pytest.mark.skip(
+        reason="This test fails on the 'both the original one and the duplicate one will be gone' section"
+    )
     def test_create_generic_env_cached(self, tmp_path, monkeypatch):
         environment_1 = self.get_project_environment(tmp_path, "old-example-project")
         environment_2 = self.get_project_environment(tmp_path, "new-example-project")
@@ -204,6 +207,12 @@ class GenericEnvironmentTests:
             environment = self.get_project_environment(tmp_path, python_type)
             python_version = self.get_python_version(environment, environment.create())
             assert python_version.startswith(python_version)
+
+
+try:
+    UV_PATH = get_executable("uv")
+except FileNotFoundError:
+    UV_PATH = None
 
 
 class TestVirtualenv(GenericEnvironmentTests):
@@ -361,23 +370,40 @@ class TestVirtualenv(GenericEnvironmentTests):
             "isolate.backends.pyenv._get_pyenv_executable", lambda: 1 / 0
         )
 
-        constraints = self.configs['old-example-project']
+        constraints = self.configs["old-example-project"]
         tagged = constraints.copy()
-        tagged['tags'] = ['tag1', 'tag2']
+        tagged["tags"] = ["tag1", "tag2"]
         tagged_environment = self.get_environment(tmp_path, tagged)
 
         no_tagged_environment = self.get_environment(tmp_path, constraints)
-        assert tagged_environment.key != no_tagged_environment.key, "Tagged environment should have different key"
+        assert (
+            tagged_environment.key != no_tagged_environment.key
+        ), "Tagged environment should have different key"
 
         tagged["tags"] = ["tag2", "tag1"]
         tagged_environment_2 = self.get_environment(tmp_path, tagged)
-        assert tagged_environment.key == tagged_environment_2.key, "Tag order should not matter"
+        assert (
+            tagged_environment.key == tagged_environment_2.key
+        ), "Tag order should not matter"
+
+    @pytest.mark.skipif(not UV_PATH, reason="uv is not available")
+    def test_try_using_uv(self, tmp_path):
+        environment = self.get_environment(
+            tmp_path,
+            {
+                "requirements": [f"pyjokes==0.5"],
+                "resolver": "uv",
+            },
+        )
+        connection_key = environment.create()
+        pyjokes_version = self.get_example_version(environment, connection_key)
+        assert pyjokes_version == "0.5.0"
 
 
 # Since mamba is an external dependency, we'll skip tests using it
 # if it is not installed.
 try:
-    _get_executable("micromamba")
+    get_executable("micromamba")
 except FileNotFoundError:
     IS_MAMBA_AVAILABLE = False
 else:
@@ -527,17 +553,22 @@ class TestConda(GenericEnvironmentTests):
         assert "agent" in pip_dep  # And pip dependency is added
 
     def test_tags_in_key(self, tmp_path):
-        constraints = self.configs['old-example-project']
+        constraints = self.configs["old-example-project"]
         tagged = constraints.copy()
-        tagged['tags'] = ['tag1', 'tag2']
+        tagged["tags"] = ["tag1", "tag2"]
         tagged_environment = self.get_environment(tmp_path, tagged)
 
         no_tagged_environment = self.get_environment(tmp_path, constraints)
-        assert tagged_environment.key != no_tagged_environment.key, "Tagged environment should have different key"
+        assert (
+            tagged_environment.key != no_tagged_environment.key
+        ), "Tagged environment should have different key"
 
         tagged["tags"] = ["tag2", "tag1"]
         tagged_environment_2 = self.get_environment(tmp_path, tagged)
-        assert tagged_environment.key == tagged_environment_2.key, "Tag order should not matter"
+        assert (
+            tagged_environment.key == tagged_environment_2.key
+        ), "Tag order should not matter"
+
 
 def test_local_python_environment():
     """Since 'local' environment does not support installation of extra dependencies

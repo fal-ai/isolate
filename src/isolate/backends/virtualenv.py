@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -11,6 +12,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import (
     active_python,
+    get_executable,
     get_executable_path,
     logged_io,
     optional_import,
@@ -19,6 +21,9 @@ from isolate.backends.common import (
 from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
 from isolate.connections import PythonIPC
 from isolate.logs import LogLevel
+
+_UV_RESOLVER_EXECUTABLE = os.environ.get("ISOLATE_UV_EXE", "uv")
+_UV_RESOLVER_HOME = os.getenv("ISOLATE_UV_HOME")
 
 
 @dataclass
@@ -30,6 +35,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
     python_version: Optional[str] = None
     extra_index_urls: List[str] = field(default_factory=list)
     tags: List[str] = field(default_factory=list)
+    resolver: Optional[str] = None
 
     @classmethod
     def from_config(
@@ -39,6 +45,10 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
     ) -> BaseEnvironment:
         environment = cls(**config)
         environment.apply_settings(settings)
+        if environment.resolver not in ("uv", None):
+            raise ValueError(
+                "Only 'uv' is supported as a resolver for virtualenv environments."
+            )
         return environment
 
     @property
@@ -49,6 +59,10 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         else:
             constraints = []
 
+        extras = []
+        if not self.resolver:
+            extras.append(f"resolver={self.resolver}")
+
         active_python_version = self.python_version or active_python()
         return sha256_digest_of(
             active_python_version,
@@ -56,6 +70,9 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             *constraints,
             *self.extra_index_urls,
             *sorted(self.tags),
+            # This is backwards compatible with environments not using
+            # the 'pip_cmd' field.
+            *extras,
         )
 
     def install_requirements(self, path: Path) -> None:
@@ -69,9 +86,22 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             return None
 
         self.log(f"Installing requirements: {', '.join(self.requirements)}")
+        environ = os.environ.copy()
+
+        if self.resolver == "uv":
+            # Set VIRTUAL_ENV to the actual path of the environment since that is
+            # how uv discovers the environment. This is necessary when using uv
+            # as the resolver.
+            environ["VIRTUAL_ENV"] = str(path)
+            base_pip_cmd = [
+                get_executable(_UV_RESOLVER_EXECUTABLE, _UV_RESOLVER_HOME),
+                "pip",
+            ]
+        else:
+            base_pip_cmd = [get_executable_path(path, "pip")]
 
         pip_cmd: List[Union[str, os.PathLike]] = [
-            get_executable_path(path, "pip"),
+            *base_pip_cmd,  # type: ignore
             "install",
             *self.requirements,
         ]
@@ -87,6 +117,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                     pip_cmd,
                     stdout=stdout,
                     stderr=stderr,
+                    env=environ,
                 )
             except subprocess.SubprocessError as exc:
                 raise EnvironmentCreationError(f"Failure during 'pip install': {exc}")
