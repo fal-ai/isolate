@@ -59,4 +59,4 @@ jobs:
     - name: Test
       run: |
         export ISOLATE_PYENV_EXECUTABLE=pyenv/bin/pyenv
-        python -m pytest
+        python -m pytest -vvv

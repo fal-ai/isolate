@@ -243,13 +243,13 @@ def optional_import(module_name: str) -> ModuleType:
 @lru_cache(4)
 def get_executable(command: str, home: str | None = None) -> Path:
     for path in [home, None]:
-        conda_path = shutil.which(command, path=path)
-        if conda_path is not None:
-            return Path(conda_path)
+        binary_path = shutil.which(command, path=path)
+        if binary_path is not None:
+            return Path(binary_path)
     else:
         # TODO: we should probably show some instructions on how you
         # can install conda here.
         raise FileNotFoundError(
-            "Could not find conda executable. If conda executable is not available by default, please point isolate "
-            " to the path where conda binary is available 'ISOLATE_CONDA_HOME'."
+            f"Could not find {command} executable. If {command} executable is not available by default, please point isolate "
+            f" to the path where conda binary is available '{home}'."
         )
