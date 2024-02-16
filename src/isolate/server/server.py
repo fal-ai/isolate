@@ -134,7 +134,9 @@ class BridgeManager:
                     agent.terminate()
 
         bound_context = ExitStack()
-        stub = bound_context.enter_context(connection._establish_bridge(max_wait_timeout=MAX_GRPC_WAIT_TIMEOUT))
+        stub = bound_context.enter_context(
+            connection._establish_bridge(max_wait_timeout=MAX_GRPC_WAIT_TIMEOUT)
+        )
         return RunnerAgent(stub, queue, bound_context)
 
     def _identify(self, connection: LocalPythonGRPC) -> Tuple[Any, ...]:

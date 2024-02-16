@@ -14,6 +14,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import (
     active_python,
+    get_executable,
     logged_io,
     optional_import,
     sha256_digest_of,
@@ -47,7 +48,6 @@ class CondaEnvironment(BaseEnvironment[Path]):
     tags: List[str] = field(default_factory=list)
     _exec_home: Optional[str] = _ISOLATE_MAMBA_HOME
     _exec_command: Optional[str] = _MAMBA_COMMAND
-
 
     @classmethod
     def from_config(
@@ -162,15 +162,17 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     def _run_create(self, env_path: str, env_name: str) -> None:
         if self._exec_command == "conda":
-            self._run_conda("env", "create", "--force", "--prefix", env_path, "-f", env_name)
+            self._run_conda(
+                "env", "create", "--force", "--prefix", env_path, "-f", env_name
+            )
         else:
             self._run_conda("env", "create", "--prefix", env_path, "-f", env_name)
 
     def _run_destroy(self, connection_key: str) -> None:
-        self._run_conda("remove","--yes","--all","--prefix", connection_key)
+        self._run_conda("remove", "--yes", "--all", "--prefix", connection_key)
 
     def _run_conda(self, *args: Any) -> None:
-        conda_executable = _get_executable(self._exec_command, self._exec_home)
+        conda_executable = get_executable(self._exec_command, self._exec_home)
         with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
             subprocess.check_call(
                 [conda_executable, *args],
@@ -184,21 +186,6 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     def open_connection(self, connection_key: Path) -> PythonIPC:
         return PythonIPC(self, connection_key)
-
-
-@functools.lru_cache(1)
-def _get_executable(command: str, home: str | None = None) -> Path:
-    for path in [home, None]:
-        conda_path = shutil.which(command, path=path)
-        if conda_path is not None:
-            return Path(conda_path)
-    else:
-        # TODO: we should probably show some instructions on how you
-        # can install conda here.
-        raise FileNotFoundError(
-            "Could not find conda executable. If conda executable is not available by default, please point isolate "
-            " to the path where conda binary is available 'ISOLATE_CONDA_HOME'."
-        )
 
 
 def _depends_on(

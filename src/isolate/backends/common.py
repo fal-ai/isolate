@@ -238,3 +238,18 @@ def optional_import(module_name: str) -> ModuleType:
             f"accessing {module_name!r} import functionality. Please try: "
             f"'$ pip install \"isolate[build]\"' to install it."
         ) from exc
+
+
+@lru_cache(4)
+def get_executable(command: str, home: str | None = None) -> Path:
+    for path in [home, None]:
+        binary_path = shutil.which(command, path=path)
+        if binary_path is not None:
+            return Path(binary_path)
+    else:
+        # TODO: we should probably show some instructions on how you
+        # can install conda here.
+        raise FileNotFoundError(
+            f"Could not find {command} executable. If {command} executable is not available by default, please point isolate "
+            f" to the path where conda binary is available '{home}'."
+        )
