@@ -250,6 +250,6 @@ def get_executable(command: str, home: str | None = None) -> Path:
         # TODO: we should probably show some instructions on how you
         # can install conda here.
         raise FileNotFoundError(
-            f"Could not find {command} executable. If {command} executable is not available by default, please point isolate "
-            f" to the path where conda binary is available '{home}'."
+            f"Could not find the {command} executable. If the {command} executable is not available by default, please point isolate "
+            f" to the path where the {command} binary is available '{home}'."
         )
