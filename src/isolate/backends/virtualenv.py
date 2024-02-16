@@ -60,7 +60,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             constraints = []
 
         extras = []
-        if not self.resolver:
+        if self.resolver is not None:
             extras.append(f"resolver={self.resolver}")
 
         active_python_version = self.python_version or active_python()
