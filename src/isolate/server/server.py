@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 import traceback
 from collections import defaultdict
 from concurrent import futures
@@ -32,6 +33,7 @@ from isolate.server import definitions, health
 from isolate.server.health_server import HealthServicer
 from isolate.server.interface import from_grpc, to_grpc
 
+EMPTY_MESSAGE_INTERVAL = float(os.getenv("ISOLATE_EMPTY_MESSAGE_INTERVAL", 600))
 MAX_GRPC_WAIT_TIMEOUT = float(os.getenv("ISOLATE_MAX_GRPC_WAIT_TIMEOUT", 10.0))
 
 # Whether to inherit all the packages from the current environment or not.
@@ -299,11 +301,21 @@ class IsolateServicer(definitions.IsolateServicer):
         """Watch the given queue until the is_completed function returns True. Note that even
         if the function is completed, this function might not finish until the queue is empty.
         """
+
+        timer = time.monotonic()
         while not is_completed():
             try:
                 yield queue.get(timeout=_Q_WAIT_DELAY)
             except QueueEmpty:
-                continue
+                # Send an empty (but 'real') packet to the client, currently a hacky way
+                # to make sure the stream results are never ignored.
+                if time.monotonic() - timer > EMPTY_MESSAGE_INTERVAL:
+                    timer = time.monotonic()
+                    yield definitions.PartialRunResult(
+                        is_complete=False,
+                        logs=[],
+                        result=None,
+                    )
 
         # Clear the final messages
         while not queue.empty():
