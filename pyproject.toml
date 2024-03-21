@@ -4,6 +4,7 @@ version = "0.12.8a0"
 readme = "README.md"
 description = "Managed isolated environments for Python"
 authors = ["Features & Labels <hello@fal.ai>"]
+repository = "https://github.com/fal-ai/isolate"
 
 [tool.poetry.dependencies]
 python = ">=3.7,<4.0"
