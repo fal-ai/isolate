@@ -1,10 +1,6 @@
 import importlib
-from typing import TYPE_CHECKING
 
-from isolate.connections.ipc import IsolatedProcessConnection, PythonIPC
-
-if TYPE_CHECKING:
-    from isolate.connections.grpc import LocalPythonGRPC
+from isolate.connections.ipc import IsolatedProcessConnection, PythonIPC  # noqa: F401
 
 
 def __getattr__(name):

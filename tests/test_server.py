@@ -44,7 +44,7 @@ def make_server(tmp_path):
     with BridgeManager() as bridge:
         definitions.register_isolate(IsolateServicer(bridge, test_settings), server)
         health.register_health(HealthServicer(), server)
-        host, port = "localhost", server.add_insecure_port(f"[::]:0")
+        host, port = "localhost", server.add_insecure_port("[::]:0")
         server.start()
 
         try:
@@ -626,7 +626,7 @@ def test_server_proper_error_delegation(
 ) -> None:
     inherit_from_local(monkeypatch)
 
-    user_logs = []
+    user_logs: List[Any] = []
     with pytest.raises(grpc.RpcError) as exc_info:
         run_function(stub, send_unserializable_object, log_handler=user_logs)
 

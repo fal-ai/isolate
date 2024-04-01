@@ -21,7 +21,7 @@ assert (
 
 
 # Enable dill to only serialize globals that are accessed by the function
-import dill
+import dill  # noqa: E402
 
 dill.settings["recurse"] = True
 
@@ -159,7 +159,7 @@ class GenericPythonConnectionTests:
                 return c
 
             def bar():
-                a = str() + str()
+                a = "" + ""  # noqa: F841
                 return 0 + foo() + 1
 
             def baz():

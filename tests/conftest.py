@@ -19,7 +19,7 @@ def isolate_server(monkeypatch, tmp_path):
         definitions.register_isolate(
             IsolateServicer(bridge_manager, test_settings), server
         )
-        host, port = "localhost", server.add_insecure_port(f"[::]:0")
+        host, port = "localhost", server.add_insecure_port("[::]:0")
         server.start()
         try:
             yield f"{host}:{port}"

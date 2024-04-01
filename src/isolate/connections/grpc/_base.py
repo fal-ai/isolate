@@ -15,8 +15,8 @@ from isolate.connections._local import PythonExecutionBase, agent_startup
 from isolate.connections.common import serialize_object
 from isolate.connections.grpc import agent, definitions
 from isolate.connections.grpc.configuration import get_default_options
-from isolate.connections.grpc.interface import from_grpc, to_grpc
-from isolate.logs import Log, LogLevel, LogSource
+from isolate.connections.grpc.interface import from_grpc
+from isolate.logs import LogLevel, LogSource
 
 
 class AgentError(Exception):
