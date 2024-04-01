@@ -1,1 +1,1 @@
-from isolate.registry import prepare_environment
+from isolate.registry import prepare_environment  # noqa: F401

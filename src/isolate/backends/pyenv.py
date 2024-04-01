@@ -87,7 +87,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
                     stdout=stdout,
                     stderr=stderr,
                 )
-            except subprocess.CalledProcessError as exc:
+            except subprocess.CalledProcessError:
                 raise EnvironmentCreationError(
                     f"Failed to install Python {self.python_version} via pyenv.\n"
                 )

@@ -1,11 +1,10 @@
-import shlex
 import subprocess
 import sys
 import textwrap
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Type, Optional
 
 import pytest
 
@@ -209,6 +208,7 @@ class GenericEnvironmentTests:
             assert python_version.startswith(python_version)
 
 
+UV_PATH: Optional[Path]
 try:
     UV_PATH = get_executable("uv")
 except FileNotFoundError:
@@ -216,7 +216,6 @@ except FileNotFoundError:
 
 
 class TestVirtualenv(GenericEnvironmentTests):
-
     backend_cls = VirtualPythonEnvironment
     configs = {
         "empty": {
@@ -391,7 +390,7 @@ class TestVirtualenv(GenericEnvironmentTests):
         environment = self.get_environment(
             tmp_path,
             {
-                "requirements": [f"pyjokes==0.5"],
+                "requirements": ["pyjokes==0.5"],
                 "resolver": "uv",
             },
         )
@@ -412,7 +411,6 @@ else:
 
 @pytest.mark.skipif(not IS_MAMBA_AVAILABLE, reason="Mamba is not available")
 class TestConda(GenericEnvironmentTests):
-
     backend_cls = CondaEnvironment
     configs = {
         "empty": {

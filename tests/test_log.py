@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 
-import pytest
 
 from isolate.common import timestamp
 from isolate.connections.grpc import definitions

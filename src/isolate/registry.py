@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Any, Dict, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, Type
 
 if sys.version_info >= (3, 10):
     import importlib.metadata as importlib_metadata

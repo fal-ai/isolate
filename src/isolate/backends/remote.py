@@ -102,7 +102,7 @@ class IsolateServerConnection(EnvironmentConnection):
         executable: BasicCallable,
         *args: Any,
         **kwargs: Any,
-    ) -> CallResultType:
+    ) -> CallResultType:  # type: ignore[type-var]
         if self._channel is None:
             self._acquire_channel()
 

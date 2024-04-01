@@ -12,8 +12,6 @@ from typing import (
     Generator,
     Iterable,
     Iterator,
-    List,
-    Optional,
     cast,
 )
 

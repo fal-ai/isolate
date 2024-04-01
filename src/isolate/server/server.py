@@ -10,7 +10,6 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
-from pathlib import Path
 from queue import Empty as QueueEmpty
 from queue import Queue
 from typing import Any, Callable, Dict, Iterator, List, Tuple, cast
@@ -19,7 +18,6 @@ import grpc
 from grpc import ServicerContext, StatusCode
 
 from isolate.backends import (
-    BaseEnvironment,
     EnvironmentCreationError,
     IsolateSettings,
 )
@@ -184,7 +182,7 @@ class IsolateServicer(definitions.IsolateServicer):
 
         if not environments:
             return self.abort_with_msg(
-                f"At least one environment must be specified for a run!",
+                "At least one environment must be specified for a run!",
                 context,
             )
 
@@ -374,7 +372,7 @@ def main() -> None:
         definitions.register_isolate(IsolateServicer(bridge_manager), server)
         health.register_health(HealthServicer(), server)
 
-        server.add_insecure_port(f"[::]:50001")
+        server.add_insecure_port("[::]:50001")
         print("Started listening at localhost:50001")
 
         server.start()

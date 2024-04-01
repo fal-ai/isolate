@@ -12,11 +12,9 @@ if TYPE_CHECKING:
     from typing import Protocol
 
     class SerializationBackend(Protocol):
-        def loads(self, data: bytes) -> Any:
-            ...
+        def loads(self, data: bytes) -> Any: ...
 
-        def dumps(self, obj: Any) -> bytes:
-            ...
+        def dumps(self, obj: Any) -> bytes: ...
 
 
 AGENT_SIGNATURE = "IS_ISOLATE_AGENT"
