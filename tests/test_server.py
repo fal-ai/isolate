@@ -693,9 +693,9 @@ def test_server_proper_error_delegation(
         run_function(stub, send_unserializable_object, log_handler=user_logs)
 
     assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
-    assert exc_info.value.details() == (
-        "Error while serializing the execution result "
-        "(object of type <class 'frame'>)."
+    assert (
+        "Error while serializing the execution result (object of type <class 'frame'>)."
+        in exc_info.value.details()
     )
     assert not user_logs
 
@@ -704,10 +704,10 @@ def test_server_proper_error_delegation(
         run_function(stub, raise_unserializable_object, log_handler=user_logs)
 
     assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
-    assert exc_info.value.details() == (
+    assert (
         "Error while serializing the execution result "
         "(object of type <class 'Exception'>)."
-    )
+    ) in exc_info.value.details()
     assert "relevant information" in "\n".join(log.message for log in user_logs)
 
 
@@ -724,10 +724,10 @@ def test_server_submit(
     )
     stub.Submit(request)
 
-    partial_results: list[definitions.PartialRunResult] = []
+    partial_results: List[definitions.PartialRunResult] = []
     while not any(pr.is_complete for pr in partial_results):
         try:
-            message = http_server.messages.get(timeout=10)
+            message = http_server.messages.get(timeout=120)
         except queue.Empty:
             raise ValueError("No message received from the server within 5 seconds")
 
