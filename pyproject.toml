@@ -7,7 +7,7 @@ authors = ["Features & Labels <hello@fal.ai>"]
 repository = "https://github.com/fal-ai/isolate"
 
 [tool.poetry.dependencies]
-python = ">=3.7,<4.0"
+python = ">=3.8,<4.0"
 grpcio = ">=1.49"
 protobuf = "*"
 

@@ -159,7 +159,7 @@ class GenericPythonConnectionTests:
                 return c
 
             def bar():
-                a = str() + str()  # noqa: F841
+                a = "" + ""  # noqa: F841
                 return 0 + foo() + 1
 
             def baz():

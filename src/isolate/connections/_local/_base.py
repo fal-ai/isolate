@@ -10,12 +10,9 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
     Generic,
     Iterator,
-    List,
     TypeVar,
-    Union,
 )
 
 from isolate.backends.common import get_executable_path, logged_io
@@ -102,7 +99,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
 
     environment: BaseEnvironment
     environment_path: Path
-    extra_inheritance_paths: List[Path] = field(default_factory=list)
+    extra_inheritance_paths: list[Path] = field(default_factory=list)
 
     @contextmanager
     def start_process(
@@ -127,7 +124,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
                 text=True,
             )
 
-    def get_env_vars(self) -> Dict[str, str]:
+    def get_env_vars(self) -> dict[str, str]:
         """Return the environment variables to run the agent process with. By default
         PYTHONUNBUFFERED is set to 1 to ensure the prints to stdout/stderr are reflect
         immediately (so that we can seamlessly transfer logs)."""
@@ -161,7 +158,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
         self,
         executable: Path,
         connection: ConnectionType,
-    ) -> List[Union[str, Path]]:
+    ) -> list[str | Path]:
         """Return the command to run the agent process with."""
         raise NotImplementedError
 

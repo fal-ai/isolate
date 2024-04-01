@@ -4,7 +4,7 @@ import importlib
 import os
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Iterator, Optional, cast
+from typing import TYPE_CHECKING, Any, Iterator, cast
 
 from tblib import Traceback, TracebackParseError
 
@@ -59,7 +59,7 @@ def load_serialized_object(
     raw_object: bytes,
     *,
     was_it_raised: bool = False,
-    stringized_traceback: Optional[str] = None,
+    stringized_traceback: str | None = None,
 ) -> Any:
     """Load the given serialized object using the given serialization method. If
     anything fails, then a SerializationError will be raised. If the was_it_raised
@@ -101,7 +101,7 @@ def is_agent() -> bool:
 def prepare_exc(
     exc: BaseException,
     *,
-    stringized_traceback: Optional[str] = None,
+    stringized_traceback: str | None = None,
 ) -> BaseException:
     if stringized_traceback:
         try:

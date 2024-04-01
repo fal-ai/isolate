@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import json
 from dataclasses import dataclass
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, List
 
 import grpc
 
@@ -28,12 +28,12 @@ class IsolateServer(BaseEnvironment[List[EnvironmentDefinition]]):
     BACKEND_NAME: ClassVar[str] = "isolate-server"
 
     host: str
-    target_environments: List[Dict[str, Any]]
+    target_environments: list[dict[str, Any]]
 
     @classmethod
     def from_config(
         cls,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         environment = cls(**config)
@@ -48,7 +48,7 @@ class IsolateServer(BaseEnvironment[List[EnvironmentDefinition]]):
             json.dumps(self.target_environments),
         )
 
-    def create(self, *, force: bool = False) -> List[EnvironmentDefinition]:
+    def create(self, *, force: bool = False) -> list[EnvironmentDefinition]:
         if force is True:
             raise NotImplementedError(
                 "Only individual environments can be forcibly created, please set them up"
@@ -75,7 +75,7 @@ class IsolateServer(BaseEnvironment[List[EnvironmentDefinition]]):
 
     def open_connection(
         self,
-        connection_key: List[EnvironmentDefinition],
+        connection_key: list[EnvironmentDefinition],
     ) -> IsolateServerConnection:
         return IsolateServerConnection(self, self.host, connection_key)
 
@@ -83,8 +83,8 @@ class IsolateServer(BaseEnvironment[List[EnvironmentDefinition]]):
 @dataclass
 class IsolateServerConnection(EnvironmentConnection):
     host: str
-    definitions: List[EnvironmentDefinition]
-    _channel: Optional[grpc.Channel] = None
+    definitions: list[EnvironmentDefinition]
+    _channel: grpc.Channel | None = None
 
     def _acquire_channel(self) -> None:
         self._channel = grpc.insecure_channel(self.host)

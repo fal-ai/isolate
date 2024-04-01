@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from functools import total_ordering
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -62,7 +62,7 @@ class Log:
     message: str
     source: LogSource
     level: LogLevel = LogLevel.INFO
-    bound_env: Optional[BaseEnvironment] = field(default=None, repr=False)
+    bound_env: BaseEnvironment | None = field(default=None, repr=False)
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __str__(self) -> str:

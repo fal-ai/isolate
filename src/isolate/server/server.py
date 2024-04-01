@@ -12,7 +12,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from queue import Empty as QueueEmpty
 from queue import Queue
-from typing import Any, Callable, Dict, Iterator, List, Tuple, cast
+from typing import Any, Callable, Iterator, cast
 
 import grpc
 from grpc import ServicerContext, StatusCode
@@ -93,7 +93,7 @@ class RunnerAgent:
 @dataclass
 class BridgeManager:
     _agent_access_lock: threading.Lock = field(default_factory=threading.Lock)
-    _agents: Dict[Tuple[Any, ...], List[RunnerAgent]] = field(
+    _agents: dict[tuple[Any, ...], list[RunnerAgent]] = field(
         default_factory=lambda: defaultdict(list)
     )
     _stack: ExitStack = field(default_factory=ExitStack)
@@ -103,7 +103,7 @@ class BridgeManager:
         self,
         connection: LocalPythonGRPC,
         queue: Queue,
-    ) -> Iterator[Tuple[definitions.AgentStub, Queue]]:
+    ) -> Iterator[tuple[definitions.AgentStub, Queue]]:
         agent = self._allocate_new_agent(connection, queue)
 
         try:
@@ -139,7 +139,7 @@ class BridgeManager:
         )
         return RunnerAgent(stub, queue, bound_context)
 
-    def _identify(self, connection: LocalPythonGRPC) -> Tuple[Any, ...]:
+    def _identify(self, connection: LocalPythonGRPC) -> tuple[Any, ...]:
         return (
             connection.environment_path,
             *connection.extra_inheritance_paths,

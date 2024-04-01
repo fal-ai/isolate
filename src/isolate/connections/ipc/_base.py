@@ -13,9 +13,6 @@ from typing import (
     Any,
     Callable,
     ContextManager,
-    List,
-    Tuple,
-    Union,
 )
 
 from isolate.backends import (
@@ -71,7 +68,7 @@ def loadserialization_method(backend_name: str) -> Any:
     return importlib.import_module(backend_name)
 
 
-def encode_service_address(address: Tuple[str, int]) -> str:
+def encode_service_address(address: tuple[str, int]) -> str:
     host, port = address
     return base64.b64encode(f"{host}:{port}".encode()).decode("utf-8")
 
@@ -203,7 +200,7 @@ class PythonIPC(PythonExecutionBase[AgentListener], IsolatedProcessConnection):
         self,
         executable: Path,
         connection: AgentListener,
-    ) -> List[Union[str, Path]]:
+    ) -> list[str | Path]:
         assert isinstance(connection.address, tuple)
         return [
             executable,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Any, Dict, Type
+from typing import TYPE_CHECKING, Any
 
 if sys.version_info >= (3, 10):
     import importlib.metadata as importlib_metadata
@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 # time by simply adding an entry point to the `isolate.environment` group.
 _ENTRY_POINT = "isolate.backends"
 
-_ENTRY_POINTS: Dict[str, importlib_metadata.EntryPoint] = {}
-_ENVIRONMENTS: Dict[str, Type["BaseEnvironment"]] = {}
+_ENTRY_POINTS: dict[str, importlib_metadata.EntryPoint] = {}
+_ENVIRONMENTS: dict[str, type[BaseEnvironment]] = {}
 
 
 def _reload_registry() -> None:

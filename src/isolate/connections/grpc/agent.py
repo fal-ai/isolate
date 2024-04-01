@@ -8,7 +8,6 @@ from concurrent import futures
 from dataclasses import dataclass, field
 from typing import (
     Any,
-    Dict,
     Generator,
     Iterable,
     Iterator,
@@ -33,7 +32,7 @@ class AbortException(Exception):
 
 @dataclass
 class AgentServicer(definitions.AgentServicer):
-    _run_cache: Dict[str, Any] = field(default_factory=dict)
+    _run_cache: dict[str, Any] = field(default_factory=dict)
 
     def Run(
         self,

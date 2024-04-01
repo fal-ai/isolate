@@ -4,9 +4,9 @@ repos:
   hooks:
   - id: ruff
     args: [--fix, --exit-non-zero-on-fix]
-    exclude: '^src/.*_pb2.py$'
+    exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"
   - id: ruff-format
-    exclude: '^src/.*_pb2.py$'
+    exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"
 - repo: https://github.com/asottile/setup-cfg-fmt
   rev: v1.20.1
   hooks:
@@ -19,13 +19,20 @@ repos:
     - --disallow-incomplete-defs
     - --ignore-missing-imports
     - --no-warn-no-return
-    exclude: '^src/.*_pb2.py$'
+    exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"
     additional_dependencies: [types-protobuf]
 - repo: https://github.com/codespell-project/codespell
   rev: v2.1.0
   hooks:
   - id: codespell
+    exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"
 - repo: https://github.com/python-poetry/poetry
   rev: 1.8.2
   hooks:
   - id: poetry-check
+- repo: https://github.com/asottile/pyupgrade
+  rev: v3.1.0
+  hooks:
+  - id: pyupgrade
+    args: ["--py38-plus"]
+    exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"

@@ -7,7 +7,7 @@ import tempfile
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from typing import Any, ClassVar
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import (
@@ -41,16 +41,16 @@ _POSSIBLE_CONDA_VERSION_IDENTIFIERS = (
 class CondaEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "conda"
 
-    environment_definition: Dict[str, Any] = field(default_factory=dict)
-    python_version: Optional[str] = None
-    tags: List[str] = field(default_factory=list)
-    _exec_home: Optional[str] = _ISOLATE_MAMBA_HOME
-    _exec_command: Optional[str] = _MAMBA_COMMAND
+    environment_definition: dict[str, Any] = field(default_factory=dict)
+    python_version: str | None = None
+    tags: list[str] = field(default_factory=list)
+    _exec_home: str | None = _ISOLATE_MAMBA_HOME
+    _exec_command: str | None = _MAMBA_COMMAND
 
     @classmethod
     def from_config(
         cls,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         processing_config = copy.deepcopy(config)
@@ -187,7 +187,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
 
 def _depends_on(
-    dependencies: List[Union[str, Dict[str, List[str]]]],
+    dependencies: list[str | dict[str, list[str]]],
     package_name: str,
 ) -> bool:
     for dependency in dependencies:
