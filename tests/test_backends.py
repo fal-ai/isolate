@@ -586,11 +586,14 @@ def test_local_python_environment():
 
 
 def test_path_on_local():
+    import os
     import shutil
 
     local_env = LocalPythonEnvironment()
     with local_env.connect() as connection:
-        assert connection.run(partial(shutil.which, "python")) == shutil.which("python")
+        assert os.readlink(
+            connection.run(partial(shutil.which, "python"))
+        ) == os.readlink(shutil.which("python"))
 
 
 def test_isolate_server_environment(isolate_server):
