@@ -6,6 +6,8 @@ on:
       - main
   pull_request:
     branches:
+  schedule:
+    - cron: '30 5 * * *' # every day at 5:30 UTC
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
