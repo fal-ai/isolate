@@ -1,11 +1,10 @@
-import shlex
 import subprocess
 import sys
 import textwrap
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Type, Optional
 
 import pytest
 
@@ -192,7 +191,6 @@ class GenericEnvironmentTests:
             py_version = self._run_cmd(connection, "python", "--version")
             assert py_version.startswith("Python 3")
 
-    @pytest.mark.xfail(reason="need to fix conda error on python 3.7")
     def test_self_installed_executable_running(self, tmp_path):
         environment = self.get_project_environment(tmp_path, "black")
         with environment.connect() as connection:
@@ -201,14 +199,15 @@ class GenericEnvironmentTests:
 
     def test_custom_python_version(self, tmp_path):
         for python_type, python_version in [
-            ("old-python", "3.7"),
-            ("new-python", "3.10"),
+            ("old-python", "3.8"),
+            ("new-python", "3.11"),
         ]:
             environment = self.get_project_environment(tmp_path, python_type)
             python_version = self.get_python_version(environment, environment.create())
             assert python_version.startswith(python_version)
 
 
+UV_PATH: Optional[Path]
 try:
     UV_PATH = get_executable("uv")
 except FileNotFoundError:
@@ -216,7 +215,6 @@ except FileNotFoundError:
 
 
 class TestVirtualenv(GenericEnvironmentTests):
-
     backend_cls = VirtualPythonEnvironment
     configs = {
         "empty": {
@@ -238,10 +236,10 @@ class TestVirtualenv(GenericEnvironmentTests):
             "requirements": ["black==22.12.0"],
         },
         "old-python": {
-            "python_version": "3.7",
+            "python_version": "3.8",
         },
         "new-python": {
-            "python_version": "3.10",
+            "python_version": "3.11",
         },
     }
     creation_entry_point = ("virtualenv.cli_run", PermissionError)
@@ -336,8 +334,8 @@ class TestVirtualenv(GenericEnvironmentTests):
         )
 
         for python_type, expected_python_version in [
-            ("old-python", "3.7"),
-            ("new-python", "3.10"),
+            ("old-python", "3.8"),
+            ("new-python", "3.11"),
         ]:
             environment = self.get_project_environment(tmp_path, python_type)
             try:
@@ -391,7 +389,7 @@ class TestVirtualenv(GenericEnvironmentTests):
         environment = self.get_environment(
             tmp_path,
             {
-                "requirements": [f"pyjokes==0.5"],
+                "requirements": ["pyjokes==0.5"],
                 "resolver": "uv",
             },
         )
@@ -412,7 +410,6 @@ else:
 
 @pytest.mark.skipif(not IS_MAMBA_AVAILABLE, reason="Mamba is not available")
 class TestConda(GenericEnvironmentTests):
-
     backend_cls = CondaEnvironment
     configs = {
         "empty": {
@@ -437,11 +434,11 @@ class TestConda(GenericEnvironmentTests):
             "packages": ["black=22.12.0"],
         },
         "old-python": {
-            "python_version": "3.7",
+            "python_version": "3.8",
             "packages": [],
         },
         "new-python": {
-            "python_version": "3.10",
+            "python_version": "3.11",
             "packages": [],
         },
         "env-dict": {
@@ -473,16 +470,16 @@ class TestConda(GenericEnvironmentTests):
         "user_packages",
         [
             ["python"],
-            ["python=3.7"],
-            ["python>=3.7"],
-            ["python=3.7.*"],
-            ["python=3.7.10"],
-            ["python != 3.7"],
-            ["python> 3.7"],
-            ["python <3.7"],
-            ["pyjokes", "python>=3.7", "emoji"],
-            ["python<=3.7", "emoji"],
-            ["pyjokes", "python==3.7"],
+            ["python=3.8"],
+            ["python>=3.8"],
+            ["python=3.8.*"],
+            ["python=3.8.10"],
+            ["python != 3.8"],
+            ["python> 3.8"],
+            ["python <3.8"],
+            ["pyjokes", "python>=3.8", "emoji"],
+            ["python<=3.8", "emoji"],
+            ["pyjokes", "python==3.8"],
         ],
     )
     @pytest.mark.parametrize("python_version", [None, "3.9"])
@@ -589,11 +586,14 @@ def test_local_python_environment():
 
 
 def test_path_on_local():
+    import os
     import shutil
 
     local_env = LocalPythonEnvironment()
     with local_env.connect() as connection:
-        assert connection.run(partial(shutil.which, "python")) == shutil.which("python")
+        assert os.readlink(
+            connection.run(partial(shutil.which, "python"))
+        ) == os.readlink(shutil.which("python"))
 
 
 def test_isolate_server_environment(isolate_server):
@@ -798,7 +798,7 @@ else:
 
 
 @pytest.mark.skipif(not IS_PYENV_AVAILABLE, reason="Pyenv is not available")
-@pytest.mark.parametrize("python_version", ["3.7", "3.10", "3.9.15"])
+@pytest.mark.parametrize("python_version", ["3.8", "3.10", "3.9.15"])
 def test_pyenv_environment(python_version, tmp_path):
     different_python = PyenvEnvironment(python_version)
     test_settings = IsolateSettings(Path(tmp_path))

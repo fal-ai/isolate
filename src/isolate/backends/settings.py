@@ -6,7 +6,7 @@ import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterator
+from typing import TYPE_CHECKING, Callable, Iterator
 
 from platformdirs import user_cache_dir
 

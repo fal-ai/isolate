@@ -12,7 +12,7 @@ from contextlib import contextmanager, suppress
 from functools import lru_cache
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Dict, Iterator, Optional, Tuple, Union
+from typing import Callable, Iterator
 
 # For ensuring that the lock is created and not forgotten
 # (e.g. the process which acquires it crashes, so it is never
@@ -91,7 +91,7 @@ HookT = Callable[[str], None]
 
 
 def _io_observer(
-    hooks: Dict[int, HookT],
+    hooks: dict[int, HookT],
     termination_event: threading.Event,
 ) -> threading.Thread:
     """Starts a new thread that reads from the specified file descriptors
@@ -156,7 +156,7 @@ def _io_observer(
     return observer_thread
 
 
-def _unblocked_pipe() -> Tuple[int, int]:
+def _unblocked_pipe() -> tuple[int, int]:
     """Create a pair of unblocked pipes. This is actually
     the same as os.pipe2(os.O_NONBLOCK), but that is not
     available in MacOS so we have to do it manually."""
@@ -170,8 +170,8 @@ def _unblocked_pipe() -> Tuple[int, int]:
 @contextmanager
 def logged_io(
     stdout_hook: HookT,
-    stderr_hook: Optional[HookT] = None,
-) -> Iterator[Tuple[int, int]]:
+    stderr_hook: HookT | None = None,
+) -> Iterator[tuple[int, int]]:
     """Open two new streams (for stdout and stderr, respectively) and start relaying all
     the output from them to the given hooks."""
 
@@ -201,11 +201,11 @@ def logged_io(
 
 
 @lru_cache(maxsize=None)
-def sha256_digest_of(*unique_fields: Union[str, bytes]) -> str:
+def sha256_digest_of(*unique_fields: str | bytes) -> str:
     """Return the SHA256 digest that corresponds to the combined version
     of 'unique_fields. The order is preserved."""
 
-    def _normalize(text: Union[str, bytes]) -> bytes:
+    def _normalize(text: str | bytes) -> bytes:
         if isinstance(text, str):
             return text.encode()
         else:

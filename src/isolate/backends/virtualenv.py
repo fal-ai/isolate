@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import os
-import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from typing import Any, ClassVar
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import (
@@ -30,17 +29,17 @@ _UV_RESOLVER_HOME = os.getenv("ISOLATE_UV_HOME")
 class VirtualPythonEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "virtualenv"
 
-    requirements: List[str] = field(default_factory=list)
-    constraints_file: Optional[os.PathLike] = None
-    python_version: Optional[str] = None
-    extra_index_urls: List[str] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)
-    resolver: Optional[str] = None
+    requirements: list[str] = field(default_factory=list)
+    constraints_file: os.PathLike | None = None
+    python_version: str | None = None
+    extra_index_urls: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    resolver: str | None = None
 
     @classmethod
     def from_config(
         cls,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         environment = cls(**config)
@@ -100,7 +99,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         else:
             base_pip_cmd = [get_executable_path(path, "pip")]
 
-        pip_cmd: List[Union[str, os.PathLike]] = [
+        pip_cmd: list[str | os.PathLike] = [
             *base_pip_cmd,  # type: ignore
             "install",
             *self.requirements,

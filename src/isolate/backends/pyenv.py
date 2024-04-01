@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, ClassVar
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import logged_io
@@ -28,7 +28,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
     @classmethod
     def from_config(
         cls,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         environment = cls(**config)
@@ -60,7 +60,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
             assert prefix is not None
             return prefix
 
-    def _try_get_prefix(self, pyenv: Path, root_path: Path) -> Optional[Path]:
+    def _try_get_prefix(self, pyenv: Path, root_path: Path) -> Path | None:
         try:
             prefix = subprocess.check_output(
                 [pyenv, "prefix", self.python_version],
@@ -87,7 +87,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
                     stdout=stdout,
                     stderr=stderr,
                 )
-            except subprocess.CalledProcessError as exc:
+            except subprocess.CalledProcessError:
                 raise EnvironmentCreationError(
                     f"Failed to install Python {self.python_version} via pyenv.\n"
                 )

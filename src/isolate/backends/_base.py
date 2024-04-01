@@ -6,10 +6,8 @@ from typing import (
     Any,
     Callable,
     ClassVar,
-    Dict,
     Generic,
     Iterator,
-    Optional,
     TypeVar,
 )
 
@@ -37,14 +35,14 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
     """Represents a managed environment definition for an isolatation backend
     that can be used to run Python code with different set of dependencies."""
 
-    BACKEND_NAME: ClassVar[Optional[str]] = None
+    BACKEND_NAME: ClassVar[str | None] = None
 
     settings: IsolateSettings = DEFAULT_SETTINGS
 
     @classmethod
     def from_config(
         cls,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         """Create a new environment from the given configuration."""
