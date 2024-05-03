@@ -118,3 +118,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# vim
+*.swp
+
+/src/isolate/_isolate_version.py
