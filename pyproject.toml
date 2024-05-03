@@ -40,6 +40,17 @@ build = [
     "virtualenv>=20.4",
     "PyYAML>=6.0",
 ]
+test = [
+    "isolate[build]",
+    "pytest",
+    "cloudpickle>=2.2.0",
+    "dill>=0.3.5.1",
+    "pytest-rerunfailures",
+]
+dev = [
+    "isolate[test]",
+]
+
 
 [project.entry-points."isolate.backends"]
 "virtualenv" = "isolate.backends.virtualenv:VirtualPythonEnvironment"
