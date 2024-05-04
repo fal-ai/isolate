@@ -4,11 +4,10 @@ import textwrap
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Type, Optional
-
-import pytest
+from typing import Any, Dict, List, Optional, Type
 
 import isolate
+import pytest
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import get_executable, sha256_digest_of
 from isolate.backends.conda import CondaEnvironment
@@ -81,7 +80,10 @@ class GenericEnvironmentTests:
             self.get_example_version(environment, connection_key)
 
     @pytest.mark.skip(
-        reason="This test fails on the 'both the original one and the duplicate one will be gone' section"
+        reason=(
+            "This test fails on the 'both the original one and the duplicate one "
+            "will be gone' section"
+        )
     )
     def test_create_generic_env_cached(self, tmp_path, monkeypatch):
         environment_1 = self.get_project_environment(tmp_path, "old-example-project")
@@ -203,8 +205,8 @@ class GenericEnvironmentTests:
             ("new-python", "3.11"),
         ]:
             environment = self.get_project_environment(tmp_path, python_type)
-            python_version = self.get_python_version(environment, environment.create())
-            assert python_version.startswith(python_version)
+            actual = self.get_python_version(environment, environment.create())
+            assert actual.startswith(python_version)
 
 
 UV_PATH: Optional[Path]
@@ -342,7 +344,8 @@ class TestVirtualenv(GenericEnvironmentTests):
                 connection = environment.create()
             except EnvironmentCreationError:
                 pytest.skip(
-                    "This python version not available on the system (through virtualenv)"
+                    "This python version not available on the system "
+                    "(through virtualenv)"
                 )
 
             python_version = self.get_python_version(environment, connection)
@@ -687,14 +690,15 @@ def test_isolate_server_demo(isolate_server):
         remote_environment = isolate.prepare_environment(
             "isolate-server", host=isolate_server, target_environments=[definition]
         )
-        with local_environment.connect() as local_connection, remote_environment.connect() as remote_connection:
-            for target_func in [
-                partial(eval, "__import__('pyjokes').__version__"),
-                partial(eval, "2 + 2"),
-            ]:
-                assert local_connection.run(target_func) == remote_connection.run(
-                    target_func
-                )
+        with local_environment.connect() as local_connection:
+            with remote_environment.connect() as remote_connection:
+                for target_func in [
+                    partial(eval, "__import__('pyjokes').__version__"),
+                    partial(eval, "2 + 2"),
+                ]:
+                    assert local_connection.run(target_func) == remote_connection.run(
+                        target_func
+                    )
 
 
 def test_isolate_server_multiple_envs(isolate_server):
@@ -729,7 +733,11 @@ def test_isolate_server_multiple_envs(isolate_server):
             connection.run(
                 partial(
                     eval,
-                    "__import__('pyjokes').__version__ + ' ' + __import__('dateutil').__version__",
+                    (
+                        "__import__('pyjokes').__version__ + "
+                        "' ' + "
+                        "__import__('dateutil').__version__"
+                    ),
                 )
             )
             == "0.5.0 2.8.2"

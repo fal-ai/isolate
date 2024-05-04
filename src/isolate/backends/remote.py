@@ -51,8 +51,9 @@ class IsolateServer(BaseEnvironment[List[EnvironmentDefinition]]):
     def create(self, *, force: bool = False) -> list[EnvironmentDefinition]:
         if force is True:
             raise NotImplementedError(
-                "Only individual environments can be forcibly created, please set them up"
-                " manually by using the 'force_create' flag on the environment definition."
+                "Only individual environments can be forcibly created, please set "
+                "them up manually by using the 'force_create' flag on the "
+                "environment definition."
             )
 
         envs = []

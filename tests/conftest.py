@@ -1,5 +1,4 @@
 import pytest
-
 from isolate.backends.settings import IsolateSettings
 
 
@@ -8,7 +7,6 @@ def isolate_server(monkeypatch, tmp_path):
     from concurrent import futures
 
     import grpc
-
     from isolate.server import BridgeManager, IsolateServicer, definitions
 
     monkeypatch.setattr("isolate.server.server.INHERIT_FROM_LOCAL", True)

@@ -49,8 +49,8 @@ class GRPCExecutionBase(EnvironmentConnection):
                     channel_status.result(timeout=max_wait_timeout)
                 except grpc.FutureTimeoutError:
                     raise AgentError(
-                        f"Couldn't connect to the gRPC server in the agent (listening at {address}) "
-                        "in time."
+                        "Couldn't connect to the gRPC server in the agent "
+                        f"(listening at {address}) in time."
                     )
                 stub = definitions.AgentStub(channel)
                 stub._channel = channel  # type: ignore
@@ -69,15 +69,16 @@ class GRPCExecutionBase(EnvironmentConnection):
         #  ---------
         #  1. [controller]: Spawn the agent.
         #  2.      [agent]: Start listening at the given address.
-        #  3. [controller]: Await *at most* max_wait_timeout seconds for the agent to be available
-        #                   if it doesn't do it until then, raise an AgentError.
-        #  4. [controller]: If the server is available, then establish the bridge and pass the
-        #                   'function' as the input.
+        #  3. [controller]: Await *at most* max_wait_timeout seconds for the agent to
+        #                   be available if it doesn't do it until then,
+        #                   raise an AgentError.
+        #  4. [controller]: If the server is available, then establish the bridge and
+        #                   pass the 'function' as the input.
         #  5.      [agent]: Receive the function, deserialize it, start the execution.
-        #  6. [controller]: Watch agent for logs (stdout/stderr), and as soon as they appear
-        #                   call the log handler.
-        #  7.      [agent]: Once the execution of the function is finished, send the result
-        #                   using the same serialization method.
+        #  6. [controller]: Watch agent for logs (stdout/stderr), and as soon as they
+        #                   appear call the log handler.
+        #  7.      [agent]: Once the execution of the function is finished, send the
+        #                   result using the same serialization method.
         #  8. [controller]: Receive the result back and return it.
 
         method = self.environment.settings.serialization_method
@@ -106,7 +107,8 @@ class GRPCExecutionBase(EnvironmentConnection):
                     return cast(CallResultType, from_grpc(partial_result.result))
 
         raise AgentError(
-            "No result object was received from the agent (it never set is_complete to True)."
+            "No result object was received from the agent "
+            "(it never set is_complete to True)."
         )
 
 

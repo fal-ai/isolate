@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any, List
 
 import pytest
-
 from isolate.backends import BaseEnvironment, EnvironmentConnection
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.settings import IsolateSettings

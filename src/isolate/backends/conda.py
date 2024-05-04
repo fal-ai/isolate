@@ -212,5 +212,4 @@ def _depends_on(
             continue
 
         return True
-    else:
-        return False
+    return False
