@@ -1,43 +1,67 @@
-[tool.poetry]
+[build-system]
+requires = ["setuptools", "wheel", "setuptools_scm[toml]>=7"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+version_file = "src/isolate/_isolate_version.py"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["isolate"]
+namespaces = false
+
+[project]
 name = "isolate"
-version = "0.12.7a0"
+dynamic = ["version"]
 readme = "README.md"
 description = "Managed isolated environments for Python"
-authors = ["Features & Labels <hello@fal.ai>"]
+authors = [{ name = "Features & Labels", email = "hello@fal.ai"}]
+requires-python = ">=3.8"
+dependencies = [
+    "grpcio>=1.49",
+    "protobuf",
+    # These are non-intrusive packages with no transitive dependencies.
+    # They are also used in the agents themselves.
+    "tblib>=1.7.0",
+    "platformdirs",
+    # For 3.10 and later, importlib-metadata's newer versions are included in the
+    # standard library.
+    'importlib-metadata>=4.4; python_version < "3.10"',
+]
 
-[tool.poetry.dependencies]
-python = ">=3.8,<4.0"
-grpcio = ">=1.49"
-protobuf = "*"
+[project.urls]
+Issues = "https://github.com/fal-ai/isolate/issues"
+Source = "https://github.com/fal-ai/isolate"
 
-# These are non-intrusive packages with no transitive dependencies.
-# They are also used in the agents themselves.
-tblib = ">=1.7.0"
-platformdirs = "*"
+[project.optional-dependencies]
+build = [
+    # The following are build-related dependencies, and their usage sites are heavily
+    # guarded with optional_import() calls.
+    "virtualenv>=20.4",
+    "PyYAML>=6.0",
+]
+test = [
+    "isolate[build]",
+    "pytest",
+    "cloudpickle>=2.2.0",
+    "dill>=0.3.5.1",
+    "pytest-rerunfailures",
+]
+dev = [
+    "isolate[test]",
+]
 
-# For 3.10 and later, importlib-metadata's newer versions are included in the standard library.
-importlib-metadata = { version = ">=4.4", python = "<3.10" }
 
-# The following are build-related dependencies, and their usage sites are heavily
-# guarded with optional_import() calls.
-virtualenv = {version = ">=20.4", optional = true}
-PyYAML = {version = ">=6.0", optional = true }
-
-[tool.poetry.extras]
-grpc = []
-server = []
-build = ["virtualenv", "PyYAML"]
-
-[tool.poetry.plugins."isolate.backends"]
+[project.entry-points."isolate.backends"]
 "virtualenv" = "isolate.backends.virtualenv:VirtualPythonEnvironment"
 "conda" = "isolate.backends.conda:CondaEnvironment"
 "local" = "isolate.backends.local:LocalPythonEnvironment"
 "isolate-server" = "isolate.backends.remote:IsolateServer"
 "pyenv" = "isolate.backends.pyenv:PyenvEnvironment"
 
-[build-system]
-requires = ["poetry-core>=1.1.0"]
-build-backend = "poetry.core.masonry.api"
-
 [tool.ruff]
+target-version = "py38"
 exclude = ["*_pb2.py", "*_pb2.pyi", "*_pb2_grpc.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "PLC", "PLE", "PLW", "I", "UP"]

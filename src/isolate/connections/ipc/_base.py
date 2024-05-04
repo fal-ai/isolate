@@ -111,10 +111,12 @@ class IsolatedProcessConnection(EnvironmentConnection):
             #  4. [controller]: Accept the incoming connection request
             #  5. [controller]: Send the executable over the established bridge
             #  6.      [agent]: Receive the executable from the bridge
-            #  7.      [agent]: Execute the executable and once done send the result back
-            #  8. [controller]: Loop until either the isolated process exits or sends any
-            #                   data (will be interpreted as a tuple of two mutually exclusive
-            #                   objects, either a result object or an exception to be raised).
+            #  7.      [agent]: Execute the executable and once done send the result
+            #                   back
+            #  8. [controller]: Loop until either the isolated process exits or sends
+            #                   any data (will be interpreted as a tuple of two
+            #                   mutually exclusive objects, either a result object or
+            #                   an exception to be raised).
             #
 
             self.log("Starting the controller bridge.")

@@ -9,7 +9,6 @@ from typing import Any, List, Optional, cast
 
 import grpc
 import pytest
-
 from isolate.backends.settings import IsolateSettings
 from isolate.connections.grpc.configuration import get_default_options
 from isolate.logs import Log, LogLevel, LogSource
@@ -108,8 +107,8 @@ def run_request(
 
     return_value = _NOT_SET
     for result in stub.Run(request):
-        for log in result.logs:
-            log = from_grpc(log)
+        for _log in result.logs:
+            log = from_grpc(_log)
             log_store[log.source].append(log)
 
         if result.is_complete:
@@ -125,8 +124,9 @@ def run_request(
 
 
 def run_function(stub, function, *args, log_handler=None, **kwargs):
-    import __main__
     import dill
+
+    import __main__
 
     dill.settings["recurse"] = True
 
@@ -310,7 +310,11 @@ def test_server_multiple_envs(
         function=to_serialized_object(
             partial(
                 eval,
-                "__import__('pyjokes').__version__ + ' ' + __import__('dateutil').__version__",
+                (
+                    "__import__('pyjokes').__version__ + "
+                    "' ' + "
+                    "__import__('dateutil').__version__"
+                ),
             ),
             method="dill",
         ),
@@ -341,7 +345,10 @@ def test_agent_requirements_custom_version(
         function=to_serialized_object(
             partial(
                 eval,
-                "__import__('sysconfig').get_python_version(), __import__('pyjokes').__version__",
+                (
+                    "__import__('sysconfig').get_python_version(), "
+                    "__import__('pyjokes').__version__"
+                ),
             ),
             method="dill",
         ),
@@ -368,7 +375,10 @@ def test_agent_show_logs_from_agent_requirements(
         function=to_serialized_object(
             partial(
                 eval,
-                "__import__('sysconfig').get_python_version(), __import__('pyjokes').__version__",
+                (
+                    "__import__('sysconfig').get_python_version(), "
+                    "__import__('pyjokes').__version__"
+                ),
             ),
             method="dill",
         ),
@@ -631,9 +641,9 @@ def test_server_proper_error_delegation(
         run_function(stub, send_unserializable_object, log_handler=user_logs)
 
     assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
-    assert (
-        exc_info.value.details()
-        == "Error while serializing the execution result (object of type <class 'frame'>)."
+    assert exc_info.value.details() == (
+        "Error while serializing the execution result "
+        "(object of type <class 'frame'>)."
     )
     assert not user_logs
 
@@ -642,8 +652,8 @@ def test_server_proper_error_delegation(
         run_function(stub, raise_unserializable_object, log_handler=user_logs)
 
     assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
-    assert (
-        exc_info.value.details()
-        == "Error while serializing the execution result (object of type <class 'Exception'>)."
+    assert exc_info.value.details() == (
+        "Error while serializing the execution result "
+        "(object of type <class 'Exception'>)."
     )
     assert "relevant information" in "\n".join(log.message for log in user_logs)

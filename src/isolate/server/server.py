@@ -31,14 +31,14 @@ from isolate.server import definitions, health
 from isolate.server.health_server import HealthServicer
 from isolate.server.interface import from_grpc, to_grpc
 
-EMPTY_MESSAGE_INTERVAL = float(os.getenv("ISOLATE_EMPTY_MESSAGE_INTERVAL", 600))
-MAX_GRPC_WAIT_TIMEOUT = float(os.getenv("ISOLATE_MAX_GRPC_WAIT_TIMEOUT", 10.0))
+EMPTY_MESSAGE_INTERVAL = float(os.getenv("ISOLATE_EMPTY_MESSAGE_INTERVAL", "600"))
+MAX_GRPC_WAIT_TIMEOUT = float(os.getenv("ISOLATE_MAX_GRPC_WAIT_TIMEOUT", "10.0"))
 
 # Whether to inherit all the packages from the current environment or not.
 INHERIT_FROM_LOCAL = os.getenv("ISOLATE_INHERIT_FROM_LOCAL") == "1"
 
 # Number of threads that the gRPC server will use.
-MAX_THREADS = int(os.getenv("MAX_THREADS", 5))
+MAX_THREADS = int(os.getenv("MAX_THREADS", "5"))
 _AGENT_REQUIREMENTS_TXT = os.getenv("AGENT_REQUIREMENTS_TXT")
 
 if _AGENT_REQUIREMENTS_TXT is not None:
@@ -296,8 +296,9 @@ class IsolateServicer(definitions.IsolateServicer):
     def watch_queue_until_completed(
         self, queue: Queue, is_completed: Callable[[], bool]
     ) -> Iterator[definitions.PartialRunResult]:
-        """Watch the given queue until the is_completed function returns True. Note that even
-        if the function is completed, this function might not finish until the queue is empty.
+        """Watch the given queue until the is_completed function returns True.
+        Note that even if the function is completed, this function might not
+        finish until the queue is empty.
         """
 
         timer = time.monotonic()

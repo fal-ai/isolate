@@ -43,8 +43,9 @@ class PyenvEnvironment(BaseEnvironment[Path]):
         pyenv = _get_pyenv_executable()
         env_path = self.settings.cache_dir_for(self)
         with self.settings.cache_lock_for(env_path):
-            # PyEnv installs* the Python versions under $root/versions/$version, where we
-            # use versions/$version as the key and $root as the base directory (for pyenv).
+            # PyEnv installs* the Python versions under $root/versions/$version, where
+            # we use versions/$version as the key and $root as the base directory
+            # (for pyenv).
             #
             # [0]: https://github.com/pyenv/pyenv#locating-pyenv-provided-python-installations
             pyenv_root = env_path.parent.parent
@@ -126,15 +127,17 @@ def _get_pyenv_executable() -> Path:
     if _PYENV_EXECUTABLE_PATH:
         if not os.path.exists(_PYENV_EXECUTABLE_PATH):
             raise EnvironmentCreationError(
-                f"Path to pyenv executable not found! ISOLATE_PYENV_EXECUTABLE variable: {_PYENV_EXECUTABLE_PATH!r}"
+                "Path to pyenv executable not found! ISOLATE_PYENV_EXECUTABLE "
+                f"variable: {_PYENV_EXECUTABLE_PATH!r}"
             )
         return Path(_PYENV_EXECUTABLE_PATH)
 
     pyenv_path = shutil.which(_PYENV_EXECUTABLE_NAME)
     if pyenv_path is None:
         raise FileNotFoundError(
-            "Could not find the pyenv executable. If pyenv is not already installed in your system, please"
-            "install it first. If it is not in your PATH, then point ISOLATE_PYENV_COMMAND to the absolute path of the"
+            "Could not find the pyenv executable. If pyenv is not already installed "
+            "in your system, please install it first. If it is not in your PATH, "
+            "then point ISOLATE_PYENV_COMMAND to the absolute path of the "
             "pyenv executable."
         )
     return Path(pyenv_path)
