@@ -246,10 +246,10 @@ def get_executable(command: str, home: str | None = None) -> Path:
         binary_path = shutil.which(command, path=path)
         if binary_path is not None:
             return Path(binary_path)
-    else:
-        # TODO: we should probably show some instructions on how you
-        # can install conda here.
-        raise FileNotFoundError(
-            f"Could not find the {command} executable. If the {command} executable is not available by default, please point isolate "
-            f" to the path where the {command} binary is available '{home}'."
-        )
+    # TODO: we should probably show some instructions on how you
+    # can install conda here.
+    raise FileNotFoundError(
+        f"Could not find the {command} executable. "
+        f"If the {command} executable is not available by default, please point "
+        f"isolate to the path where the {command} binary is available '{home}'."
+    )

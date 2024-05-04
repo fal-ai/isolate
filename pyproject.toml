@@ -60,4 +60,8 @@ dev = [
 "pyenv" = "isolate.backends.pyenv:PyenvEnvironment"
 
 [tool.ruff]
+target-version = "py38"
 exclude = ["*_pb2.py", "*_pb2.pyi", "*_pb2_grpc.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "PLC", "PLE", "PLW", "I", "UP"]

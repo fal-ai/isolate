@@ -161,7 +161,10 @@ def main() -> int:
         assert not options.with_pdb, "--with-pdb can't be used in the debug mode"
         message = "=" * 60
         message += "\n" * 3
-        message += "Debug mode successfully activated. You can start your debugging session with the following command:\n"
+        message += (
+            "Debug mode successfully activated. "
+            "You can start your debugging session with the following command:\n"
+        )
         message += (
             f"    $ {_get_shell_bootstrap()}\\\n     "
             f"{sys.executable} {os.path.abspath(__file__)} "

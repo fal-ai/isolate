@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 
-
 from isolate.common import timestamp
 from isolate.connections.grpc import definitions
 from isolate.logs import Log, LogLevel, LogSource

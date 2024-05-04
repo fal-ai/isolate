@@ -101,7 +101,8 @@ class AgentServicer(definitions.AgentServicer):
     ) -> Generator[definitions.PartialRunResult, None, Any]:
         if function.was_it_raised:
             raise AbortException(
-                f"The {function_kind} function must be callable, not a raised exception."
+                f"The {function_kind} function must be callable, "
+                "not a raised exception."
             )
 
         try:
@@ -113,7 +114,8 @@ class AgentServicer(definitions.AgentServicer):
 
         if not callable(function):
             raise AbortException(
-                f"The {function_kind} function must be callable, not {type(function).__name__}."
+                f"The {function_kind} function must be callable, "
+                f"not {type(function).__name__}."
             )
 
         yield from self.log(f"Starting the execution of the {function_kind} function.")
@@ -146,7 +148,8 @@ class AgentServicer(definitions.AgentServicer):
                     stringized_tb, source=LogSource.USER, level=LogLevel.STDERR
                 )
             raise AbortException(
-                f"Error while serializing the execution result (object of type {type(result)})."
+                "Error while serializing the execution result "
+                f"(object of type {type(result)})."
             )
         except BaseException:
             yield from self.log(traceback.format_exc(), level=LogLevel.ERROR)

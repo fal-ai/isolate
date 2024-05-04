@@ -73,13 +73,14 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
     def open_connection(
         self, connection_key: ConnectionKeyType
     ) -> EnvironmentConnection:
-        """Return a new connection to the environment with using the `connection_key`."""
+        """Return a new connection to the environment with using the
+        `connection_key`."""
         raise NotImplementedError
 
     @contextmanager
     def connect(self) -> Iterator[EnvironmentConnection]:
-        """Create the given environment (if it already doesn't exist) and establish a connection
-        to it."""
+        """Create the given environment (if it already doesn't exist) and establish a
+        connection to it."""
         connection_key = self.create()
         with self.open_connection(connection_key) as connection:
             yield connection

@@ -8,7 +8,6 @@ from functools import total_ordering
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
     from isolate.backends import BaseEnvironment
 
