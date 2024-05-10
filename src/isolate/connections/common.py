@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Iterator, cast
 
 from tblib import Traceback, TracebackParseError
 
+from isolate.exceptions import IsolateException
+
 if TYPE_CHECKING:
     from typing import Protocol
 
@@ -21,7 +23,7 @@ AGENT_SIGNATURE = "IS_ISOLATE_AGENT"
 
 
 @dataclass
-class SerializationError(Exception):
+class SerializationError(IsolateException):
     """An error that happened during the serialization process."""
 
     message: str
