@@ -16,10 +16,11 @@ from isolate.connections.common import serialize_object
 from isolate.connections.grpc import agent, definitions
 from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc
+from isolate.exceptions import IsolateException
 from isolate.logs import LogLevel, LogSource
 
 
-class AgentError(Exception):
+class AgentError(IsolateException):
     """An internal problem caused by (most probably) the agent."""
 
 

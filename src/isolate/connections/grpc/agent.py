@@ -22,11 +22,12 @@ from isolate.connections.common import SerializationError, serialize_object
 from isolate.connections.grpc import definitions
 from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc, to_grpc
+from isolate.exceptions import IsolateException
 from isolate.logs import Log, LogLevel, LogSource
 
 
 @dataclass
-class AbortException(Exception):
+class AbortException(IsolateException):
     message: str
 
 
