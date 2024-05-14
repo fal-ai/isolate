@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib
 import os
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from tblib import Traceback, TracebackParseError
@@ -21,11 +20,10 @@ if TYPE_CHECKING:
 AGENT_SIGNATURE = "IS_ISOLATE_AGENT"
 
 
-@dataclass
 class BaseSerializationError(IsolateException):
     """An error that happened during the serialization process."""
 
-    message: str
+    pass
 
 
 class SerializationError(BaseSerializationError):
