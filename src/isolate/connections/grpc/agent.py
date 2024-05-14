@@ -107,10 +107,10 @@ class AgentServicer(definitions.AgentServicer):
             )
 
         try:
-            # TODO: technically any sort of exception could be raised here, since
+            # NOTE: technically any sort of exception could be raised here, since
             # depickling is basically involves code execution from the *user*.
             function = from_grpc(function)
-        except SerializationError as exc:
+        except BaseException as exc:
             return exc, True, traceback.format_exc()
 
         if not callable(function):
