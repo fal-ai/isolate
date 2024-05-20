@@ -171,7 +171,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     def _run_conda(self, *args: Any) -> None:
         conda_executable = get_executable(self._exec_command, self._exec_home)
-        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
+        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr, _):
             subprocess.check_call(
                 [conda_executable, *args],
                 stdout=stdout,

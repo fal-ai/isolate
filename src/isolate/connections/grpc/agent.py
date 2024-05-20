@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+import os
+import sys
 import traceback
 from argparse import ArgumentParser
 from concurrent import futures
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import (
     Any,
     Generator,
     Iterable,
     Iterator,
-    cast,
 )
 
 import grpc
@@ -21,9 +22,8 @@ from isolate.backends.common import sha256_digest_of
 from isolate.connections.common import SerializationError, serialize_object
 from isolate.connections.grpc import definitions
 from isolate.connections.grpc.configuration import get_default_options
-from isolate.connections.grpc.interface import from_grpc, to_grpc
+from isolate.connections.grpc.interface import from_grpc
 from isolate.exceptions import IsolateException
-from isolate.logs import Log, LogLevel, LogSource
 
 
 @dataclass
@@ -31,16 +31,19 @@ class AbortException(IsolateException):
     message: str
 
 
-@dataclass
 class AgentServicer(definitions.AgentServicer):
-    _run_cache: dict[str, Any] = field(default_factory=dict)
+    def __init__(self, log_fd: int | None = None):
+        super().__init__()
+
+        self._run_cache: dict[str, Any] = {}
+        self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
 
     def Run(
         self,
         request: definitions.FunctionCall,
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
-        yield from self.log(f"A connection has been established: {context.peer()}!")
+        self.log(f"A connection has been established: {context.peer()}!")
 
         extra_args = []
         if request.HasField("setup_func"):
@@ -54,13 +57,13 @@ class AgentServicer(definitions.AgentServicer):
                         result,
                         was_it_raised,
                         stringized_tb,
-                    ) = yield from self.execute_function(
+                    ) = self.execute_function(
                         request.setup_func,
                         "setup",
                     )
 
                     if was_it_raised:
-                        yield from self.log(
+                        self.log(
                             "The setup function has thrown an error. Aborting the run."
                         )
                         yield from self.send_object(
@@ -79,7 +82,7 @@ class AgentServicer(definitions.AgentServicer):
             extra_args.append(self._run_cache[cache_key])
 
         try:
-            result, was_it_raised, stringized_tb = yield from self.execute_function(
+            result, was_it_raised, stringized_tb = self.execute_function(
                 request.function,
                 "function",
                 extra_args=extra_args,
@@ -99,7 +102,7 @@ class AgentServicer(definitions.AgentServicer):
         function_kind: str,
         *,
         extra_args: Iterable[Any] = (),
-    ) -> Generator[definitions.PartialRunResult, None, Any]:
+    ) -> tuple[Any, bool, str | None]:
         if function.was_it_raised:
             raise AbortException(
                 f"The {function_kind} function must be callable, "
@@ -119,7 +122,7 @@ class AgentServicer(definitions.AgentServicer):
                 f"not {type(function).__name__}."
             )
 
-        yield from self.log(f"Starting the execution of the {function_kind} function.")
+        self.log(f"Starting the execution of the {function_kind} function.")
 
         was_it_raised = False
         stringized_tb = None
@@ -131,7 +134,7 @@ class AgentServicer(definitions.AgentServicer):
             num_frames = len(traceback.extract_stack()[:-5])
             stringized_tb = "".join(traceback.format_exc(limit=-num_frames))
 
-        yield from self.log(f"Completed the execution of the {function_kind} function.")
+        self.log(f"Completed the execution of the {function_kind} function.")
         return result, was_it_raised, stringized_tb
 
     def send_object(
@@ -145,20 +148,18 @@ class AgentServicer(definitions.AgentServicer):
             definition = serialize_object(serialization_method, result)
         except SerializationError:
             if stringized_tb:
-                yield from self.log(
-                    stringized_tb, source=LogSource.USER, level=LogLevel.STDERR
-                )
+                print(stringized_tb, file=sys.stderr)
             raise AbortException(
                 "Error while serializing the execution result "
                 f"(object of type {type(result)})."
             )
         except BaseException:
-            yield from self.log(traceback.format_exc(), level=LogLevel.ERROR)
+            self.log(traceback.format_exc())
             raise AbortException(
                 "An unexpected error occurred while serializing the result."
             )
 
-        yield from self.log("Sending the result.")
+        self.log("Sending the result.")
         serialized_obj = definitions.SerializedObject(
             method=serialization_method,
             definition=definition,
@@ -171,15 +172,9 @@ class AgentServicer(definitions.AgentServicer):
             logs=[],
         )
 
-    def log(
-        self,
-        message: str,
-        level: LogLevel = LogLevel.TRACE,
-        source: LogSource = LogSource.BRIDGE,
-    ) -> Iterator[definitions.PartialRunResult]:
-        log = to_grpc(Log(message, level=level, source=source))
-        log = cast(definitions.Log, log)
-        yield definitions.PartialRunResult(result=None, is_complete=False, logs=[log])
+    def log(self, message: str) -> None:
+        self._log.write(message)
+        self._log.flush()
 
     def abort_with_msg(
         self,
@@ -209,10 +204,10 @@ def create_server(address: str) -> grpc.Server:
     return server
 
 
-def run_agent(address: str) -> int:
+def run_agent(address: str, log_fd: int | None = None) -> int:
     """Run the agent servicer on the given address."""
     server = create_server(address)
-    servicer = AgentServicer()
+    servicer = AgentServicer(log_fd=log_fd)
 
     # This function just calls some methods on the server
     # and register a generic handler for the bridge. It does
@@ -227,9 +222,10 @@ def run_agent(address: str) -> int:
 def main() -> int:
     parser = ArgumentParser()
     parser.add_argument("address", type=str)
+    parser.add_argument("--log-fd", type=int)
 
     options = parser.parse_args()
-    return run_agent(options.address)
+    return run_agent(options.address, log_fd=options.log_fd)
 
 
 if __name__ == "__main__":

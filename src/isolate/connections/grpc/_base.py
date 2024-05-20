@@ -137,13 +137,17 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
         self,
         executable: Path,
         connection: str,
+        log_fd: int,
     ) -> List[Union[str, Path]]:
         return [
             executable,
             agent_startup.__file__,
             agent.__file__,
             connection,
+            "--log-fd",
+            str(log_fd),
         ]
 
-    def handle_agent_log(self, line: str, level: LogLevel) -> None:
-        self.log(line, level=level, source=LogSource.USER)
+    def handle_agent_log(self, line: str, level: LogLevel, source: LogSource) -> None:
+        print(f"[{source}] [{level}] {line}")
+        self.log(line, level=level, source=source)

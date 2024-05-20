@@ -202,6 +202,7 @@ class PythonIPC(PythonExecutionBase[AgentListener], IsolatedProcessConnection):
         self,
         executable: Path,
         connection: AgentListener,
+        log_fd: int,
     ) -> list[str | Path]:
         assert isinstance(connection.address, tuple)
         return [
@@ -214,21 +215,9 @@ class PythonIPC(PythonExecutionBase[AgentListener], IsolatedProcessConnection):
             # the connection with the bridge.
             "--serialization-backend",
             self.environment.settings.serialization_method,
+            "--log-fd",
+            str(log_fd),
         ]
 
-    def handle_agent_log(self, line: str, level: LogLevel) -> None:
-        # TODO: we probably should create a new fd and pass it as
-        # one of the the arguments to the child process. Then everything
-        # from that fd can be automatically logged as originating from the
-        # bridge.
-
-        # Agent can produce [trace] messages, so change the log
-        # level to it if this does not originate from the user.
-        if line.startswith("[trace]"):
-            line = line.replace("[trace]", "", 1)
-            level = LogLevel.TRACE
-            source = LogSource.BRIDGE
-        else:
-            source = LogSource.USER
-
+    def handle_agent_log(self, line: str, level: LogLevel, source: LogSource) -> None:
         self.log(line, level=level, source=source)

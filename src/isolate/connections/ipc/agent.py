@@ -15,6 +15,8 @@
 # one being the actual result of the given callable, and the other one is a boolean flag
 # indicating whether the callable has raised an exception or not.
 
+from __future__ import annotations
+
 import base64
 import importlib
 import os
@@ -24,7 +26,7 @@ import traceback
 from argparse import ArgumentParser
 from contextlib import closing
 from multiprocessing.connection import Client
-from typing import TYPE_CHECKING, Any, Callable, ContextManager, Tuple
+from typing import TYPE_CHECKING, Any, Callable, ContextManager
 
 if TYPE_CHECKING:
     # Somhow mypy can't figure out that `ConnectionWrapper`
@@ -47,13 +49,13 @@ else:
     from multiprocessing.connection import ConnectionWrapper
 
 
-def decode_service_address(address: str) -> Tuple[str, int]:
+def decode_service_address(address: str) -> tuple[str, int]:
     host, port = base64.b64decode(address).decode("utf-8").rsplit(":", 1)
     return host, int(port)
 
 
 def child_connection(
-    serialization_method: str, address: Tuple[str, int]
+    serialization_method: str, address: tuple[str, int]
 ) -> ContextManager[ConnectionWrapper]:
     serialization_backend = importlib.import_module(serialization_method)
     return closing(
@@ -70,7 +72,11 @@ DEBUG_TIMEOUT = 60 * 15
 
 
 def run_client(
-    serialization_method: str, address: Tuple[str, int], *, with_pdb: bool = False
+    serialization_method: str,
+    address: tuple[str, int],
+    *,
+    with_pdb: bool = False,
+    log_fd: int | None = None,
 ) -> None:
     # Debug Mode
     # ==========
@@ -96,13 +102,22 @@ def run_client(
 
         pdb.set_trace()
 
-    print(f"[trace] Trying to create a connection to {address}")
+    if log_fd is None:
+        _log = sys.stdout
+    else:
+        _log = os.fdopen(log_fd, "w")
+
+    def log(_msg):
+        _log.write(_msg)
+        _log.flush()
+
+    log(f"Trying to create a connection to {address}")
     # TODO(feat): this should probably run in a loop instead of
     # receiving a single function and then exitting immediately.
     with child_connection(serialization_method, address) as connection:
-        print(f"[trace] Created child connection to {address}")
+        log(f"Created child connection to {address}")
         callable = connection.recv()
-        print(f"[trace] Received the callable at {address}")
+        log(f"Received the callable at {address}")
 
         result = None
         did_it_raise = False
@@ -149,12 +164,11 @@ def _get_shell_bootstrap() -> str:
 
 
 def main() -> int:
-    print(f"[trace] Starting the isolated process at PID {os.getpid()}")
-
     parser = ArgumentParser()
     parser.add_argument("listen_at")
     parser.add_argument("--with-pdb", action="store_true", default=False)
     parser.add_argument("--serialization-backend", default="pickle")
+    parser.add_argument("--log-fd", type=int)
 
     options = parser.parse_args()
     if IS_DEBUG_MODE:
@@ -178,7 +192,12 @@ def main() -> int:
 
     serialization_method = options.serialization_backend
     address = decode_service_address(options.listen_at)
-    run_client(serialization_method, address, with_pdb=options.with_pdb)
+    run_client(
+        serialization_method,
+        address,
+        with_pdb=options.with_pdb,
+        log_fd=options.log_fd,
+    )
     return 0
 
 
