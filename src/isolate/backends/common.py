@@ -171,23 +171,26 @@ def _unblocked_pipe() -> tuple[int, int]:
 def logged_io(
     stdout_hook: HookT,
     stderr_hook: HookT | None = None,
-) -> Iterator[tuple[int, int]]:
+    log_hook: HookT | None = None,
+) -> Iterator[tuple[int, int, int]]:
     """Open two new streams (for stdout and stderr, respectively) and start relaying all
     the output from them to the given hooks."""
 
     stdout_reader_fd, stdout_writer_fd = _unblocked_pipe()
     stderr_reader_fd, stderr_writer_fd = _unblocked_pipe()
+    log_reader_fd, log_writer_fd = _unblocked_pipe()
 
     termination_event = threading.Event()
     io_observer = _io_observer(
         hooks={
             stdout_reader_fd: stdout_hook,
             stderr_reader_fd: stderr_hook or stdout_hook,
+            log_reader_fd: log_hook or stdout_hook,
         },
         termination_event=termination_event,
     )
     try:
-        yield stdout_writer_fd, stderr_writer_fd
+        yield stdout_writer_fd, stderr_writer_fd, log_writer_fd
     finally:
         termination_event.set()
         try:
