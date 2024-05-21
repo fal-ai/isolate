@@ -17,7 +17,7 @@ from typing import (
 
 from isolate.backends.common import get_executable_path, logged_io
 from isolate.connections.common import AGENT_SIGNATURE
-from isolate.logs import LogLevel
+from isolate.logs import LogLevel, LogSource
 
 if TYPE_CHECKING:
     from isolate.backends import BaseEnvironment
@@ -113,14 +113,22 @@ class PythonExecutionBase(Generic[ConnectionType]):
 
         python_executable = get_executable_path(self.environment_path, "python")
         with logged_io(
-            partial(self.handle_agent_log, level=LogLevel.STDOUT),
-            partial(self.handle_agent_log, level=LogLevel.STDERR),
-        ) as (stdout, stderr):
+            partial(
+                self.handle_agent_log, source=LogSource.USER, level=LogLevel.STDOUT
+            ),
+            partial(
+                self.handle_agent_log, source=LogSource.USER, level=LogLevel.STDERR
+            ),
+            partial(
+                self.handle_agent_log, source=LogSource.BRIDGE, level=LogLevel.TRACE
+            ),
+        ) as (stdout, stderr, log_fd):
             yield subprocess.Popen(
-                self.get_python_cmd(python_executable, connection),
+                self.get_python_cmd(python_executable, connection, log_fd),
                 env=self.get_env_vars(),
                 stdout=stdout,
                 stderr=stderr,
+                pass_fds=(log_fd,),
                 text=True,
             )
 
@@ -158,11 +166,12 @@ class PythonExecutionBase(Generic[ConnectionType]):
         self,
         executable: Path,
         connection: ConnectionType,
+        log_fd: int,
     ) -> list[str | Path]:
         """Return the command to run the agent process with."""
         raise NotImplementedError
 
-    def handle_agent_log(self, line: str, level: LogLevel) -> None:
+    def handle_agent_log(self, line: str, level: LogLevel, source: LogSource) -> None:
         """Handle a log line emitted by the agent process. The level will be either
         STDOUT or STDERR."""
         raise NotImplementedError
