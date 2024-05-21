@@ -10,7 +10,6 @@ from concurrent import futures
 from dataclasses import dataclass
 from typing import (
     Any,
-    Generator,
     Iterable,
     Iterator,
 )
@@ -66,7 +65,7 @@ class AgentServicer(definitions.AgentServicer):
                         self.log(
                             "The setup function has thrown an error. Aborting the run."
                         )
-                        yield from self.send_object(
+                        yield self.send_object(
                             request.setup_func.method,
                             result,
                             was_it_raised,
@@ -74,7 +73,7 @@ class AgentServicer(definitions.AgentServicer):
                         )
                         raise AbortException("The setup function has thrown an error.")
                 except AbortException as exc:
-                    return self.abort_with_msg(context, exc.message)
+                    context.abort(StatusCode.INVALID_ARGUMENT, exc.message)
                 else:
                     assert not was_it_raised
                     self._run_cache[cache_key] = result
@@ -87,14 +86,14 @@ class AgentServicer(definitions.AgentServicer):
                 "function",
                 extra_args=extra_args,
             )
-            yield from self.send_object(
+            yield self.send_object(
                 request.function.method,
                 result,
                 was_it_raised,
                 stringized_tb,
             )
         except AbortException as exc:
-            return self.abort_with_msg(context, exc.message)
+            context.abort(StatusCode.INVALID_ARGUMENT, exc.message)
 
     def execute_function(
         self,
@@ -143,7 +142,7 @@ class AgentServicer(definitions.AgentServicer):
         result: object,
         was_it_raised: bool,
         stringized_tb: str | None,
-    ) -> Generator[definitions.PartialRunResult, None, Any]:
+    ) -> definitions.PartialRunResult:
         try:
             definition = serialize_object(serialization_method, result)
         except SerializationError:
@@ -166,7 +165,7 @@ class AgentServicer(definitions.AgentServicer):
             was_it_raised=was_it_raised,
             stringized_traceback=stringized_tb,
         )
-        yield definitions.PartialRunResult(
+        return definitions.PartialRunResult(
             result=serialized_obj,
             is_complete=True,
             logs=[],
@@ -175,17 +174,6 @@ class AgentServicer(definitions.AgentServicer):
     def log(self, message: str) -> None:
         self._log.write(message)
         self._log.flush()
-
-    def abort_with_msg(
-        self,
-        context: ServicerContext,
-        message: str,
-        *,
-        code: StatusCode = StatusCode.INVALID_ARGUMENT,
-    ) -> None:
-        context.set_code(code)
-        context.set_details(message)
-        return None
 
 
 def create_server(address: str) -> grpc.Server:
