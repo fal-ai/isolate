@@ -78,7 +78,10 @@ class AgentServicer(definitions.AgentServicer):
                     assert not was_it_raised
                     self._run_cache[cache_key] = result
 
-            extra_args.append(self._run_cache[cache_key])
+            try:
+                extra_args.append(self._run_cache[cache_key])
+            except Exception as exc:
+                context.abort(StatusCode.INVALID_ARGUMENT, "OLOLO " + str(exc))
 
         try:
             result, was_it_raised, stringized_tb = self.execute_function(

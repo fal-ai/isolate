@@ -341,7 +341,7 @@ class IsolateServicer(definitions.IsolateServicer):
         code: StatusCode = StatusCode.INVALID_ARGUMENT,
     ) -> None:
         context.set_code(code)
-        context.set_details(message)
+        context.set_details("ALALALA " + message)
         return None
 
 
