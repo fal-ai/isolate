@@ -56,6 +56,7 @@ dev = [
 "virtualenv" = "isolate.backends.virtualenv:VirtualPythonEnvironment"
 "conda" = "isolate.backends.conda:CondaEnvironment"
 "local" = "isolate.backends.local:LocalPythonEnvironment"
+"container" = "isolate.backends.container:ContainerizedPythonEnvironment"
 "isolate-server" = "isolate.backends.remote:IsolateServer"
 "pyenv" = "isolate.backends.pyenv:PyenvEnvironment"
 
