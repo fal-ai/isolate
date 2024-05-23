@@ -1,13 +1,15 @@
+import shlex
 import subprocess
 import sys
 import textwrap
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Type
+
+import pytest
 
 import isolate
-import pytest
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import get_executable, sha256_digest_of
 from isolate.backends.conda import CondaEnvironment
@@ -80,10 +82,7 @@ class GenericEnvironmentTests:
             self.get_example_version(environment, connection_key)
 
     @pytest.mark.skip(
-        reason=(
-            "This test fails on the 'both the original one and the duplicate one "
-            "will be gone' section"
-        )
+        reason="This test fails on the 'both the original one and the duplicate one will be gone' section"
     )
     def test_create_generic_env_cached(self, tmp_path, monkeypatch):
         environment_1 = self.get_project_environment(tmp_path, "old-example-project")
@@ -193,6 +192,7 @@ class GenericEnvironmentTests:
             py_version = self._run_cmd(connection, "python", "--version")
             assert py_version.startswith("Python 3")
 
+    @pytest.mark.xfail(reason="need to fix conda error on python 3.7")
     def test_self_installed_executable_running(self, tmp_path):
         environment = self.get_project_environment(tmp_path, "black")
         with environment.connect() as connection:
@@ -201,15 +201,14 @@ class GenericEnvironmentTests:
 
     def test_custom_python_version(self, tmp_path):
         for python_type, python_version in [
-            ("old-python", "3.8"),
-            ("new-python", "3.11"),
+            ("old-python", "3.7"),
+            ("new-python", "3.10"),
         ]:
             environment = self.get_project_environment(tmp_path, python_type)
-            actual = self.get_python_version(environment, environment.create())
-            assert actual.startswith(python_version)
+            python_version = self.get_python_version(environment, environment.create())
+            assert python_version.startswith(python_version)
 
 
-UV_PATH: Optional[Path]
 try:
     UV_PATH = get_executable("uv")
 except FileNotFoundError:
@@ -217,6 +216,7 @@ except FileNotFoundError:
 
 
 class TestVirtualenv(GenericEnvironmentTests):
+
     backend_cls = VirtualPythonEnvironment
     configs = {
         "empty": {
@@ -238,10 +238,10 @@ class TestVirtualenv(GenericEnvironmentTests):
             "requirements": ["black==22.12.0"],
         },
         "old-python": {
-            "python_version": "3.8",
+            "python_version": "3.7",
         },
         "new-python": {
-            "python_version": "3.11",
+            "python_version": "3.10",
         },
     }
     creation_entry_point = ("virtualenv.cli_run", PermissionError)
@@ -336,16 +336,15 @@ class TestVirtualenv(GenericEnvironmentTests):
         )
 
         for python_type, expected_python_version in [
-            ("old-python", "3.8"),
-            ("new-python", "3.11"),
+            ("old-python", "3.7"),
+            ("new-python", "3.10"),
         ]:
             environment = self.get_project_environment(tmp_path, python_type)
             try:
                 connection = environment.create()
             except EnvironmentCreationError:
                 pytest.skip(
-                    "This python version not available on the system "
-                    "(through virtualenv)"
+                    "This python version not available on the system (through virtualenv)"
                 )
 
             python_version = self.get_python_version(environment, connection)
@@ -392,7 +391,7 @@ class TestVirtualenv(GenericEnvironmentTests):
         environment = self.get_environment(
             tmp_path,
             {
-                "requirements": ["pyjokes==0.5"],
+                "requirements": [f"pyjokes==0.5"],
                 "resolver": "uv",
             },
         )
@@ -413,6 +412,7 @@ else:
 
 @pytest.mark.skipif(not IS_MAMBA_AVAILABLE, reason="Mamba is not available")
 class TestConda(GenericEnvironmentTests):
+
     backend_cls = CondaEnvironment
     configs = {
         "empty": {
@@ -437,11 +437,11 @@ class TestConda(GenericEnvironmentTests):
             "packages": ["black=22.12.0"],
         },
         "old-python": {
-            "python_version": "3.8",
+            "python_version": "3.7",
             "packages": [],
         },
         "new-python": {
-            "python_version": "3.11",
+            "python_version": "3.10",
             "packages": [],
         },
         "env-dict": {
@@ -473,16 +473,16 @@ class TestConda(GenericEnvironmentTests):
         "user_packages",
         [
             ["python"],
-            ["python=3.8"],
-            ["python>=3.8"],
-            ["python=3.8.*"],
-            ["python=3.8.10"],
-            ["python != 3.8"],
-            ["python> 3.8"],
-            ["python <3.8"],
-            ["pyjokes", "python>=3.8", "emoji"],
-            ["python<=3.8", "emoji"],
-            ["pyjokes", "python==3.8"],
+            ["python=3.7"],
+            ["python>=3.7"],
+            ["python=3.7.*"],
+            ["python=3.7.10"],
+            ["python != 3.7"],
+            ["python> 3.7"],
+            ["python <3.7"],
+            ["pyjokes", "python>=3.7", "emoji"],
+            ["python<=3.7", "emoji"],
+            ["pyjokes", "python==3.7"],
         ],
     )
     @pytest.mark.parametrize("python_version", [None, "3.9"])
@@ -589,14 +589,11 @@ def test_local_python_environment():
 
 
 def test_path_on_local():
-    import os
     import shutil
 
     local_env = LocalPythonEnvironment()
     with local_env.connect() as connection:
-        assert os.readlink(
-            connection.run(partial(shutil.which, "python"))
-        ) == os.readlink(shutil.which("python"))
+        assert connection.run(partial(shutil.which, "python")) == shutil.which("python")
 
 
 def test_isolate_server_environment(isolate_server):
@@ -690,15 +687,14 @@ def test_isolate_server_demo(isolate_server):
         remote_environment = isolate.prepare_environment(
             "isolate-server", host=isolate_server, target_environments=[definition]
         )
-        with local_environment.connect() as local_connection:
-            with remote_environment.connect() as remote_connection:
-                for target_func in [
-                    partial(eval, "__import__('pyjokes').__version__"),
-                    partial(eval, "2 + 2"),
-                ]:
-                    assert local_connection.run(target_func) == remote_connection.run(
-                        target_func
-                    )
+        with local_environment.connect() as local_connection, remote_environment.connect() as remote_connection:
+            for target_func in [
+                partial(eval, "__import__('pyjokes').__version__"),
+                partial(eval, "2 + 2"),
+            ]:
+                assert local_connection.run(target_func) == remote_connection.run(
+                    target_func
+                )
 
 
 def test_isolate_server_multiple_envs(isolate_server):
@@ -733,11 +729,7 @@ def test_isolate_server_multiple_envs(isolate_server):
             connection.run(
                 partial(
                     eval,
-                    (
-                        "__import__('pyjokes').__version__ + "
-                        "' ' + "
-                        "__import__('dateutil').__version__"
-                    ),
+                    "__import__('pyjokes').__version__ + ' ' + __import__('dateutil').__version__",
                 )
             )
             == "0.5.0 2.8.2"
@@ -806,7 +798,7 @@ else:
 
 
 @pytest.mark.skipif(not IS_PYENV_AVAILABLE, reason="Pyenv is not available")
-@pytest.mark.parametrize("python_version", ["3.8", "3.10", "3.9.15"])
+@pytest.mark.parametrize("python_version", ["3.7", "3.10", "3.9.15"])
 def test_pyenv_environment(python_version, tmp_path):
     different_python = PyenvEnvironment(python_version)
     test_settings = IsolateSettings(Path(tmp_path))

@@ -32,28 +32,3 @@ this problem lacked a universal interface which one can simply define a set of r
 different) and can change it without any loss. Isolate is working towards a future where this
 transititon is as seamless as the transition from your local environment to the remote
 environment.
-
-## Contributing
-
-### Installing in editable mode with dev dependencies
-
-```
-pip install -e '.[dev]'
-```
-
-### Running tests
-
-```
-pytest
-```
-
-### Pre-commit
-
-```
-pre-commit install
-```
-
-### Commit format
-
-Please follow [conventional commits specification](https://www.conventionalcommits.org/) for descriptions/messages.
-

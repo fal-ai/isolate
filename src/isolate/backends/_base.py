@@ -6,13 +6,14 @@ from typing import (
     Any,
     Callable,
     ClassVar,
+    Dict,
     Generic,
     Iterator,
+    Optional,
     TypeVar,
 )
 
 from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
-from isolate.exceptions import IsolateException
 from isolate.logs import Log, LogLevel, LogSource
 
 __all__ = [
@@ -28,7 +29,7 @@ CallResultType = TypeVar("CallResultType")
 BasicCallable = Callable[[], CallResultType]
 
 
-class EnvironmentCreationError(IsolateException):
+class EnvironmentCreationError(Exception):
     """Raised when the environment cannot be created."""
 
 
@@ -36,14 +37,14 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
     """Represents a managed environment definition for an isolatation backend
     that can be used to run Python code with different set of dependencies."""
 
-    BACKEND_NAME: ClassVar[str | None] = None
+    BACKEND_NAME: ClassVar[Optional[str]] = None
 
     settings: IsolateSettings = DEFAULT_SETTINGS
 
     @classmethod
     def from_config(
         cls,
-        config: dict[str, Any],
+        config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         """Create a new environment from the given configuration."""
@@ -74,14 +75,13 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
     def open_connection(
         self, connection_key: ConnectionKeyType
     ) -> EnvironmentConnection:
-        """Return a new connection to the environment with using the
-        `connection_key`."""
+        """Return a new connection to the environment with using the `connection_key`."""
         raise NotImplementedError
 
     @contextmanager
     def connect(self) -> Iterator[EnvironmentConnection]:
-        """Create the given environment (if it already doesn't exist) and establish a
-        connection to it."""
+        """Create the given environment (if it already doesn't exist) and establish a connection
+        to it."""
         connection_key = self.create()
         with self.open_connection(connection_key) as connection:
             yield connection

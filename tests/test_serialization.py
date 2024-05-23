@@ -1,8 +1,10 @@
 from functools import partial
 
 import pytest
+
 from isolate.connections.common import (
     SerializationError,
+    as_serialization_method,
     load_serialized_object,
     serialize_object,
 )
@@ -38,7 +40,7 @@ def test_deserialize_raised_exception():
 
 
 def error_while_serializing():
-    anon = lambda: 2 + 2  # anonymous functions are not  # noqa: E731
+    anon = lambda: 2 + 2  # anonymous functions are not
     # serializable by pickle
     with pytest.raises(SerializationError) as exc_info:
         serialize_object("pickle", anon)

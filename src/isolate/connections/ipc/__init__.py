@@ -1,4 +1,4 @@
-from isolate.connections.ipc._base import (  # noqa: F401
+from isolate.connections.ipc._base import (
     IsolatedProcessConnection,
     PythonExecutionBase,
     PythonIPC,

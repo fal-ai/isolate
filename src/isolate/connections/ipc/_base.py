@@ -13,6 +13,9 @@ from typing import (
     Any,
     Callable,
     ContextManager,
+    List,
+    Tuple,
+    Union,
 )
 
 from isolate.backends import (
@@ -34,13 +37,17 @@ if TYPE_CHECKING:
             connection: Any,
             loads: Callable[[bytes], Any],
             dumps: Callable[[Any], bytes],
-        ) -> None: ...
+        ) -> None:
+            ...
 
-        def recv(self) -> Any: ...
+        def recv(self) -> Any:
+            ...
 
-        def send(self, value: Any) -> None: ...
+        def send(self, value: Any) -> None:
+            ...
 
-        def close(self) -> None: ...
+        def close(self) -> None:
+            ...
 
 else:
     from multiprocessing.connection import ConnectionWrapper
@@ -68,7 +75,7 @@ def loadserialization_method(backend_name: str) -> Any:
     return importlib.import_module(backend_name)
 
 
-def encode_service_address(address: tuple[str, int]) -> str:
+def encode_service_address(address: Tuple[str, int]) -> str:
     host, port = address
     return base64.b64encode(f"{host}:{port}".encode()).decode("utf-8")
 
@@ -111,12 +118,10 @@ class IsolatedProcessConnection(EnvironmentConnection):
             #  4. [controller]: Accept the incoming connection request
             #  5. [controller]: Send the executable over the established bridge
             #  6.      [agent]: Receive the executable from the bridge
-            #  7.      [agent]: Execute the executable and once done send the result
-            #                   back
-            #  8. [controller]: Loop until either the isolated process exits or sends
-            #                   any data (will be interpreted as a tuple of two
-            #                   mutually exclusive objects, either a result object or
-            #                   an exception to be raised).
+            #  7.      [agent]: Execute the executable and once done send the result back
+            #  8. [controller]: Loop until either the isolated process exits or sends any
+            #                   data (will be interpreted as a tuple of two mutually exclusive
+            #                   objects, either a result object or an exception to be raised).
             #
 
             self.log("Starting the controller bridge.")
@@ -202,8 +207,7 @@ class PythonIPC(PythonExecutionBase[AgentListener], IsolatedProcessConnection):
         self,
         executable: Path,
         connection: AgentListener,
-        log_fd: int,
-    ) -> list[str | Path]:
+    ) -> List[Union[str, Path]]:
         assert isinstance(connection.address, tuple)
         return [
             executable,
@@ -215,9 +219,21 @@ class PythonIPC(PythonExecutionBase[AgentListener], IsolatedProcessConnection):
             # the connection with the bridge.
             "--serialization-backend",
             self.environment.settings.serialization_method,
-            "--log-fd",
-            str(log_fd),
         ]
 
-    def handle_agent_log(self, line: str, level: LogLevel, source: LogSource) -> None:
+    def handle_agent_log(self, line: str, level: LogLevel) -> None:
+        # TODO: we probably should create a new fd and pass it as
+        # one of the the arguments to the child process. Then everything
+        # from that fd can be automatically logged as originating from the
+        # bridge.
+
+        # Agent can produce [trace] messages, so change the log
+        # level to it if this does not originate from the user.
+        if line.startswith("[trace]"):
+            line = line.replace("[trace]", "", 1)
+            level = LogLevel.TRACE
+            source = LogSource.BRIDGE
+        else:
+            source = LogSource.USER
+
         self.log(line, level=level, source=source)

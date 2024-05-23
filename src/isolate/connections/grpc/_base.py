@@ -15,12 +15,11 @@ from isolate.connections._local import PythonExecutionBase, agent_startup
 from isolate.connections.common import serialize_object
 from isolate.connections.grpc import agent, definitions
 from isolate.connections.grpc.configuration import get_default_options
-from isolate.connections.grpc.interface import from_grpc
-from isolate.exceptions import IsolateException
-from isolate.logs import LogLevel, LogSource
+from isolate.connections.grpc.interface import from_grpc, to_grpc
+from isolate.logs import Log, LogLevel, LogSource
 
 
-class AgentError(IsolateException):
+class AgentError(Exception):
     """An internal problem caused by (most probably) the agent."""
 
 
@@ -50,8 +49,8 @@ class GRPCExecutionBase(EnvironmentConnection):
                     channel_status.result(timeout=max_wait_timeout)
                 except grpc.FutureTimeoutError:
                     raise AgentError(
-                        "Couldn't connect to the gRPC server in the agent "
-                        f"(listening at {address}) in time."
+                        f"Couldn't connect to the gRPC server in the agent (listening at {address}) "
+                        "in time."
                     )
                 stub = definitions.AgentStub(channel)
                 stub._channel = channel  # type: ignore
@@ -70,16 +69,15 @@ class GRPCExecutionBase(EnvironmentConnection):
         #  ---------
         #  1. [controller]: Spawn the agent.
         #  2.      [agent]: Start listening at the given address.
-        #  3. [controller]: Await *at most* max_wait_timeout seconds for the agent to
-        #                   be available if it doesn't do it until then,
-        #                   raise an AgentError.
-        #  4. [controller]: If the server is available, then establish the bridge and
-        #                   pass the 'function' as the input.
+        #  3. [controller]: Await *at most* max_wait_timeout seconds for the agent to be available
+        #                   if it doesn't do it until then, raise an AgentError.
+        #  4. [controller]: If the server is available, then establish the bridge and pass the
+        #                   'function' as the input.
         #  5.      [agent]: Receive the function, deserialize it, start the execution.
-        #  6. [controller]: Watch agent for logs (stdout/stderr), and as soon as they
-        #                   appear call the log handler.
-        #  7.      [agent]: Once the execution of the function is finished, send the
-        #                   result using the same serialization method.
+        #  6. [controller]: Watch agent for logs (stdout/stderr), and as soon as they appear
+        #                   call the log handler.
+        #  7.      [agent]: Once the execution of the function is finished, send the result
+        #                   using the same serialization method.
         #  8. [controller]: Receive the result back and return it.
 
         method = self.environment.settings.serialization_method
@@ -108,8 +106,7 @@ class GRPCExecutionBase(EnvironmentConnection):
                     return cast(CallResultType, from_grpc(partial_result.result))
 
         raise AgentError(
-            "No result object was received from the agent "
-            "(it never set is_complete to True)."
+            "No result object was received from the agent (it never set is_complete to True)."
         )
 
 
@@ -137,17 +134,13 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
         self,
         executable: Path,
         connection: str,
-        log_fd: int,
     ) -> List[Union[str, Path]]:
         return [
             executable,
             agent_startup.__file__,
             agent.__file__,
             connection,
-            "--log-fd",
-            str(log_fd),
         ]
 
-    def handle_agent_log(self, line: str, level: LogLevel, source: LogSource) -> None:
-        print(f"[{source}] [{level}] {line}")
-        self.log(line, level=level, source=source)
+    def handle_agent_log(self, line: str, level: LogLevel) -> None:
+        self.log(line, level=level, source=LogSource.USER)

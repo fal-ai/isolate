@@ -1,1 +1,1 @@
-from isolate.server.server import BridgeManager, IsolateServicer  # noqa: F401
+from isolate.server.server import BridgeManager, IsolateServicer

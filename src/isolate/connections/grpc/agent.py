@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-import os
-import sys
 import traceback
 from argparse import ArgumentParser
 from concurrent import futures
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import (
     Any,
+    Dict,
+    Generator,
     Iterable,
     Iterator,
+    List,
+    Optional,
+    cast,
 )
 
 import grpc
@@ -21,28 +24,25 @@ from isolate.backends.common import sha256_digest_of
 from isolate.connections.common import SerializationError, serialize_object
 from isolate.connections.grpc import definitions
 from isolate.connections.grpc.configuration import get_default_options
-from isolate.connections.grpc.interface import from_grpc
-from isolate.exceptions import IsolateException
+from isolate.connections.grpc.interface import from_grpc, to_grpc
+from isolate.logs import Log, LogLevel, LogSource
 
 
 @dataclass
-class AbortException(IsolateException):
+class AbortException(Exception):
     message: str
 
 
+@dataclass
 class AgentServicer(definitions.AgentServicer):
-    def __init__(self, log_fd: int | None = None):
-        super().__init__()
-
-        self._run_cache: dict[str, Any] = {}
-        self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
+    _run_cache: Dict[str, Any] = field(default_factory=dict)
 
     def Run(
         self,
         request: definitions.FunctionCall,
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
-        self.log(f"A connection has been established: {context.peer()}!")
+        yield from self.log(f"A connection has been established: {context.peer()}!")
 
         extra_args = []
         if request.HasField("setup_func"):
@@ -56,16 +56,16 @@ class AgentServicer(definitions.AgentServicer):
                         result,
                         was_it_raised,
                         stringized_tb,
-                    ) = self.execute_function(
+                    ) = yield from self.execute_function(
                         request.setup_func,
                         "setup",
                     )
 
                     if was_it_raised:
-                        self.log(
+                        yield from self.log(
                             "The setup function has thrown an error. Aborting the run."
                         )
-                        yield self.send_object(
+                        yield from self.send_object(
                             request.setup_func.method,
                             result,
                             was_it_raised,
@@ -73,7 +73,7 @@ class AgentServicer(definitions.AgentServicer):
                         )
                         raise AbortException("The setup function has thrown an error.")
                 except AbortException as exc:
-                    context.abort(StatusCode.INVALID_ARGUMENT, exc.message)
+                    return self.abort_with_msg(context, exc.message)
                 else:
                     assert not was_it_raised
                     self._run_cache[cache_key] = result
@@ -81,19 +81,19 @@ class AgentServicer(definitions.AgentServicer):
             extra_args.append(self._run_cache[cache_key])
 
         try:
-            result, was_it_raised, stringized_tb = self.execute_function(
+            result, was_it_raised, stringized_tb = yield from self.execute_function(
                 request.function,
                 "function",
                 extra_args=extra_args,
             )
-            yield self.send_object(
+            yield from self.send_object(
                 request.function.method,
                 result,
                 was_it_raised,
                 stringized_tb,
             )
         except AbortException as exc:
-            context.abort(StatusCode.INVALID_ARGUMENT, exc.message)
+            return self.abort_with_msg(context, exc.message)
 
     def execute_function(
         self,
@@ -101,30 +101,28 @@ class AgentServicer(definitions.AgentServicer):
         function_kind: str,
         *,
         extra_args: Iterable[Any] = (),
-    ) -> tuple[Any, bool, str | None]:
+    ) -> Generator[definitions.PartialRunResult, None, Any]:
         if function.was_it_raised:
             raise AbortException(
-                f"The {function_kind} function must be callable, "
-                "not a raised exception."
+                f"The {function_kind} function must be callable, not a raised exception."
             )
 
         try:
-            # NOTE: technically any sort of exception could be raised here, since
+            # TODO: technically any sort of exception could be raised here, since
             # depickling is basically involves code execution from the *user*.
             function = from_grpc(function)
-        except BaseException:
-            self.log(traceback.format_exc())
+        except SerializationError:
+            yield from self.log(traceback.format_exc(), level=LogLevel.ERROR)
             raise AbortException(
                 f"The {function_kind} function could not be deserialized."
             )
 
         if not callable(function):
             raise AbortException(
-                f"The {function_kind} function must be callable, "
-                f"not {type(function).__name__}."
+                f"The {function_kind} function must be callable, not {type(function).__name__}."
             )
 
-        self.log(f"Starting the execution of the {function_kind} function.")
+        yield from self.log(f"Starting the execution of the {function_kind} function.")
 
         was_it_raised = False
         stringized_tb = None
@@ -136,7 +134,7 @@ class AgentServicer(definitions.AgentServicer):
             num_frames = len(traceback.extract_stack()[:-5])
             stringized_tb = "".join(traceback.format_exc(limit=-num_frames))
 
-        self.log(f"Completed the execution of the {function_kind} function.")
+        yield from self.log(f"Completed the execution of the {function_kind} function.")
         return result, was_it_raised, stringized_tb
 
     def send_object(
@@ -145,38 +143,56 @@ class AgentServicer(definitions.AgentServicer):
         result: object,
         was_it_raised: bool,
         stringized_tb: str | None,
-    ) -> definitions.PartialRunResult:
+    ) -> Generator[definitions.PartialRunResult, None, Any]:
         try:
             definition = serialize_object(serialization_method, result)
         except SerializationError:
             if stringized_tb:
-                print(stringized_tb, file=sys.stderr)
+                yield from self.log(
+                    stringized_tb, source=LogSource.USER, level=LogLevel.STDERR
+                )
             raise AbortException(
-                "Error while serializing the execution result "
-                f"(object of type {type(result)})."
+                f"Error while serializing the execution result (object of type {type(result)})."
             )
         except BaseException:
-            self.log(traceback.format_exc())
+            yield from self.log(traceback.format_exc(), level=LogLevel.ERROR)
             raise AbortException(
                 "An unexpected error occurred while serializing the result."
             )
 
-        self.log("Sending the result.")
+        yield from self.log("Sending the result.")
         serialized_obj = definitions.SerializedObject(
             method=serialization_method,
             definition=definition,
             was_it_raised=was_it_raised,
             stringized_traceback=stringized_tb,
         )
-        return definitions.PartialRunResult(
+        yield definitions.PartialRunResult(
             result=serialized_obj,
             is_complete=True,
             logs=[],
         )
 
-    def log(self, message: str) -> None:
-        self._log.write(message)
-        self._log.flush()
+    def log(
+        self,
+        message: str,
+        level: LogLevel = LogLevel.TRACE,
+        source: LogSource = LogSource.BRIDGE,
+    ) -> Iterator[definitions.PartialRunResult]:
+        log = to_grpc(Log(message, level=level, source=source))
+        log = cast(definitions.Log, log)
+        yield definitions.PartialRunResult(result=None, is_complete=False, logs=[log])
+
+    def abort_with_msg(
+        self,
+        context: ServicerContext,
+        message: str,
+        *,
+        code: StatusCode = StatusCode.INVALID_ARGUMENT,
+    ) -> None:
+        context.set_code(code)
+        context.set_details(message)
+        return None
 
 
 def create_server(address: str) -> grpc.Server:
@@ -195,10 +211,10 @@ def create_server(address: str) -> grpc.Server:
     return server
 
 
-def run_agent(address: str, log_fd: int | None = None) -> int:
+def run_agent(address: str) -> int:
     """Run the agent servicer on the given address."""
     server = create_server(address)
-    servicer = AgentServicer(log_fd=log_fd)
+    servicer = AgentServicer()
 
     # This function just calls some methods on the server
     # and register a generic handler for the bridge. It does
@@ -213,10 +229,9 @@ def run_agent(address: str, log_fd: int | None = None) -> int:
 def main() -> int:
     parser = ArgumentParser()
     parser.add_argument("address", type=str)
-    parser.add_argument("--log-fd", type=int)
 
     options = parser.parse_args()
-    return run_agent(options.address, log_fd=options.log_fd)
+    return run_agent(options.address)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Dict, Optional
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import logged_io
@@ -28,7 +28,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
     @classmethod
     def from_config(
         cls,
-        config: dict[str, Any],
+        config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         environment = cls(**config)
@@ -43,9 +43,8 @@ class PyenvEnvironment(BaseEnvironment[Path]):
         pyenv = _get_pyenv_executable()
         env_path = self.settings.cache_dir_for(self)
         with self.settings.cache_lock_for(env_path):
-            # PyEnv installs* the Python versions under $root/versions/$version, where
-            # we use versions/$version as the key and $root as the base directory
-            # (for pyenv).
+            # PyEnv installs* the Python versions under $root/versions/$version, where we
+            # use versions/$version as the key and $root as the base directory (for pyenv).
             #
             # [0]: https://github.com/pyenv/pyenv#locating-pyenv-provided-python-installations
             pyenv_root = env_path.parent.parent
@@ -61,7 +60,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
             assert prefix is not None
             return prefix
 
-    def _try_get_prefix(self, pyenv: Path, root_path: Path) -> Path | None:
+    def _try_get_prefix(self, pyenv: Path, root_path: Path) -> Optional[Path]:
         try:
             prefix = subprocess.check_output(
                 [pyenv, "prefix", self.python_version],
@@ -80,7 +79,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
         return Path(prefix.strip())
 
     def _install_python(self, pyenv: Path, root_path: Path) -> None:
-        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr, _):
+        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
             try:
                 subprocess.check_call(
                     [pyenv, "install", "--skip-existing", self.python_version],
@@ -88,7 +87,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
                     stdout=stdout,
                     stderr=stderr,
                 )
-            except subprocess.CalledProcessError:
+            except subprocess.CalledProcessError as exc:
                 raise EnvironmentCreationError(
                     f"Failed to install Python {self.python_version} via pyenv.\n"
                 )
@@ -102,7 +101,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
                 return None
 
             pyenv_root = connection_key.parent.parent
-            with logged_io(self.log) as (stdout, stderr, _):
+            with logged_io(self.log) as (stdout, stderr):
                 subprocess.check_call(
                     [pyenv, "uninstall", "-f", connection_key.name],
                     env={**os.environ, "PYENV_ROOT": str(pyenv_root)},
@@ -127,17 +126,15 @@ def _get_pyenv_executable() -> Path:
     if _PYENV_EXECUTABLE_PATH:
         if not os.path.exists(_PYENV_EXECUTABLE_PATH):
             raise EnvironmentCreationError(
-                "Path to pyenv executable not found! ISOLATE_PYENV_EXECUTABLE "
-                f"variable: {_PYENV_EXECUTABLE_PATH!r}"
+                f"Path to pyenv executable not found! ISOLATE_PYENV_EXECUTABLE variable: {_PYENV_EXECUTABLE_PATH!r}"
             )
         return Path(_PYENV_EXECUTABLE_PATH)
 
     pyenv_path = shutil.which(_PYENV_EXECUTABLE_NAME)
     if pyenv_path is None:
         raise FileNotFoundError(
-            "Could not find the pyenv executable. If pyenv is not already installed "
-            "in your system, please install it first. If it is not in your PATH, "
-            "then point ISOLATE_PYENV_COMMAND to the absolute path of the "
+            "Could not find the pyenv executable. If pyenv is not already installed in your system, please"
+            "install it first. If it is not in your PATH, then point ISOLATE_PYENV_COMMAND to the absolute path of the"
             "pyenv executable."
         )
     return Path(pyenv_path)

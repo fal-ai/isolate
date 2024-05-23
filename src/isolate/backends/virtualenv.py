@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Dict, List, Optional, Union
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import (
@@ -29,17 +30,17 @@ _UV_RESOLVER_HOME = os.getenv("ISOLATE_UV_HOME")
 class VirtualPythonEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "virtualenv"
 
-    requirements: list[str] = field(default_factory=list)
-    constraints_file: os.PathLike | None = None
-    python_version: str | None = None
-    extra_index_urls: list[str] = field(default_factory=list)
-    tags: list[str] = field(default_factory=list)
-    resolver: str | None = None
+    requirements: List[str] = field(default_factory=list)
+    constraints_file: Optional[os.PathLike] = None
+    python_version: Optional[str] = None
+    extra_index_urls: List[str] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
+    resolver: Optional[str] = None
 
     @classmethod
     def from_config(
         cls,
-        config: dict[str, Any],
+        config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         environment = cls(**config)
@@ -99,7 +100,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         else:
             base_pip_cmd = [get_executable_path(path, "pip")]
 
-        pip_cmd: list[str | os.PathLike] = [
+        pip_cmd: List[Union[str, os.PathLike]] = [
             *base_pip_cmd,  # type: ignore
             "install",
             *self.requirements,
@@ -110,7 +111,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         for extra_index_url in self.extra_index_urls:
             pip_cmd.extend(["--extra-index-url", extra_index_url])
 
-        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr, _):
+        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
             try:
                 subprocess.check_call(
                     pip_cmd,

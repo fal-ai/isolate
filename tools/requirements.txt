@@ -1,6 +1,5 @@
 virtualenv>=20.4
 importlib-metadata>=4.4
 grpcio>=1.49
-cloudpickle==3.0.0
 dill==0.3.5.1
 protobuf

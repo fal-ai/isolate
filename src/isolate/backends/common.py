@@ -12,7 +12,7 @@ from contextlib import contextmanager, suppress
 from functools import lru_cache
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Iterator
+from typing import Callable, Dict, Iterator, Optional, Tuple, Union
 
 # For ensuring that the lock is created and not forgotten
 # (e.g. the process which acquires it crashes, so it is never
@@ -91,7 +91,7 @@ HookT = Callable[[str], None]
 
 
 def _io_observer(
-    hooks: dict[int, HookT],
+    hooks: Dict[int, HookT],
     termination_event: threading.Event,
 ) -> threading.Thread:
     """Starts a new thread that reads from the specified file descriptors
@@ -156,7 +156,7 @@ def _io_observer(
     return observer_thread
 
 
-def _unblocked_pipe() -> tuple[int, int]:
+def _unblocked_pipe() -> Tuple[int, int]:
     """Create a pair of unblocked pipes. This is actually
     the same as os.pipe2(os.O_NONBLOCK), but that is not
     available in MacOS so we have to do it manually."""
@@ -170,27 +170,24 @@ def _unblocked_pipe() -> tuple[int, int]:
 @contextmanager
 def logged_io(
     stdout_hook: HookT,
-    stderr_hook: HookT | None = None,
-    log_hook: HookT | None = None,
-) -> Iterator[tuple[int, int, int]]:
+    stderr_hook: Optional[HookT] = None,
+) -> Iterator[Tuple[int, int]]:
     """Open two new streams (for stdout and stderr, respectively) and start relaying all
     the output from them to the given hooks."""
 
     stdout_reader_fd, stdout_writer_fd = _unblocked_pipe()
     stderr_reader_fd, stderr_writer_fd = _unblocked_pipe()
-    log_reader_fd, log_writer_fd = _unblocked_pipe()
 
     termination_event = threading.Event()
     io_observer = _io_observer(
         hooks={
             stdout_reader_fd: stdout_hook,
             stderr_reader_fd: stderr_hook or stdout_hook,
-            log_reader_fd: log_hook or stdout_hook,
         },
         termination_event=termination_event,
     )
     try:
-        yield stdout_writer_fd, stderr_writer_fd, log_writer_fd
+        yield stdout_writer_fd, stderr_writer_fd
     finally:
         termination_event.set()
         try:
@@ -204,11 +201,11 @@ def logged_io(
 
 
 @lru_cache(maxsize=None)
-def sha256_digest_of(*unique_fields: str | bytes) -> str:
+def sha256_digest_of(*unique_fields: Union[str, bytes]) -> str:
     """Return the SHA256 digest that corresponds to the combined version
     of 'unique_fields. The order is preserved."""
 
-    def _normalize(text: str | bytes) -> bytes:
+    def _normalize(text: Union[str, bytes]) -> bytes:
         if isinstance(text, str):
             return text.encode()
         else:
@@ -249,10 +246,10 @@ def get_executable(command: str, home: str | None = None) -> Path:
         binary_path = shutil.which(command, path=path)
         if binary_path is not None:
             return Path(binary_path)
-    # TODO: we should probably show some instructions on how you
-    # can install conda here.
-    raise FileNotFoundError(
-        f"Could not find the {command} executable. "
-        f"If the {command} executable is not available by default, please point "
-        f"isolate to the path where the {command} binary is available '{home}'."
-    )
+    else:
+        # TODO: we should probably show some instructions on how you
+        # can install conda here.
+        raise FileNotFoundError(
+            f"Could not find the {command} executable. If the {command} executable is not available by default, please point isolate "
+            f" to the path where the {command} binary is available '{home}'."
+        )

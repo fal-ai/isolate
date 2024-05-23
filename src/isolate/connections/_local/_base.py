@@ -10,14 +10,17 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
+    Dict,
     Generic,
     Iterator,
+    List,
     TypeVar,
+    Union,
 )
 
 from isolate.backends.common import get_executable_path, logged_io
 from isolate.connections.common import AGENT_SIGNATURE
-from isolate.logs import LogLevel, LogSource
+from isolate.logs import LogLevel
 
 if TYPE_CHECKING:
     from isolate.backends import BaseEnvironment
@@ -99,7 +102,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
 
     environment: BaseEnvironment
     environment_path: Path
-    extra_inheritance_paths: list[Path] = field(default_factory=list)
+    extra_inheritance_paths: List[Path] = field(default_factory=list)
 
     @contextmanager
     def start_process(
@@ -113,26 +116,18 @@ class PythonExecutionBase(Generic[ConnectionType]):
 
         python_executable = get_executable_path(self.environment_path, "python")
         with logged_io(
-            partial(
-                self.handle_agent_log, source=LogSource.USER, level=LogLevel.STDOUT
-            ),
-            partial(
-                self.handle_agent_log, source=LogSource.USER, level=LogLevel.STDERR
-            ),
-            partial(
-                self.handle_agent_log, source=LogSource.BRIDGE, level=LogLevel.TRACE
-            ),
-        ) as (stdout, stderr, log_fd):
+            partial(self.handle_agent_log, level=LogLevel.STDOUT),
+            partial(self.handle_agent_log, level=LogLevel.STDERR),
+        ) as (stdout, stderr):
             yield subprocess.Popen(
-                self.get_python_cmd(python_executable, connection, log_fd),
+                self.get_python_cmd(python_executable, connection),
                 env=self.get_env_vars(),
                 stdout=stdout,
                 stderr=stderr,
-                pass_fds=(log_fd,),
                 text=True,
             )
 
-    def get_env_vars(self) -> dict[str, str]:
+    def get_env_vars(self) -> Dict[str, str]:
         """Return the environment variables to run the agent process with. By default
         PYTHONUNBUFFERED is set to 1 to ensure the prints to stdout/stderr are reflect
         immediately (so that we can seamlessly transfer logs)."""
@@ -166,12 +161,11 @@ class PythonExecutionBase(Generic[ConnectionType]):
         self,
         executable: Path,
         connection: ConnectionType,
-        log_fd: int,
-    ) -> list[str | Path]:
+    ) -> List[Union[str, Path]]:
         """Return the command to run the agent process with."""
         raise NotImplementedError
 
-    def handle_agent_log(self, line: str, level: LogLevel, source: LogSource) -> None:
+    def handle_agent_log(self, line: str, level: LogLevel) -> None:
         """Handle a log line emitted by the agent process. The level will be either
         STDOUT or STDERR."""
         raise NotImplementedError

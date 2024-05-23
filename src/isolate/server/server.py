@@ -10,14 +10,16 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
+from pathlib import Path
 from queue import Empty as QueueEmpty
 from queue import Queue
-from typing import Any, Callable, Iterator, cast
+from typing import Any, Callable, Dict, Iterator, List, Tuple, cast
 
 import grpc
 from grpc import ServicerContext, StatusCode
 
 from isolate.backends import (
+    BaseEnvironment,
     EnvironmentCreationError,
     IsolateSettings,
 )
@@ -31,14 +33,14 @@ from isolate.server import definitions, health
 from isolate.server.health_server import HealthServicer
 from isolate.server.interface import from_grpc, to_grpc
 
-EMPTY_MESSAGE_INTERVAL = float(os.getenv("ISOLATE_EMPTY_MESSAGE_INTERVAL", "600"))
-MAX_GRPC_WAIT_TIMEOUT = float(os.getenv("ISOLATE_MAX_GRPC_WAIT_TIMEOUT", "10.0"))
+EMPTY_MESSAGE_INTERVAL = float(os.getenv("ISOLATE_EMPTY_MESSAGE_INTERVAL", 600))
+MAX_GRPC_WAIT_TIMEOUT = float(os.getenv("ISOLATE_MAX_GRPC_WAIT_TIMEOUT", 10.0))
 
 # Whether to inherit all the packages from the current environment or not.
 INHERIT_FROM_LOCAL = os.getenv("ISOLATE_INHERIT_FROM_LOCAL") == "1"
 
 # Number of threads that the gRPC server will use.
-MAX_THREADS = int(os.getenv("MAX_THREADS", "5"))
+MAX_THREADS = int(os.getenv("MAX_THREADS", 5))
 _AGENT_REQUIREMENTS_TXT = os.getenv("AGENT_REQUIREMENTS_TXT")
 
 if _AGENT_REQUIREMENTS_TXT is not None:
@@ -93,7 +95,7 @@ class RunnerAgent:
 @dataclass
 class BridgeManager:
     _agent_access_lock: threading.Lock = field(default_factory=threading.Lock)
-    _agents: dict[tuple[Any, ...], list[RunnerAgent]] = field(
+    _agents: Dict[Tuple[Any, ...], List[RunnerAgent]] = field(
         default_factory=lambda: defaultdict(list)
     )
     _stack: ExitStack = field(default_factory=ExitStack)
@@ -103,7 +105,7 @@ class BridgeManager:
         self,
         connection: LocalPythonGRPC,
         queue: Queue,
-    ) -> Iterator[tuple[definitions.AgentStub, Queue]]:
+    ) -> Iterator[Tuple[definitions.AgentStub, Queue]]:
         agent = self._allocate_new_agent(connection, queue)
 
         try:
@@ -139,7 +141,7 @@ class BridgeManager:
         )
         return RunnerAgent(stub, queue, bound_context)
 
-    def _identify(self, connection: LocalPythonGRPC) -> tuple[Any, ...]:
+    def _identify(self, connection: LocalPythonGRPC) -> Tuple[Any, ...]:
         return (
             connection.environment_path,
             *connection.extra_inheritance_paths,
@@ -182,7 +184,7 @@ class IsolateServicer(definitions.IsolateServicer):
 
         if not environments:
             return self.abort_with_msg(
-                "At least one environment must be specified for a run!",
+                f"At least one environment must be specified for a run!",
                 context,
             )
 
@@ -296,9 +298,8 @@ class IsolateServicer(definitions.IsolateServicer):
     def watch_queue_until_completed(
         self, queue: Queue, is_completed: Callable[[], bool]
     ) -> Iterator[definitions.PartialRunResult]:
-        """Watch the given queue until the is_completed function returns True.
-        Note that even if the function is completed, this function might not
-        finish until the queue is empty.
+        """Watch the given queue until the is_completed function returns True. Note that even
+        if the function is completed, this function might not finish until the queue is empty.
         """
 
         timer = time.monotonic()
@@ -373,7 +374,7 @@ def main() -> None:
         definitions.register_isolate(IsolateServicer(bridge_manager), server)
         health.register_health(HealthServicer(), server)
 
-        server.add_insecure_port("[::]:50001")
+        server.add_insecure_port(f"[::]:50001")
         print("Started listening at localhost:50001")
 
         server.start()

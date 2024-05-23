@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Dict
 
 from isolate.backends import BaseEnvironment
 from isolate.backends.common import sha256_digest_of
@@ -18,7 +18,7 @@ class LocalPythonEnvironment(BaseEnvironment[Path]):
     @classmethod
     def from_config(
         cls,
-        config: dict[str, Any],
+        config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         environment = cls(**config)

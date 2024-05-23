@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import copy
+import functools
 import os
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Dict, List, Optional, Union
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import (
@@ -41,16 +43,16 @@ _POSSIBLE_CONDA_VERSION_IDENTIFIERS = (
 class CondaEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "conda"
 
-    environment_definition: dict[str, Any] = field(default_factory=dict)
-    python_version: str | None = None
-    tags: list[str] = field(default_factory=list)
-    _exec_home: str | None = _ISOLATE_MAMBA_HOME
-    _exec_command: str | None = _MAMBA_COMMAND
+    environment_definition: Dict[str, Any] = field(default_factory=dict)
+    python_version: Optional[str] = None
+    tags: List[str] = field(default_factory=list)
+    _exec_home: Optional[str] = _ISOLATE_MAMBA_HOME
+    _exec_command: Optional[str] = _MAMBA_COMMAND
 
     @classmethod
     def from_config(
         cls,
-        config: dict[str, Any],
+        config: Dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
         processing_config = copy.deepcopy(config)
@@ -161,7 +163,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
     def _run_create(self, env_path: str, env_name: str) -> None:
         if self._exec_command == "conda":
             self._run_conda(
-                "env", "create", "--yes", "--prefix", env_path, "-f", env_name
+                "env", "create", "--force", "--prefix", env_path, "-f", env_name
             )
         else:
             self._run_conda("env", "create", "--prefix", env_path, "-f", env_name)
@@ -171,7 +173,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
     def _run_conda(self, *args: Any) -> None:
         conda_executable = get_executable(self._exec_command, self._exec_home)
-        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr, _):
+        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
             subprocess.check_call(
                 [conda_executable, *args],
                 stdout=stdout,
@@ -187,7 +189,7 @@ class CondaEnvironment(BaseEnvironment[Path]):
 
 
 def _depends_on(
-    dependencies: list[str | dict[str, list[str]]],
+    dependencies: List[Union[str, Dict[str, List[str]]]],
     package_name: str,
 ) -> bool:
     for dependency in dependencies:
@@ -212,4 +214,5 @@ def _depends_on(
             continue
 
         return True
-    return False
+    else:
+        return False

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, List
 
 import pytest
+
 from isolate.backends import BaseEnvironment, EnvironmentConnection
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.settings import IsolateSettings
@@ -20,7 +21,7 @@ assert (
 
 
 # Enable dill to only serialize globals that are accessed by the function
-import dill  # noqa: E402
+import dill
 
 dill.settings["recurse"] = True
 
@@ -158,7 +159,7 @@ class GenericPythonConnectionTests:
                 return c
 
             def bar():
-                a = "" + ""  # noqa: F841
+                a = str() + str()
                 return 0 + foo() + 1
 
             def baz():

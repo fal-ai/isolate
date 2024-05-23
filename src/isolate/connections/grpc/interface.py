@@ -2,7 +2,7 @@
 and the Isolate Server to share."""
 
 import functools
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from isolate.common import timestamp
 from isolate.connections.common import load_serialized_object, serialize_object

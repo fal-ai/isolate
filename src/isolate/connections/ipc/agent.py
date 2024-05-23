@@ -15,8 +15,6 @@
 # one being the actual result of the given callable, and the other one is a boolean flag
 # indicating whether the callable has raised an exception or not.
 
-from __future__ import annotations
-
 import base64
 import importlib
 import os
@@ -26,7 +24,7 @@ import traceback
 from argparse import ArgumentParser
 from contextlib import closing
 from multiprocessing.connection import Client
-from typing import TYPE_CHECKING, Any, Callable, ContextManager
+from typing import TYPE_CHECKING, Any, Callable, ContextManager, Tuple
 
 if TYPE_CHECKING:
     # Somhow mypy can't figure out that `ConnectionWrapper`
@@ -37,25 +35,29 @@ if TYPE_CHECKING:
             connection: Any,
             loads: Callable[[bytes], Any],
             dumps: Callable[[Any], bytes],
-        ) -> None: ...
+        ) -> None:
+            ...
 
-        def recv(self) -> Any: ...
+        def recv(self) -> Any:
+            ...
 
-        def send(self, value: Any) -> None: ...
+        def send(self, value: Any) -> None:
+            ...
 
-        def close(self) -> None: ...
+        def close(self) -> None:
+            ...
 
 else:
     from multiprocessing.connection import ConnectionWrapper
 
 
-def decode_service_address(address: str) -> tuple[str, int]:
+def decode_service_address(address: str) -> Tuple[str, int]:
     host, port = base64.b64decode(address).decode("utf-8").rsplit(":", 1)
     return host, int(port)
 
 
 def child_connection(
-    serialization_method: str, address: tuple[str, int]
+    serialization_method: str, address: Tuple[str, int]
 ) -> ContextManager[ConnectionWrapper]:
     serialization_backend = importlib.import_module(serialization_method)
     return closing(
@@ -72,11 +74,7 @@ DEBUG_TIMEOUT = 60 * 15
 
 
 def run_client(
-    serialization_method: str,
-    address: tuple[str, int],
-    *,
-    with_pdb: bool = False,
-    log_fd: int | None = None,
+    serialization_method: str, address: Tuple[str, int], *, with_pdb: bool = False
 ) -> None:
     # Debug Mode
     # ==========
@@ -102,22 +100,13 @@ def run_client(
 
         pdb.set_trace()
 
-    if log_fd is None:
-        _log = sys.stdout
-    else:
-        _log = os.fdopen(log_fd, "w")
-
-    def log(_msg):
-        _log.write(_msg)
-        _log.flush()
-
-    log(f"Trying to create a connection to {address}")
+    print(f"[trace] Trying to create a connection to {address}")
     # TODO(feat): this should probably run in a loop instead of
     # receiving a single function and then exitting immediately.
     with child_connection(serialization_method, address) as connection:
-        log(f"Created child connection to {address}")
+        print(f"[trace] Created child connection to {address}")
         callable = connection.recv()
-        log(f"Received the callable at {address}")
+        print(f"[trace] Received the callable at {address}")
 
         result = None
         did_it_raise = False
@@ -164,21 +153,19 @@ def _get_shell_bootstrap() -> str:
 
 
 def main() -> int:
+    print(f"[trace] Starting the isolated process at PID {os.getpid()}")
+
     parser = ArgumentParser()
     parser.add_argument("listen_at")
     parser.add_argument("--with-pdb", action="store_true", default=False)
     parser.add_argument("--serialization-backend", default="pickle")
-    parser.add_argument("--log-fd", type=int)
 
     options = parser.parse_args()
     if IS_DEBUG_MODE:
         assert not options.with_pdb, "--with-pdb can't be used in the debug mode"
         message = "=" * 60
         message += "\n" * 3
-        message += (
-            "Debug mode successfully activated. "
-            "You can start your debugging session with the following command:\n"
-        )
+        message += "Debug mode successfully activated. You can start your debugging session with the following command:\n"
         message += (
             f"    $ {_get_shell_bootstrap()}\\\n     "
             f"{sys.executable} {os.path.abspath(__file__)} "
@@ -192,12 +179,7 @@ def main() -> int:
 
     serialization_method = options.serialization_backend
     address = decode_service_address(options.listen_at)
-    run_client(
-        serialization_method,
-        address,
-        with_pdb=options.with_pdb,
-        log_fd=options.log_fd,
-    )
+    run_client(serialization_method, address, with_pdb=options.with_pdb)
     return 0
 
 

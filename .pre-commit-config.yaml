@@ -1,28 +1,30 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
 repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: 'v0.3.4'
-  hooks:
-  - id: ruff
-    args: [--fix, --exit-non-zero-on-fix]
-    exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"
-  - id: ruff-format
-    exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"
-- repo: https://github.com/asottile/setup-cfg-fmt
-  rev: v1.20.1
-  hooks:
-  - id: setup-cfg-fmt
-- repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v1.2.0
-  hooks:
-  - id: mypy
-    args:
-    - --disallow-incomplete-defs
-    - --ignore-missing-imports
-    - --no-warn-no-return
-    exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"
-    additional_dependencies: [types-protobuf]
-- repo: https://github.com/codespell-project/codespell
-  rev: v2.1.0
-  hooks:
-  - id: codespell
-    exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"
+-   repo: https://github.com/psf/black
+    rev: 22.6.0
+    hooks:
+    -   id: black
+-   repo: https://github.com/pre-commit/mirrors-isort
+    rev: v5.10.1
+    hooks:
+    -   id: isort
+-   repo: https://github.com/asottile/setup-cfg-fmt
+    rev: v1.20.1
+    hooks:
+    -   id: setup-cfg-fmt
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.2.0
+    hooks:
+      -  id: mypy
+         args:
+         -   --disallow-incomplete-defs
+         -   --ignore-missing-imports
+         -   --no-warn-no-return
+         exclude: '^src/.*_pb2.py$'
+         additional_dependencies: [types-protobuf]
+-   repo: https://github.com/codespell-project/codespell
+    rev: v2.1.0
+    hooks:
+    -   id: codespell

@@ -1,1 +1,1 @@
-from isolate.connections.grpc._base import AgentError, LocalPythonGRPC  # noqa: F401
+from isolate.connections.grpc._base import AgentError, LocalPythonGRPC
