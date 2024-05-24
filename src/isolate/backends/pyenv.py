@@ -80,7 +80,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
         return Path(prefix.strip())
 
     def _install_python(self, pyenv: Path, root_path: Path) -> None:
-        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
+        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr, _):
             try:
                 subprocess.check_call(
                     [pyenv, "install", "--skip-existing", self.python_version],
@@ -102,7 +102,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
                 return None
 
             pyenv_root = connection_key.parent.parent
-            with logged_io(self.log) as (stdout, stderr):
+            with logged_io(self.log) as (stdout, stderr, _):
                 subprocess.check_call(
                     [pyenv, "uninstall", "-f", connection_key.name],
                     env={**os.environ, "PYENV_ROOT": str(pyenv_root)},
