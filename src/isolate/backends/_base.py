@@ -12,7 +12,6 @@ from typing import (
 )
 
 from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
-from isolate.exceptions import IsolateException
 from isolate.logs import Log, LogLevel, LogSource
 
 __all__ = [
@@ -28,7 +27,7 @@ CallResultType = TypeVar("CallResultType")
 BasicCallable = Callable[[], CallResultType]
 
 
-class EnvironmentCreationError(IsolateException):
+class EnvironmentCreationError(Exception):
     """Raised when the environment cannot be created."""
 
 

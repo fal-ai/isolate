@@ -16,11 +16,10 @@ from isolate.connections.common import serialize_object
 from isolate.connections.grpc import agent, definitions
 from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc
-from isolate.exceptions import IsolateException
 from isolate.logs import LogLevel, LogSource
 
 
-class AgentError(IsolateException):
+class AgentError(Exception):
     """An internal problem caused by (most probably) the agent."""
 
 
@@ -137,17 +136,13 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
         self,
         executable: Path,
         connection: str,
-        log_fd: int,
     ) -> List[Union[str, Path]]:
         return [
             executable,
             agent_startup.__file__,
             agent.__file__,
             connection,
-            "--log-fd",
-            str(log_fd),
         ]
 
-    def handle_agent_log(self, line: str, level: LogLevel, source: LogSource) -> None:
-        print(f"[{source}] [{level}] {line}")
-        self.log(line, level=level, source=source)
+    def handle_agent_log(self, line: str, level: LogLevel) -> None:
+        self.log(line, level=level, source=LogSource.USER)

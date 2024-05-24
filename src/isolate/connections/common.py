@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import importlib
 import os
-from typing import TYPE_CHECKING, Any, cast
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Iterator, cast
 
 from tblib import Traceback, TracebackParseError
-
-from isolate.exceptions import IsolateException
 
 if TYPE_CHECKING:
     from typing import Protocol
@@ -20,18 +20,24 @@ if TYPE_CHECKING:
 AGENT_SIGNATURE = "IS_ISOLATE_AGENT"
 
 
-class BaseSerializationError(IsolateException):
+@dataclass
+class SerializationError(Exception):
     """An error that happened during the serialization process."""
 
-    pass
+    message: str
 
 
-class SerializationError(BaseSerializationError):
-    pass
+@contextmanager
+def _step(message: str) -> Iterator[None]:
+    """A context manager to capture every expression
+    underneath it and if any of them fails for any reason
+    then it will raise a SerializationError with the
+    given message."""
 
-
-class DeserializationError(BaseSerializationError):
-    pass
+    try:
+        yield
+    except BaseException as exception:
+        raise SerializationError("Error while " + message) from exception
 
 
 def as_serialization_method(backend: Any) -> SerializationBackend:
@@ -60,22 +66,13 @@ def load_serialized_object(
     flag is set to true, then the given object will be raised as an exception (instead
     of being returned)."""
 
-    try:
+    with _step(f"preparing the serialization backend ({serialization_method})"):
         serialization_backend = as_serialization_method(
             importlib.import_module(serialization_method)
         )
-    except BaseException as exc:
-        raise DeserializationError(
-            "Error while preparing the serialization backend "
-            f"({serialization_method})"
-        ) from exc
 
-    try:
+    with _step("deserializing the given object"):
         result = serialization_backend.loads(raw_object)
-    except BaseException as exc:
-        raise DeserializationError(
-            "Error while deserializing the given object"
-        ) from exc
 
     if was_it_raised:
         raise prepare_exc(result, stringized_traceback=stringized_traceback)
@@ -87,19 +84,13 @@ def serialize_object(serialization_method: str, object: Any) -> bytes:
     """Serialize the given object using the given serialization method. If
     anything fails, then a SerializationError will be raised."""
 
-    try:
+    with _step(f"preparing the serialization backend ({serialization_method})"):
         serialization_backend = as_serialization_method(
             importlib.import_module(serialization_method)
         )
-    except BaseException as exc:
-        raise SerializationError(
-            f"Error while preparing the serialization backend ({serialization_method})"
-        ) from exc
 
-    try:
+    with _step("serializing the given object"):
         return serialization_backend.dumps(object)
-    except BaseException as exc:
-        raise SerializationError("Error while serializing the given object") from exc
 
 
 def is_agent() -> bool:

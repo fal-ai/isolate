@@ -1,2 +1,0 @@
-class IsolateException(Exception):
-    pass

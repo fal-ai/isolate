@@ -110,7 +110,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         for extra_index_url in self.extra_index_urls:
             pip_cmd.extend(["--extra-index-url", extra_index_url])
 
-        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr, _):
+        with logged_io(partial(self.log, level=LogLevel.INFO)) as (stdout, stderr):
             try:
                 subprocess.check_call(
                     pip_cmd,
