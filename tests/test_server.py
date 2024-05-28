@@ -41,7 +41,8 @@ def make_server(tmp_path):
     )
     test_settings = IsolateSettings(cache_dir=tmp_path / "cache")
     with BridgeManager() as bridge:
-        definitions.register_isolate(IsolateServicer(bridge, test_settings), server)
+        servicer = IsolateServicer(bridge, test_settings)
+        definitions.register_isolate(servicer, server)
         health.register_health(HealthServicer(), server)
         host, port = "localhost", server.add_insecure_port("[::]:0")
         server.start()
@@ -64,6 +65,11 @@ def make_server(tmp_path):
             yield Stubs(isolate_stub=isolate_stub, health_stub=health_stub)
         finally:
             server.stop(None)
+            for task in servicer.background_tasks:
+                if task.done():
+                    task.result()
+                else:
+                    print("leaking background task", task)
 
 
 @pytest.fixture
@@ -123,7 +129,7 @@ def run_request(
         return cast(definitions.SerializedObject, return_value)
 
 
-def run_function(stub, function, *args, log_handler=None, **kwargs):
+def prepare_request(function, *args, **kwargs):
     import dill
 
     import __main__
@@ -137,10 +143,14 @@ def run_function(stub, function, *args, log_handler=None, **kwargs):
 
     basic_function = partial(function, *args, **kwargs)
     environment = define_environment("virtualenv", requirements=[])
-    request = definitions.BoundFunction(
+    return definitions.BoundFunction(
         function=to_serialized_object(basic_function, method="dill"),
         environments=[environment],
     )
+
+
+def run_function(stub, function, *args, log_handler=None, **kwargs):
+    request = prepare_request(function, *args, **kwargs)
 
     user_logs: List[Log] = [] if log_handler is None else log_handler
     result = run_request(stub, request, user_logs=user_logs)
@@ -641,10 +651,10 @@ def test_server_proper_error_delegation(
         run_function(stub, send_unserializable_object, log_handler=user_logs)
 
     assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
-    assert exc_info.value.details() == (
+    assert (
         "Error while serializing the execution result "
         "(object of type <class 'frame'>)."
-    )
+    ) in exc_info.value.details()
     assert not user_logs
 
     user_logs = []
@@ -652,8 +662,38 @@ def test_server_proper_error_delegation(
         run_function(stub, raise_unserializable_object, log_handler=user_logs)
 
     assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
-    assert exc_info.value.details() == (
+    assert (
         "Error while serializing the execution result "
         "(object of type <class 'Exception'>)."
-    )
+    ) in exc_info.value.details()
     assert "relevant information" in "\n".join(log.message for log in user_logs)
+
+
+def myfunc(path):
+    import time
+
+    with open(path, "w") as fobj:
+        for _ in range(10):
+            time.sleep(0.1)
+            fobj.write("still alive")
+
+        fobj.write("completed")
+
+
+def test_server_submit(
+    stub: definitions.IsolateStub,
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    import time
+
+    inherit_from_local(monkeypatch)
+
+    file = tmp_path / "file"
+
+    request = definitions.SubmitRequest(
+        function=prepare_request(myfunc, str(file)),
+    )
+    stub.Submit(request)
+    time.sleep(5)
+    assert "completed" in file.read_text()

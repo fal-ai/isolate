@@ -66,3 +66,34 @@ class EnvironmentDefinition(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal["configuration", b"configuration", "force", b"force", "kind", b"kind"]) -> None: ...
 
 global___EnvironmentDefinition = EnvironmentDefinition
+
+@typing.final
+class SubmitRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FUNCTION_FIELD_NUMBER: builtins.int
+    @property
+    def function(self) -> global___BoundFunction:
+        """The function to run."""
+
+    def __init__(
+        self,
+        *,
+        function: global___BoundFunction | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["function", b"function"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["function", b"function"]) -> None: ...
+
+global___SubmitRequest = SubmitRequest
+
+@typing.final
+class SubmitResponse(google.protobuf.message.Message):
+    """Reserved for future use."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+
+global___SubmitResponse = SubmitResponse
