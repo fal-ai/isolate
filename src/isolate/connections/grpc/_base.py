@@ -36,7 +36,7 @@ class GRPCExecutionBase(EnvironmentConnection):
     def _establish_bridge(
         self,
         *,
-        max_wait_timeout: float = 10.0,
+        max_wait_timeout: float = 20.0,
     ) -> Iterator[definitions.AgentStub]:
         with self.start_agent() as (address, credentials):
             with grpc.secure_channel(
