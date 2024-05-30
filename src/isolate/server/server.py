@@ -51,6 +51,17 @@ else:
 # Number of seconds to observe the queue before checking the termination
 # event.
 _Q_WAIT_DELAY = 0.1
+RUNNER_THREAD_POOL = futures.ThreadPoolExecutor(max_workers=MAX_THREADS)
+
+
+class GRPCException(Exception):
+    def __init__(self, message: str, code: StatusCode = StatusCode.INVALID_ARGUMENT):
+        super().__init__(message)
+        self.message = message
+        self.code = code
+
+    def __str__(self) -> str:
+        return f"{self.code.name}: {self.message}"
 
 
 @dataclass
@@ -158,11 +169,11 @@ class BridgeManager:
 class IsolateServicer(definitions.IsolateServicer):
     bridge_manager: BridgeManager
     default_settings: IsolateSettings = field(default_factory=IsolateSettings)
+    background_tasks: set[futures.Future] = field(default_factory=set)
 
-    def Run(
+    def _run_function(
         self,
         request: definitions.BoundFunction,
-        context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
         messages: Queue[definitions.PartialRunResult] = Queue()
         environments = []
@@ -170,20 +181,14 @@ class IsolateServicer(definitions.IsolateServicer):
             try:
                 environments.append((env.force, from_grpc(env)))
             except ValueError:
-                return self.abort_with_msg(
-                    f"Unknown environment kind: {env.kind}",
-                    context,
-                )
+                raise GRPCException(f"Unknown environment kind: {env.kind}")
             except TypeError as exc:
-                return self.abort_with_msg(
-                    f"Invalid environment parameter: {str(exc)}.",
-                    context,
-                )
+                raise GRPCException(f"Invalid environment: {str(exc)}")
 
         if not environments:
-            return self.abort_with_msg(
+            raise GRPCException(
                 "At least one environment must be specified for a run!",
-                context,
+                StatusCode.INVALID_ARGUMENT,
             )
 
         run_settings = replace(
@@ -226,7 +231,7 @@ class IsolateServicer(definitions.IsolateServicer):
                     # but it is just in case.
                     environment_paths.append(future.result(timeout=0.1))
                 except EnvironmentCreationError as e:
-                    return self.abort_with_msg(f"{e}", context)
+                    raise GRPCException(f"{e}", StatusCode.INVALID_ARGUMENT)
 
             primary_path, *inheritance_paths = environment_paths
             inheritance_paths.extend(extra_inheritance_paths)
@@ -268,10 +273,9 @@ class IsolateServicer(definitions.IsolateServicer):
                     # If this is an RPC error, propagate it as is without any
                     # further processing.
                     if isinstance(exception, grpc.RpcError):
-                        return self.abort_with_msg(
-                            exception.details(),
-                            context,
-                            code=exception.code(),
+                        raise GRPCException(
+                            str(exception),
+                            exception.code(),
                         )
 
                     # Otherwise this is a bug in the agent itself, so needs
@@ -281,17 +285,49 @@ class IsolateServicer(definitions.IsolateServicer):
                     ):
                         yield from self.log(line, level=LogLevel.ERROR)
                     if isinstance(exception, AgentError):
-                        return self.abort_with_msg(
-                            str(exception),
-                            context,
-                            code=StatusCode.ABORTED,
-                        )
+                        raise GRPCException(str(exception), StatusCode.ABORTED)
                     else:
-                        return self.abort_with_msg(
+                        raise GRPCException(
                             f"An unexpected error occurred: {exception}.",
-                            context,
-                            code=StatusCode.UNKNOWN,
+                            StatusCode.UNKNOWN,
                         )
+
+    def _run_function_in_background(
+        self,
+        bound_function: definitions.BoundFunction,
+    ) -> None:
+        try:
+            for _ in self._run_function(bound_function):
+                pass
+        except GRPCException:
+            pass
+
+    def Submit(
+        self,
+        request: definitions.SubmitRequest,
+        context: ServicerContext,
+    ) -> definitions.SubmitResponse:
+        run_future = RUNNER_THREAD_POOL.submit(
+            self._run_function_in_background,
+            request.function,
+        )
+        self.background_tasks.add(run_future)
+
+        return definitions.SubmitResponse()
+
+    def Run(
+        self,
+        request: definitions.BoundFunction,
+        context: ServicerContext,
+    ) -> Iterator[definitions.PartialRunResult]:
+        try:
+            yield from self._run_function(request)
+        except GRPCException as exc:
+            return self.abort_with_msg(
+                exc.message,
+                context,
+                code=exc.code,
+            )
 
     def watch_queue_until_completed(
         self, queue: Queue, is_completed: Callable[[], bool]
@@ -366,7 +402,7 @@ def _add_log_to_queue(messages: Queue, log: Log) -> None:
 
 def main() -> None:
     server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=MAX_THREADS),
+        RUNNER_THREAD_POOL,
         options=get_default_options(),
     )
     with BridgeManager() as bridge_manager:
