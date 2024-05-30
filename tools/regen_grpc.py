@@ -1,4 +1,5 @@
 import ast
+import glob
 import os
 import subprocess
 import sys
@@ -73,10 +74,19 @@ def regen_grpc(file: Path) -> None:
 
 def main() -> None:
     parser = ArgumentParser()
-    parser.add_argument("definition_file", type=Path)
+    parser.add_argument("definition_file", nargs="?")
 
     options = parser.parse_args()
-    regen_grpc(options.definition_file)
+
+    if options.definition_file:
+        files = [options.definition_file]
+    else:
+        files = glob.glob("**/*.proto", recursive=True)
+        if not files:
+            raise Exception("No definition files specified or found.")
+
+    for file in files:
+        regen_grpc(Path(file))
 
 
 if __name__ == "__main__":
