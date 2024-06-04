@@ -22,6 +22,8 @@ from isolate.connections.common import SerializationError, serialize_object
 from isolate.connections.grpc import definitions
 from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc
+from isolate.logger import logger
+from isolate.logs import LogLevel, LogSource
 
 
 @dataclass
@@ -149,7 +151,7 @@ class AgentServicer(definitions.AgentServicer):
             definition = serialize_object(serialization_method, result)
         except SerializationError:
             if stringized_tb:
-                print(stringized_tb, file=sys.stderr)
+                logger.log(LogLevel.ERROR, stringized_tb, LogSource.BRIDGE)
             raise AbortException(
                 "Error while serializing the execution result "
                 f"(object of type {type(result)})."
