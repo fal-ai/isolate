@@ -178,7 +178,7 @@ class AgentServicer(definitions.AgentServicer):
         )
 
     def log(self, message: str) -> None:
-        self._log.write(message)
+        self._log.write(message + "\n")
         self._log.flush()
 
     def abort_with_msg(
