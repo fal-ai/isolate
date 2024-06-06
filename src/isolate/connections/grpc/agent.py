@@ -23,8 +23,6 @@ from isolate.connections.common import SerializationError, serialize_object
 from isolate.connections.grpc import definitions
 from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc
-from isolate.logger import logger
-from isolate.logs import LogLevel, LogSource
 
 
 @dataclass
@@ -117,7 +115,7 @@ class AgentServicer(definitions.AgentServicer):
             # depickling is basically involves code execution from the *user*.
             function = from_grpc(function)
         except SerializationError:
-            self.log(traceback.format_exc())
+            traceback.print_exc()
             raise AbortException(
                 f"The {function_kind} function could not be deserialized."
             )
@@ -154,7 +152,8 @@ class AgentServicer(definitions.AgentServicer):
             definition = serialize_object(serialization_method, result)
         except SerializationError:
             if stringized_tb:
-                logger.log(LogLevel.ERROR, stringized_tb, LogSource.BRIDGE)
+                print(stringized_tb, file=sys.stderr)
+            self.log(traceback.format_exc())
             raise AbortException(
                 "Error while serializing the execution result "
                 f"(object of type {type(result)})."
@@ -179,7 +178,7 @@ class AgentServicer(definitions.AgentServicer):
         )
 
     def log(self, message: str) -> None:
-        self._log.write(message)
+        self._log.write(message + "\n")
         self._log.flush()
 
     def abort_with_msg(
