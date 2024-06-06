@@ -15,6 +15,7 @@ from typing import (
     TypeVar,
 )
 
+from isolate import __version__ as isolate_version
 from isolate.backends.common import get_executable_path, logged_io
 from isolate.connections.common import AGENT_SIGNATURE
 from isolate.logs import LogLevel, LogSource
@@ -138,6 +139,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
         immediately (so that we can seamlessly transfer logs)."""
 
         custom_vars = {}
+        custom_vars["ISOLATE_SERVER_VERSION"] = isolate_version
         custom_vars[AGENT_SIGNATURE] = "1"
         custom_vars["PYTHONUNBUFFERED"] = "1"
 

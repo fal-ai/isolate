@@ -17,6 +17,7 @@ from typing import (
 import grpc
 from grpc import ServicerContext, StatusCode
 
+from isolate import __version__ as agent_version
 from isolate.backends.common import sha256_digest_of
 from isolate.connections.common import SerializationError, serialize_object
 from isolate.connections.grpc import definitions
@@ -44,6 +45,8 @@ class AgentServicer(definitions.AgentServicer):
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
         self.log(f"A connection has been established: {context.peer()}!")
+        server_version = os.getenv("ISOLATE_SERVER_VERSION") or "unknown"
+        self.log(f"Isolate info: server {server_version}, agent {agent_version}")
 
         extra_args = []
         if request.HasField("setup_func"):
