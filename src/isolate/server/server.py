@@ -9,7 +9,6 @@ from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
-from functools import partial
 from queue import Empty as QueueEmpty
 from queue import Queue
 from typing import Any, Callable, Iterator, cast
@@ -26,6 +25,7 @@ from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 from isolate.connections.grpc import AgentError, LocalPythonGRPC
 from isolate.connections.grpc.configuration import get_default_options
+from isolate.logger import logger
 from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions, health
 from isolate.server.health_server import HealthServicer
@@ -191,9 +191,10 @@ class IsolateServicer(definitions.IsolateServicer):
                 StatusCode.INVALID_ARGUMENT,
             )
 
+        log_handler = LogHandler(messages)
         run_settings = replace(
             self.default_settings,
-            log_hook=partial(_add_log_to_queue, messages),
+            log_hook=log_handler.handle,
             serialization_method=request.function.method,
         )
 
@@ -390,14 +391,22 @@ def _proxy_to_queue(
         queue.put_nowait(message)
 
 
-def _add_log_to_queue(messages: Queue, log: Log) -> None:
-    grpc_log = cast(definitions.Log, to_grpc(log))
-    grpc_result = definitions.PartialRunResult(
-        is_complete=False,
-        logs=[grpc_log],
-        result=None,
-    )
-    messages.put_nowait(grpc_result)
+@dataclass
+class LogHandler:
+    messages: Queue
+
+    def handle(self, log: Log) -> None:
+        logger.log(log.level, log.message, source=log.source)
+        self._add_log_to_queue(log)
+
+    def _add_log_to_queue(self, log: Log) -> None:
+        grpc_log = cast(definitions.Log, to_grpc(log))
+        grpc_result = definitions.PartialRunResult(
+            is_complete=False,
+            logs=[grpc_log],
+            result=None,
+        )
+        self.messages.put_nowait(grpc_result)
 
 
 def main() -> None:
