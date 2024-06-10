@@ -16,7 +16,6 @@ from isolate.connections.common import serialize_object
 from isolate.connections.grpc import agent, definitions
 from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc
-from isolate.logger import logger
 from isolate.logs import LogLevel, LogSource
 
 
@@ -149,5 +148,4 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
         ]
 
     def handle_agent_log(self, line: str, level: LogLevel, source: LogSource) -> None:
-        logger.log(level, line, source)
         self.log(line, level=level, source=source)
