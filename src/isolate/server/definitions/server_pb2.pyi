@@ -88,12 +88,81 @@ global___SubmitRequest = SubmitRequest
 
 @typing.final
 class SubmitResponse(google.protobuf.message.Message):
-    """Reserved for future use."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    TASK_ID_FIELD_NUMBER: builtins.int
+    task_id: builtins.str
+    def __init__(
+        self,
+        *,
+        task_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["task_id", b"task_id"]) -> None: ...
+
+global___SubmitResponse = SubmitResponse
+
+@typing.final
+class ListRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
         self,
     ) -> None: ...
 
-global___SubmitResponse = SubmitResponse
+global___ListRequest = ListRequest
+
+@typing.final
+class TaskInfo(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TASK_ID_FIELD_NUMBER: builtins.int
+    task_id: builtins.str
+    def __init__(
+        self,
+        *,
+        task_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["task_id", b"task_id"]) -> None: ...
+
+global___TaskInfo = TaskInfo
+
+@typing.final
+class ListResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TASKS_FIELD_NUMBER: builtins.int
+    @property
+    def tasks(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TaskInfo]: ...
+    def __init__(
+        self,
+        *,
+        tasks: collections.abc.Iterable[global___TaskInfo] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["tasks", b"tasks"]) -> None: ...
+
+global___ListResponse = ListResponse
+
+@typing.final
+class CancelRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TASK_ID_FIELD_NUMBER: builtins.int
+    task_id: builtins.str
+    def __init__(
+        self,
+        *,
+        task_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["task_id", b"task_id"]) -> None: ...
+
+global___CancelRequest = CancelRequest
+
+@typing.final
+class CancelResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+
+global___CancelResponse = CancelResponse

@@ -50,6 +50,16 @@ class IsolateStub(object):
                 request_serializer=server__pb2.SubmitRequest.SerializeToString,
                 response_deserializer=server__pb2.SubmitResponse.FromString,
                 _registered_method=True)
+        self.List = channel.unary_unary(
+                '/Isolate/List',
+                request_serializer=server__pb2.ListRequest.SerializeToString,
+                response_deserializer=server__pb2.ListResponse.FromString,
+                _registered_method=True)
+        self.Cancel = channel.unary_unary(
+                '/Isolate/Cancel',
+                request_serializer=server__pb2.CancelRequest.SerializeToString,
+                response_deserializer=server__pb2.CancelResponse.FromString,
+                _registered_method=True)
 
 
 class IsolateServicer(object):
@@ -70,6 +80,20 @@ class IsolateServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def List(self, request, context):
+        """List running tasks
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Cancel(self, request, context):
+        """Cancel a running task
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IsolateServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -82,6 +106,16 @@ def add_IsolateServicer_to_server(servicer, server):
                     servicer.Submit,
                     request_deserializer=server__pb2.SubmitRequest.FromString,
                     response_serializer=server__pb2.SubmitResponse.SerializeToString,
+            ),
+            'List': grpc.unary_unary_rpc_method_handler(
+                    servicer.List,
+                    request_deserializer=server__pb2.ListRequest.FromString,
+                    response_serializer=server__pb2.ListResponse.SerializeToString,
+            ),
+            'Cancel': grpc.unary_unary_rpc_method_handler(
+                    servicer.Cancel,
+                    request_deserializer=server__pb2.CancelRequest.FromString,
+                    response_serializer=server__pb2.CancelResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -138,6 +172,60 @@ class Isolate(object):
             '/Isolate/Submit',
             server__pb2.SubmitRequest.SerializeToString,
             server__pb2.SubmitResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def List(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/Isolate/List',
+            server__pb2.ListRequest.SerializeToString,
+            server__pb2.ListResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Cancel(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/Isolate/Cancel',
+            server__pb2.CancelRequest.SerializeToString,
+            server__pb2.CancelResponse.FromString,
             options,
             channel_credentials,
             insecure,

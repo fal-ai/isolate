@@ -65,11 +65,7 @@ def make_server(tmp_path):
             yield Stubs(isolate_stub=isolate_stub, health_stub=health_stub)
         finally:
             server.stop(None)
-            for task in servicer.background_tasks:
-                if task.done():
-                    task.result()
-                else:
-                    print("leaking background task", task)
+            servicer.cancel_tasks()
 
 
 @pytest.fixture
@@ -697,3 +693,29 @@ def test_server_submit(
     stub.Submit(request)
     time.sleep(5)
     assert "completed" in file.read_text()
+    assert not list(stub.List(definitions.ListRequest()).tasks)
+
+
+def myserver():
+    import time
+
+    while True:
+        print("running")
+        time.sleep(1)
+
+
+def test_server_submit_server(
+    stub: definitions.IsolateStub,
+    monkeypatch: Any,
+) -> None:
+    inherit_from_local(monkeypatch)
+
+    request = definitions.SubmitRequest(function=prepare_request(myserver))
+    task_id = stub.Submit(request).task_id
+
+    tasks = [task.task_id for task in stub.List(definitions.ListRequest()).tasks]
+    assert task_id in tasks
+
+    stub.Cancel(definitions.CancelRequest(task_id=task_id))
+
+    assert not list(stub.List(definitions.ListRequest()).tasks)
