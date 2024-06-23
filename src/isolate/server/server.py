@@ -167,7 +167,7 @@ class BridgeManager:
 
 
 @dataclass
-class Task:
+class RunTask:
     request: definitions.BoundFunction
     future: futures.Future | None = None
     agent: RunnerAgent | None = None
@@ -188,9 +188,9 @@ class Task:
 class IsolateServicer(definitions.IsolateServicer):
     bridge_manager: BridgeManager
     default_settings: IsolateSettings = field(default_factory=IsolateSettings)
-    background_tasks: dict[str, Task] = field(default_factory=dict)
+    background_tasks: dict[str, RunTask] = field(default_factory=dict)
 
-    def _run_task(self, task: Task) -> Iterator[definitions.PartialRunResult]:
+    def _run_task(self, task: RunTask) -> Iterator[definitions.PartialRunResult]:
         messages: Queue[definitions.PartialRunResult] = Queue()
         environments = []
         for env in task.request.environments:
@@ -309,7 +309,7 @@ class IsolateServicer(definitions.IsolateServicer):
                             StatusCode.UNKNOWN,
                         )
 
-    def _run_task_in_background(self, task: Task) -> None:
+    def _run_task_in_background(self, task: RunTask) -> None:
         for _ in self._run_task(task):
             pass
 
@@ -318,7 +318,7 @@ class IsolateServicer(definitions.IsolateServicer):
         request: definitions.SubmitRequest,
         context: ServicerContext,
     ) -> definitions.SubmitResponse:
-        task = Task(request=request.function)
+        task = RunTask(request=request.function)
         task.future = RUNNER_THREAD_POOL.submit(
             self._run_task_in_background,
             task,
@@ -343,7 +343,7 @@ class IsolateServicer(definitions.IsolateServicer):
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
         try:
-            yield from self._run_task(Task(request=request))
+            yield from self._run_task(RunTask(request=request))
         except GRPCException as exc:
             return self.abort_with_msg(
                 exc.message,
