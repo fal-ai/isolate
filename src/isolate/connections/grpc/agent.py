@@ -1,4 +1,12 @@
 # agent-requires: isolate[server]
+"""
+This file contains the implementation of the gRPC agent. The agent is a
+separate process that is responsible for running the user code in a
+sandboxed environment.
+
+This file is referenced by the latest version of the `isolate` package
+but then runs it in the context of the frozen agent built environment.
+"""
 
 from __future__ import annotations
 
@@ -17,7 +25,11 @@ from typing import (
 import grpc
 from grpc import ServicerContext, StatusCode
 
-from isolate import __version__ as agent_version
+try:
+    from isolate import __version__ as agent_version
+except ImportError:
+    agent_version = "UNKNOWN"
+
 from isolate.backends.common import sha256_digest_of
 from isolate.connections.common import SerializationError, serialize_object
 from isolate.connections.grpc import definitions
