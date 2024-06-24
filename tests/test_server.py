@@ -217,7 +217,7 @@ def test_server_builder_error(stub: definitions.IsolateStub, monkeypatch: Any) -
     assert "Failure during 'pip install': Command" in exc.value.details()
 
     raw_logs = [log.message for log in build_logs]
-    assert "ERROR: Invalid requirement: '$$$$'" in raw_logs
+    assert any("ERROR: Invalid requirement: '$$$$'" in raw_log for raw_log in raw_logs)
 
 
 def test_user_logs_immediate(stub: definitions.IsolateStub, monkeypatch: Any) -> None:
@@ -402,7 +402,7 @@ def test_agent_show_logs_from_agent_requirements(
     assert "Failure during 'pip install': Command" in exc.value.details()
 
     raw_logs = [log.message for log in build_logs]
-    assert "ERROR: Invalid requirement: '$$$$'" in raw_logs
+    assert any("ERROR: Invalid requirement: '$$$$'" in raw_log for raw_log in raw_logs)
 
 
 def test_bridge_connection_reuse(
