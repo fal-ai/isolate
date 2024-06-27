@@ -4,6 +4,7 @@ import os
 import threading
 import time
 import traceback
+import uuid
 from collections import defaultdict
 from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor
@@ -114,11 +115,11 @@ class BridgeManager:
         self,
         connection: LocalPythonGRPC,
         queue: Queue,
-    ) -> Iterator[tuple[definitions.AgentStub, Queue]]:
+    ) -> Iterator[RunnerAgent]:
         agent = self._allocate_new_agent(connection, queue)
 
         try:
-            yield agent.stub, agent.message_queue
+            yield agent
         finally:
             self._cache_agent(connection, agent)
 
@@ -166,18 +167,33 @@ class BridgeManager:
 
 
 @dataclass
+class RunTask:
+    request: definitions.BoundFunction
+    future: futures.Future | None = None
+    agent: RunnerAgent | None = None
+
+    def cancel(self):
+        while True:
+            self.future.cancel()
+            if self.agent:
+                self.agent.terminate()
+            try:
+                self.future.exception(timeout=0.1)
+                return
+            except futures.TimeoutError:
+                pass
+
+
+@dataclass
 class IsolateServicer(definitions.IsolateServicer):
     bridge_manager: BridgeManager
     default_settings: IsolateSettings = field(default_factory=IsolateSettings)
-    background_tasks: set[futures.Future] = field(default_factory=set)
+    background_tasks: dict[str, RunTask] = field(default_factory=dict)
 
-    def _run_function(
-        self,
-        request: definitions.BoundFunction,
-    ) -> Iterator[definitions.PartialRunResult]:
+    def _run_task(self, task: RunTask) -> Iterator[definitions.PartialRunResult]:
         messages: Queue[definitions.PartialRunResult] = Queue()
         environments = []
-        for env in request.environments:
+        for env in task.request.environments:
             try:
                 environments.append((env.force, from_grpc(env)))
             except ValueError:
@@ -195,7 +211,7 @@ class IsolateServicer(definitions.IsolateServicer):
         run_settings = replace(
             self.default_settings,
             log_hook=log_handler.handle,
-            serialization_method=request.function.method,
+            serialization_method=task.request.function.method,
         )
 
         for _, environment in environments:
@@ -244,28 +260,28 @@ class IsolateServicer(definitions.IsolateServicer):
                 extra_inheritance_paths=inheritance_paths,
             )
 
-            with self.bridge_manager.establish(connection, queue=messages) as (
-                bridge,
-                queue,
-            ):
+            with self.bridge_manager.establish(connection, queue=messages) as agent:
+                task.agent = agent
                 function_call = definitions.FunctionCall(
-                    function=request.function,
-                    setup_func=request.setup_func,
+                    function=task.request.function,
+                    setup_func=task.request.setup_func,
                 )
-                if not request.HasField("setup_func"):
+                if not task.request.HasField("setup_func"):
                     function_call.ClearField("setup_func")
 
                 future = local_pool.submit(
                     _proxy_to_queue,
-                    queue=queue,
-                    bridge=bridge,
+                    queue=agent.message_queue,
+                    bridge=agent.stub,
                     input=function_call,
                 )
 
                 # Unlike above; we are not interested in the result value of future
                 # here, since it will be already transferred to other side without
                 # us even seeing (through the queue).
-                yield from self.watch_queue_until_completed(queue, future.done)
+                yield from self.watch_queue_until_completed(
+                    agent.message_queue, future.done
+                )
 
                 # But we still have to check whether there were any errors raised
                 # during the execution, and handle them accordingly.
@@ -293,14 +309,8 @@ class IsolateServicer(definitions.IsolateServicer):
                             StatusCode.UNKNOWN,
                         )
 
-    def _run_function_in_background(
-        self,
-        bound_function: definitions.BoundFunction,
-    ) -> None:
-        try:
-            for _ in self._run_function(bound_function):
-                pass
-        except GRPCException:
+    def _run_task_in_background(self, task: RunTask) -> None:
+        for _ in self._run_task(task):
             pass
 
     def Submit(
@@ -308,13 +318,24 @@ class IsolateServicer(definitions.IsolateServicer):
         request: definitions.SubmitRequest,
         context: ServicerContext,
     ) -> definitions.SubmitResponse:
-        run_future = RUNNER_THREAD_POOL.submit(
-            self._run_function_in_background,
-            request.function,
+        task = RunTask(request=request.function)
+        task.future = RUNNER_THREAD_POOL.submit(
+            self._run_task_in_background,
+            task,
         )
-        self.background_tasks.add(run_future)
+        task_id = str(uuid.uuid4())
 
-        return definitions.SubmitResponse()
+        print(f"Submitted a task {task_id}")
+
+        self.background_tasks[task_id] = task
+
+        def _callback(_):
+            print(f"Task {task_id} finished")
+            self.background_tasks.pop(task_id, None)
+
+        task.future.add_done_callback(_callback)
+
+        return definitions.SubmitResponse(task_id=task_id)
 
     def Run(
         self,
@@ -322,13 +343,39 @@ class IsolateServicer(definitions.IsolateServicer):
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
         try:
-            yield from self._run_function(request)
+            yield from self._run_task(RunTask(request=request))
         except GRPCException as exc:
             return self.abort_with_msg(
                 exc.message,
                 context,
                 code=exc.code,
             )
+
+    def List(
+        self,
+        request: definitions.ListRequest,
+        context: ServicerContext,
+    ) -> definitions.ListResponse:
+        return definitions.ListResponse(
+            tasks=[
+                definitions.TaskInfo(task_id=task_id)
+                for task_id in self.background_tasks.keys()
+            ]
+        )
+
+    def Cancel(
+        self,
+        request: definitions.CancelRequest,
+        context: ServicerContext,
+    ) -> definitions.CancelResponse:
+        task_id = request.task_id
+
+        print(f"Canceling task {task_id}")
+        task = self.background_tasks.get(task_id)
+        if task is not None:
+            task.cancel()
+
+        return definitions.CancelResponse()
 
     def watch_queue_until_completed(
         self, queue: Queue, is_completed: Callable[[], bool]
@@ -380,6 +427,10 @@ class IsolateServicer(definitions.IsolateServicer):
         context.set_code(code)
         context.set_details(message)
         return None
+
+    def cancel_tasks(self):
+        for task in self.background_tasks.values():
+            task.cancel()
 
 
 def _proxy_to_queue(

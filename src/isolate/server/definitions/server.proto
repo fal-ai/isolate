@@ -10,6 +10,12 @@ service Isolate {
 
     // Submit a function to be run without waiting for results.
     rpc Submit (SubmitRequest) returns (SubmitResponse) {}
+
+    // List running tasks
+    rpc List (ListRequest) returns (ListResponse) {}
+
+    // Cancel a running task
+    rpc Cancel (CancelRequest) returns (CancelResponse) {}
 }
 
 message BoundFunction {
@@ -33,5 +39,23 @@ message SubmitRequest {
 }
 
 message SubmitResponse {
-    // Reserved for future use.
+    string task_id = 1;
+}
+
+message ListRequest {
+}
+
+message TaskInfo {
+    string task_id = 1;
+}
+
+message ListResponse {
+    repeated TaskInfo tasks = 1;
+}
+
+message CancelRequest {
+    string task_id = 1;
+}
+
+message CancelResponse {
 }
