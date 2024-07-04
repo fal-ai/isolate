@@ -329,8 +329,13 @@ class IsolateServicer(definitions.IsolateServicer):
 
         self.background_tasks[task_id] = task
 
-        def _callback(_):
-            print(f"Task {task_id} finished")
+        def _callback(future: futures.Future) -> None:
+            msg = f"Task {task_id} finished with"
+            if exc := future.exception():
+                msg += f" error: {exc!r}"
+            else:
+                msg += f" result: {future.result()!r}"
+            print(msg)
             self.background_tasks.pop(task_id, None)
 
         task.future.add_done_callback(_callback)
