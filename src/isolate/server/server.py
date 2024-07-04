@@ -467,7 +467,7 @@ class LogHandler:
 
 def main() -> None:
     server = grpc.server(
-        RUNNER_THREAD_POOL,
+        futures.ThreadPoolExecutor(max_workers=MAX_THREADS),
         options=get_default_options(),
     )
     with BridgeManager() as bridge_manager:
