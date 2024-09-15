@@ -16,31 +16,41 @@ from isolate.connections.grpc.definitions import common_pb2 as common__pb2
 from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cserver.proto\x1a\x0c\x63ommon.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x9d\x01\n\rBoundFunction\x12,\n\x0c\x65nvironments\x18\x01 \x03(\x0b\x32\x16.EnvironmentDefinition\x12#\n\x08\x66unction\x18\x02 \x01(\x0b\x32\x11.SerializedObject\x12*\n\nsetup_func\x18\x03 \x01(\x0b\x32\x11.SerializedObjectH\x00\x88\x01\x01\x42\r\n\x0b_setup_func\"d\n\x15\x45nvironmentDefinition\x12\x0c\n\x04kind\x18\x01 \x01(\t\x12.\n\rconfiguration\x18\x02 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\r\n\x05\x66orce\x18\x03 \x01(\x08\"1\n\rSubmitRequest\x12 \n\x08\x66unction\x18\x01 \x01(\x0b\x32\x0e.BoundFunction\"!\n\x0eSubmitResponse\x12\x0f\n\x07task_id\x18\x01 \x01(\t\"\r\n\x0bListRequest\"\x1b\n\x08TaskInfo\x12\x0f\n\x07task_id\x18\x01 \x01(\t\"(\n\x0cListResponse\x12\x18\n\x05tasks\x18\x01 \x03(\x0b\x32\t.TaskInfo\" \n\rCancelRequest\x12\x0f\n\x07task_id\x18\x01 \x01(\t\"\x10\n\x0e\x43\x61ncelResponse2\xb8\x01\n\x07Isolate\x12,\n\x03Run\x12\x0e.BoundFunction\x1a\x11.PartialRunResult\"\x00\x30\x01\x12+\n\x06Submit\x12\x0e.SubmitRequest\x1a\x0f.SubmitResponse\"\x00\x12%\n\x04List\x12\x0c.ListRequest\x1a\r.ListResponse\"\x00\x12+\n\x06\x43\x61ncel\x12\x0e.CancelRequest\x1a\x0f.CancelResponse\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cserver.proto\x1a\x0c\x63ommon.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x9d\x01\n\rBoundFunction\x12,\n\x0c\x65nvironments\x18\x01 \x03(\x0b\x32\x16.EnvironmentDefinition\x12#\n\x08\x66unction\x18\x02 \x01(\x0b\x32\x11.SerializedObject\x12*\n\nsetup_func\x18\x03 \x01(\x0b\x32\x11.SerializedObjectH\x00\x88\x01\x01\x42\r\n\x0b_setup_func\"d\n\x15\x45nvironmentDefinition\x12\x0c\n\x04kind\x18\x01 \x01(\t\x12.\n\rconfiguration\x18\x02 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\r\n\x05\x66orce\x18\x03 \x01(\x08\"R\n\rSubmitRequest\x12 \n\x08\x66unction\x18\x01 \x01(\x0b\x32\x0e.BoundFunction\x12\x1f\n\x08metadata\x18\x02 \x01(\x0b\x32\r.TaskMetadata\"{\n\x0cTaskMetadata\x12\x36\n\rlogger_labels\x18\x01 \x03(\x0b\x32\x1f.TaskMetadata.LoggerLabelsEntry\x1a\x33\n\x11LoggerLabelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"!\n\x0eSubmitResponse\x12\x0f\n\x07task_id\x18\x01 \x01(\t\"F\n\x12SetMetadataRequest\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x1f\n\x08metadata\x18\x02 \x01(\x0b\x32\r.TaskMetadata\"\x15\n\x13SetMetadataResponse\"\r\n\x0bListRequest\"\x1b\n\x08TaskInfo\x12\x0f\n\x07task_id\x18\x01 \x01(\t\"(\n\x0cListResponse\x12\x18\n\x05tasks\x18\x01 \x03(\x0b\x32\t.TaskInfo\" \n\rCancelRequest\x12\x0f\n\x07task_id\x18\x01 \x01(\t\"\x10\n\x0e\x43\x61ncelResponse2\xf4\x01\n\x07Isolate\x12,\n\x03Run\x12\x0e.BoundFunction\x1a\x11.PartialRunResult\"\x00\x30\x01\x12+\n\x06Submit\x12\x0e.SubmitRequest\x1a\x0f.SubmitResponse\"\x00\x12:\n\x0bSetMetadata\x12\x13.SetMetadataRequest\x1a\x14.SetMetadataResponse\"\x00\x12%\n\x04List\x12\x0c.ListRequest\x1a\r.ListResponse\"\x00\x12+\n\x06\x43\x61ncel\x12\x0e.CancelRequest\x1a\x0f.CancelResponse\"\x00\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'server_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
+  _globals['_TASKMETADATA_LOGGERLABELSENTRY']._loaded_options = None
+  _globals['_TASKMETADATA_LOGGERLABELSENTRY']._serialized_options = b'8\001'
   _globals['_BOUNDFUNCTION']._serialized_start=61
   _globals['_BOUNDFUNCTION']._serialized_end=218
   _globals['_ENVIRONMENTDEFINITION']._serialized_start=220
   _globals['_ENVIRONMENTDEFINITION']._serialized_end=320
   _globals['_SUBMITREQUEST']._serialized_start=322
-  _globals['_SUBMITREQUEST']._serialized_end=371
-  _globals['_SUBMITRESPONSE']._serialized_start=373
-  _globals['_SUBMITRESPONSE']._serialized_end=406
-  _globals['_LISTREQUEST']._serialized_start=408
-  _globals['_LISTREQUEST']._serialized_end=421
-  _globals['_TASKINFO']._serialized_start=423
-  _globals['_TASKINFO']._serialized_end=450
-  _globals['_LISTRESPONSE']._serialized_start=452
-  _globals['_LISTRESPONSE']._serialized_end=492
-  _globals['_CANCELREQUEST']._serialized_start=494
-  _globals['_CANCELREQUEST']._serialized_end=526
-  _globals['_CANCELRESPONSE']._serialized_start=528
-  _globals['_CANCELRESPONSE']._serialized_end=544
-  _globals['_ISOLATE']._serialized_start=547
-  _globals['_ISOLATE']._serialized_end=731
+  _globals['_SUBMITREQUEST']._serialized_end=404
+  _globals['_TASKMETADATA']._serialized_start=406
+  _globals['_TASKMETADATA']._serialized_end=529
+  _globals['_TASKMETADATA_LOGGERLABELSENTRY']._serialized_start=478
+  _globals['_TASKMETADATA_LOGGERLABELSENTRY']._serialized_end=529
+  _globals['_SUBMITRESPONSE']._serialized_start=531
+  _globals['_SUBMITRESPONSE']._serialized_end=564
+  _globals['_SETMETADATAREQUEST']._serialized_start=566
+  _globals['_SETMETADATAREQUEST']._serialized_end=636
+  _globals['_SETMETADATARESPONSE']._serialized_start=638
+  _globals['_SETMETADATARESPONSE']._serialized_end=659
+  _globals['_LISTREQUEST']._serialized_start=661
+  _globals['_LISTREQUEST']._serialized_end=674
+  _globals['_TASKINFO']._serialized_start=676
+  _globals['_TASKINFO']._serialized_end=703
+  _globals['_LISTRESPONSE']._serialized_start=705
+  _globals['_LISTRESPONSE']._serialized_end=745
+  _globals['_CANCELREQUEST']._serialized_start=747
+  _globals['_CANCELREQUEST']._serialized_end=779
+  _globals['_CANCELRESPONSE']._serialized_start=781
+  _globals['_CANCELRESPONSE']._serialized_end=797
+  _globals['_ISOLATE']._serialized_start=800
+  _globals['_ISOLATE']._serialized_end=1044
 # @@protoc_insertion_point(module_scope)

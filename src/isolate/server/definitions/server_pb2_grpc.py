@@ -50,6 +50,11 @@ class IsolateStub(object):
                 request_serializer=server__pb2.SubmitRequest.SerializeToString,
                 response_deserializer=server__pb2.SubmitResponse.FromString,
                 _registered_method=True)
+        self.SetMetadata = channel.unary_unary(
+                '/Isolate/SetMetadata',
+                request_serializer=server__pb2.SetMetadataRequest.SerializeToString,
+                response_deserializer=server__pb2.SetMetadataResponse.FromString,
+                _registered_method=True)
         self.List = channel.unary_unary(
                 '/Isolate/List',
                 request_serializer=server__pb2.ListRequest.SerializeToString,
@@ -75,6 +80,13 @@ class IsolateServicer(object):
 
     def Submit(self, request, context):
         """Submit a function to be run without waiting for results.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetMetadata(self, request, context):
+        """Set the metadata for a task.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -106,6 +118,11 @@ def add_IsolateServicer_to_server(servicer, server):
                     servicer.Submit,
                     request_deserializer=server__pb2.SubmitRequest.FromString,
                     response_serializer=server__pb2.SubmitResponse.SerializeToString,
+            ),
+            'SetMetadata': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetMetadata,
+                    request_deserializer=server__pb2.SetMetadataRequest.FromString,
+                    response_serializer=server__pb2.SetMetadataResponse.SerializeToString,
             ),
             'List': grpc.unary_unary_rpc_method_handler(
                     servicer.List,
@@ -172,6 +189,33 @@ class Isolate(object):
             '/Isolate/Submit',
             server__pb2.SubmitRequest.SerializeToString,
             server__pb2.SubmitResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetMetadata(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/Isolate/SetMetadata',
+            server__pb2.SetMetadataRequest.SerializeToString,
+            server__pb2.SetMetadataResponse.FromString,
             options,
             channel_credentials,
             insecure,
