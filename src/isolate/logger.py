@@ -34,11 +34,11 @@ class IsolateLogger:
 
 
 _labels = {}
-try:
-    raw = os.getenv("ISOLATE_LOG_LABELS")
-    if raw:
+raw = os.getenv("ISOLATE_LOG_LABELS")
+if raw:
+    try:
         _labels: dict[str, str] = json.loads(raw)
-except BaseException:
-    print("Failed to parse ISOLATE_LOG_LABELS")
+    except json.JSONDecodeError:
+        print("Failed to parse ISOLATE_LOG_LABELS")
 
 ENV_LOGGER = IsolateLogger.with_env_expanded(labels=_labels)
