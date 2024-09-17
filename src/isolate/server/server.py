@@ -29,7 +29,7 @@ from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 from isolate.connections.grpc import AgentError, LocalPythonGRPC
 from isolate.connections.grpc.configuration import get_default_options
-from isolate.logger import logger
+from isolate.logger import ENV_LOGGER, IsolateLogger
 from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions, health
 from isolate.server.health_server import HealthServicer
@@ -453,9 +453,10 @@ def _proxy_to_queue(
 @dataclass
 class LogHandler:
     messages: Queue
+    logger: IsolateLogger = ENV_LOGGER
 
     def handle(self, log: Log) -> None:
-        logger.log(log.level, log.message, source=log.source)
+        self.logger.log(log.level, log.message, source=log.source)
         self._add_log_to_queue(log)
 
     def _add_log_to_queue(self, log: Log) -> None:
