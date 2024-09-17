@@ -33,13 +33,17 @@ class IsolateLogger:
 
         return cls(labels)
 
+    @classmethod
+    def from_env(cls) -> "IsolateLogger":
+        _labels: Dict[str, str] = {}
+        raw = os.getenv("ISOLATE_LOG_LABELS")
+        if raw:
+            try:
+                _labels = json.loads(raw)
+            except json.JSONDecodeError:
+                print("Failed to parse ISOLATE_LOG_LABELS")
 
-_labels: Dict[str, str] = {}
-raw = os.getenv("ISOLATE_LOG_LABELS")
-if raw:
-    try:
-        _labels = json.loads(raw)
-    except json.JSONDecodeError:
-        print("Failed to parse ISOLATE_LOG_LABELS")
+        return cls.with_env_expanded(labels=_labels)
 
-ENV_LOGGER = IsolateLogger.with_env_expanded(labels=_labels)
+
+ENV_LOGGER = IsolateLogger.from_env()
