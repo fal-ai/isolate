@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Dict
 
 from isolate.logs import LogLevel, LogSource
 
@@ -8,10 +9,10 @@ from isolate.logs import LogLevel, LogSource
 # but it handling `source` would be not trivial, so we are better off
 # just keeping it simple for now.
 class IsolateLogger:
-    def __init__(self, log_labels: dict[str, str]):
+    def __init__(self, log_labels: Dict[str, str]):
         self.log_labels = log_labels
 
-    def log(self, level: LogLevel, message: str, source: LogSource):
+    def log(self, level: LogLevel, message: str, source: LogSource) -> None:
         record = {
             "isolate_source": source.name,
             "level": level.name,
@@ -21,7 +22,7 @@ class IsolateLogger:
         print(json.dumps(record))
 
     @classmethod
-    def with_env_expanded(cls, labels: dict[str, str]):
+    def with_env_expanded(cls, labels: Dict[str, str]) -> "IsolateLogger":
         for key, value in labels.items():
             if value.startswith("$"):
                 expanded = os.getenv(value[1:])
@@ -33,11 +34,11 @@ class IsolateLogger:
         return cls(labels)
 
 
-_labels = {}
+_labels: Dict[str, str] = {}
 raw = os.getenv("ISOLATE_LOG_LABELS")
 if raw:
     try:
-        _labels: dict[str, str] = json.loads(raw)
+        _labels = json.loads(raw)
     except json.JSONDecodeError:
         print("Failed to parse ISOLATE_LOG_LABELS")
 
