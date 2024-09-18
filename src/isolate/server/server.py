@@ -211,7 +211,7 @@ class IsolateServicer(definitions.IsolateServicer):
                 StatusCode.INVALID_ARGUMENT,
             )
 
-        log_handler = LogHandler(messages, logger=task.logger)
+        log_handler = LogHandler(messages, task=task)
 
         run_settings = replace(
             self.default_settings,
@@ -480,10 +480,11 @@ def _proxy_to_queue(
 @dataclass
 class LogHandler:
     messages: Queue
-    logger: IsolateLogger = ENV_LOGGER
+    # Reference to the task so we can change the logger
+    task: RunTask
 
     def handle(self, log: Log) -> None:
-        self.logger.log(log.level, log.message, source=log.source)
+        self.task.logger.log(log.level, log.message, source=log.source)
         self._add_log_to_queue(log)
 
     def _add_log_to_queue(self, log: Log) -> None:
