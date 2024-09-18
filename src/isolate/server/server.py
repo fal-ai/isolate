@@ -323,17 +323,14 @@ class IsolateServicer(definitions.IsolateServicer):
         request: definitions.SubmitRequest,
         context: ServicerContext,
     ) -> definitions.SubmitResponse:
-        logger_labels = request.metadata.logger_labels
-        if not logger_labels:
-            logger_labels_dict = {}
-        else:
-            logger_labels_dict = dict(logger_labels)
-
-        try:
-            logger = IsolateLogger.with_env_expanded(logger_labels_dict)
-        except BaseException:
-            # Ignore the error if the logger couldn't be created.
-            logger = ENV_LOGGER
+        logger = ENV_LOGGER
+        if request.metadata.logger_labels:
+            logger_labels_dict = dict(request.metadata.logger_labels)
+            try:
+                logger = IsolateLogger.with_env_expanded(logger_labels_dict)
+            except BaseException:
+                # Ignore the error if the logger couldn't be created.
+                pass
 
         task = RunTask(request=request.function, logger=logger)
         task.future = RUNNER_THREAD_POOL.submit(self._run_task_in_background, task)
