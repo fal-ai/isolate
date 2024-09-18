@@ -174,6 +174,7 @@ class RunTask:
     request: definitions.BoundFunction
     future: futures.Future | None = None
     agent: RunnerAgent | None = None
+    logger: IsolateLogger = ENV_LOGGER
 
     def cancel(self):
         while True:
@@ -210,7 +211,8 @@ class IsolateServicer(definitions.IsolateServicer):
                 StatusCode.INVALID_ARGUMENT,
             )
 
-        log_handler = LogHandler(messages)
+        log_handler = LogHandler(messages, logger=task.logger)
+
         run_settings = replace(
             self.default_settings,
             log_hook=log_handler.handle,
@@ -321,11 +323,20 @@ class IsolateServicer(definitions.IsolateServicer):
         request: definitions.SubmitRequest,
         context: ServicerContext,
     ) -> definitions.SubmitResponse:
-        task = RunTask(request=request.function)
-        task.future = RUNNER_THREAD_POOL.submit(
-            self._run_task_in_background,
-            task,
-        )
+        logger_labels = request.metadata.logger_labels
+        if not logger_labels:
+            logger_labels_dict = {}
+        else:
+            logger_labels_dict = dict(logger_labels)
+
+        try:
+            logger = IsolateLogger.with_env_expanded(logger_labels_dict)
+        except BaseException:
+            # Ignore the error if the logger couldn't be created.
+            logger = ENV_LOGGER
+
+        task = RunTask(request=request.function, logger=logger)
+        task.future = RUNNER_THREAD_POOL.submit(self._run_task_in_background, task)
         task_id = str(uuid.uuid4())
 
         print(f"Submitted a task {task_id}")
@@ -344,6 +355,25 @@ class IsolateServicer(definitions.IsolateServicer):
         task.future.add_done_callback(_callback)
 
         return definitions.SubmitResponse(task_id=task_id)
+
+    def SetMetadata(
+        self,
+        request: definitions.SetMetadataRequest,
+        context: ServicerContext,
+    ) -> definitions.SetMetadataResponse:
+        if request.task_id not in self.background_tasks:
+            raise GRPCException(
+                f"Task {request.task_id} not found.",
+                StatusCode.NOT_FOUND,
+            )
+
+        task = self.background_tasks[request.task_id]
+
+        task.logger = IsolateLogger.with_env_expanded(
+            dict(request.metadata.logger_labels)
+        )
+
+        return definitions.SetMetadataResponse()
 
     def Run(
         self,

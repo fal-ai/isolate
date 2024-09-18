@@ -11,6 +11,9 @@ service Isolate {
     // Submit a function to be run without waiting for results.
     rpc Submit (SubmitRequest) returns (SubmitResponse) {}
 
+    // Set the metadata for a task.
+    rpc SetMetadata (SetMetadataRequest) returns (SetMetadataResponse) {}
+
     // List running tasks
     rpc List (ListRequest) returns (ListResponse) {}
 
@@ -36,10 +39,25 @@ message EnvironmentDefinition {
 message SubmitRequest {
     // The function to run.
     BoundFunction function = 1;
+    // Task metadata.
+    TaskMetadata metadata = 2;
+}
+
+message TaskMetadata {
+    // Labels to attach to the logs.
+    map<string, string> logger_labels = 1;
 }
 
 message SubmitResponse {
     string task_id = 1;
+}
+
+message SetMetadataRequest{
+    string task_id = 1;
+    TaskMetadata metadata = 2;
+}
+
+message SetMetadataResponse {
 }
 
 message ListRequest {
