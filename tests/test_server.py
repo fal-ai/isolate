@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Any, List, Optional, cast
+from typing import Any, Iterator, List, Optional, cast
 
 import grpc
 import pytest
@@ -15,7 +15,12 @@ from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions, health
 from isolate.server.health_server import HealthServicer
 from isolate.server.interface import from_grpc, to_serialized_object
-from isolate.server.server import BridgeManager, IsolateServicer
+from isolate.server.server import (
+    BridgeManager,
+    IsolateServicer,
+    ServerBoundInterceptor,
+    SingleTaskInterceptor,
+)
 
 REPO_DIR = Path(__file__).parent.parent
 assert (
@@ -34,14 +39,32 @@ class Stubs:
     health_stub: health.HealthStub
 
 
+@pytest.fixture
+def interceptors():
+    return []
+
+
 @contextmanager
-def make_server(tmp_path):
+def make_server(
+    tmp_path: Path, interceptors: Optional[List[ServerBoundInterceptor]] = None
+) -> Iterator[Stubs]:
+    interceptors = interceptors or []
     server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=1), options=get_default_options()
+        futures.ThreadPoolExecutor(max_workers=1),
+        options=get_default_options(),
+        interceptors=interceptors,  # type: ignore
     )
+
+    for interceptor in interceptors:
+        interceptor.register_server(server)
+
     test_settings = IsolateSettings(cache_dir=tmp_path / "cache")
     with BridgeManager() as bridge:
         servicer = IsolateServicer(bridge, test_settings)
+
+        for interceptor in interceptors:
+            interceptor.register_servicer(servicer)
+
         definitions.register_isolate(servicer, server)
         health.register_health(HealthServicer(), server)
         host, port = "localhost", server.add_insecure_port("[::]:0")
@@ -69,14 +92,14 @@ def make_server(tmp_path):
 
 
 @pytest.fixture
-def stub(tmp_path):
-    with make_server(tmp_path) as stubs:
+def stub(tmp_path, interceptors):
+    with make_server(tmp_path, interceptors) as stubs:
         yield stubs.isolate_stub
 
 
 @pytest.fixture
-def health_stub(tmp_path):
-    with make_server(tmp_path) as stubs:
+def health_stub(tmp_path, interceptors):
+    with make_server(tmp_path, interceptors) as stubs:
         yield stubs.health_stub
 
 
@@ -719,3 +742,39 @@ def test_server_submit_server(
     stub.Cancel(definitions.CancelRequest(task_id=task_id))
 
     assert not list(stub.List(definitions.ListRequest()).tasks)
+
+
+@pytest.mark.parametrize(
+    "interceptors",
+    [
+        [SingleTaskInterceptor()],
+    ],
+)
+def test_server_single_use_submit(
+    stub: definitions.IsolateStub,
+    monkeypatch: Any,
+) -> None:
+    inherit_from_local(monkeypatch)
+
+    request = definitions.SubmitRequest(function=prepare_request(myserver))
+    task_id = stub.Submit(request).task_id
+
+    tasks = [task.task_id for task in stub.List(definitions.ListRequest()).tasks]
+    assert task_id in tasks
+
+    # Now try to Submit again
+    with pytest.raises(grpc.RpcError) as exc_info:
+        stub.Submit(request)
+    assert exc_info.value.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
+
+    # And try to Run a task
+    with pytest.raises(grpc.RpcError) as exc_info:
+        run_request(stub, prepare_request(myserver))
+    assert exc_info.value.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
+
+    stub.Cancel(definitions.CancelRequest(task_id=task_id))
+
+    with pytest.raises(grpc.RpcError) as exc_info:
+        stub.List(definitions.ListRequest())
+    # Server should be shutting down
+    assert exc_info.value.code() == grpc.StatusCode.UNAVAILABLE
