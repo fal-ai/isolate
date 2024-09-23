@@ -754,6 +754,8 @@ def test_server_single_use_submit(
     stub: definitions.IsolateStub,
     monkeypatch: Any,
 ) -> None:
+    import time
+
     inherit_from_local(monkeypatch)
 
     request = definitions.SubmitRequest(function=prepare_request(myserver))
@@ -773,8 +775,46 @@ def test_server_single_use_submit(
     assert exc_info.value.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
 
     stub.Cancel(definitions.CancelRequest(task_id=task_id))
+    time.sleep(1)
 
     with pytest.raises(grpc.RpcError) as exc_info:
         stub.List(definitions.ListRequest())
+
     # Server should be shutting down
+    assert exc_info.value.code() == grpc.StatusCode.UNAVAILABLE
+
+
+@pytest.mark.parametrize(
+    "interceptors",
+    [
+        [SingleTaskInterceptor()],
+    ],
+)
+def test_server_single_use_run(
+    stub: definitions.IsolateStub,
+    monkeypatch: Any,
+) -> None:
+    import time
+
+    inherit_from_local(monkeypatch)
+
+    run_function(stub, check_machine)
+    time.sleep(1)
+
+    # Now try to Submit again
+    with pytest.raises(grpc.RpcError) as exc_info:
+        submit_request = definitions.SubmitRequest(function=prepare_request(myserver))
+        stub.Submit(submit_request)
+
+    assert exc_info.value.code() == grpc.StatusCode.UNAVAILABLE
+
+    # And try to Run a task
+    with pytest.raises(grpc.RpcError) as exc_info:
+        run_function(stub, check_machine)
+
+    assert exc_info.value.code() == grpc.StatusCode.UNAVAILABLE
+
+    with pytest.raises(grpc.RpcError) as exc_info:
+        stub.List(definitions.ListRequest())
+
     assert exc_info.value.code() == grpc.StatusCode.UNAVAILABLE
