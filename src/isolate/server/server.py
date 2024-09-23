@@ -464,7 +464,8 @@ class IsolateServicer(definitions.IsolateServicer):
         return None
 
     def cancel_tasks(self):
-        for task in self.background_tasks.values():
+        tasks_copy = self.background_tasks.copy()
+        for task in tasks_copy.values():
             task.cancel()
 
 
@@ -534,6 +535,16 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
     """Sets server to terminate after the first Submit/Run task."""
 
     _done: bool = False
+    _task_id: str | None = None
+
+    def __init__(self):
+        def terminate(request: Any, context: grpc.ServicerContext) -> Any:
+            context.abort(
+                grpc.StatusCode.RESOURCE_EXHAUSTED,
+                "Server has already served one Run/Submit task.",
+            )
+
+        self._terminator = grpc.unary_unary_rpc_method_handler(terminate)
 
     def intercept_service(self, continuation, handler_call_details):
         handler = continuation(handler_call_details)
@@ -542,29 +553,62 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
         is_run = handler_call_details.method == "/Isolate/Run"
         is_new_task = is_submit or is_run
 
-        if is_new_task and self._done:
-            raise grpc.RpcError(
-                grpc.StatusCode.UNAVAILABLE,
-                "Server has already served one Run/Submit task.",
-            )
-        elif is_new_task:
-            self._done = True
-        else:
+        if not is_new_task:
             # Let other requests like List/Cancel/etc pass through
-            return continuation(handler_call_details)
+            return handler
+
+        if self._done:
+            # Fail the request if the server has already served or is serving
+            # a Run/Submit task.
+            return self._terminator
+
+        self._done = True
 
         def wrapper(method_impl):
             @functools.wraps(method_impl)
-            def _wrapper(request, context):
-                def _stop():
-                    if is_submit:
-                        # Wait for the task to finish
-                        while self.server.servicer.background_tasks:
-                            time.sleep(0.1)
-                    self.server.stop(grace=0.1)
+            def _wrapper(request: Any, context: grpc.ServicerContext) -> Any:
+                def termination() -> None:
+                    if is_run:
+                        print("Stopping server since run is finished")
+                        # Stop the server after the Run task is finished
+                        self.server.stop(grace=0.1)
 
-                context.add_callback(_stop)
-                return method_impl(request, context)
+                    elif is_submit:
+                        # Wait until the task_id is assigned
+                        while self._task_id is None:
+                            time.sleep(0.1)
+
+                        # Get the task from the background tasks
+                        task = self.servicer.background_tasks.get(self._task_id)
+
+                        if task is not None:
+                            # Wait until the task future is assigned
+                            tries = 0
+                            while task.future is None:
+                                time.sleep(0.1)
+                                tries += 1
+                                if tries > 100:
+                                    raise RuntimeError(
+                                        "Task future was not assigned in time."
+                                    )
+
+                            def _stop(*args):
+                                # Small sleep to make sure the cancellation is processed
+                                time.sleep(0.1)
+                                print("Stopping server since the task is finished")
+                                self.server.stop(grace=0.1)
+
+                            # Add a callback which will stop the server
+                            # after the task is finished
+                            task.future.add_done_callback(_stop)
+
+                context.add_callback(termination)
+                res = method_impl(request, context)
+
+                if is_submit:
+                    self._task_id = cast(definitions.SubmitResponse, res).task_id
+
+                return res
 
             return _wrapper
 
@@ -598,7 +642,7 @@ def main(argv: list[str] | None = None) -> None:
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=options.num_workers),
         options=get_default_options(),
-        interceptors=interceptors,
+        interceptors=interceptors,  # type: ignore
     )
 
     for interceptor in interceptors:
