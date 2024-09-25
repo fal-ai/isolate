@@ -36,6 +36,7 @@ from isolate.server.health_server import HealthServicer
 from isolate.server.interface import from_grpc, to_grpc
 
 EMPTY_MESSAGE_INTERVAL = float(os.getenv("ISOLATE_EMPTY_MESSAGE_INTERVAL", "600"))
+SKIP_EMPTY_LOGS = os.getenv("ISOLATE_SKIP_EMPTY_LOGS") == "1"
 MAX_GRPC_WAIT_TIMEOUT = float(os.getenv("ISOLATE_MAX_GRPC_WAIT_TIMEOUT", "10.0"))
 
 # Whether to inherit all the packages from the current environment or not.
@@ -485,8 +486,9 @@ class LogHandler:
     task: RunTask
 
     def handle(self, log: Log) -> None:
-        self.task.logger.log(log.level, log.message, source=log.source)
-        self._add_log_to_queue(log)
+        if not SKIP_EMPTY_LOGS or log.message.strip():
+            self.task.logger.log(log.level, log.message, source=log.source)
+            self._add_log_to_queue(log)
 
     def _add_log_to_queue(self, log: Log) -> None:
         grpc_log = cast(definitions.Log, to_grpc(log))
