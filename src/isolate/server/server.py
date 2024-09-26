@@ -377,13 +377,19 @@ class IsolateServicer(definitions.IsolateServicer):
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
         try:
-            yield from self._run_task(RunTask(request=request))
+            # HACK: we can support only one task at a time for Run
+            # TODO: move away from this when we use submit for env-aware tasks
+            task = RunTask(request=request)
+            self.background_tasks["RUN"] = task
+            yield from self._run_task(task)
         except GRPCException as exc:
             return self.abort_with_msg(
                 exc.message,
                 context,
                 code=exc.code,
             )
+        finally:
+            self.background_tasks.pop("RUN", None)
 
     def List(
         self,
