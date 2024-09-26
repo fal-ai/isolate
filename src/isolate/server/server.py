@@ -367,9 +367,7 @@ class IsolateServicer(definitions.IsolateServicer):
 
         task = self.background_tasks[request.task_id]
 
-        task.logger = IsolateLogger.with_env_expanded(
-            dict(request.metadata.logger_labels)
-        )
+        task.logger.extra_labels = dict(request.metadata.logger_labels)
 
         return definitions.SetMetadataResponse()
 
