@@ -117,6 +117,7 @@ def _io_observer(
                 return  # Nothing to read
 
             for line in raw_data.splitlines():
+                # TODO: parse the lines to include `extra={...}` added by the logger?
                 hook(line)
 
     def _reader():
