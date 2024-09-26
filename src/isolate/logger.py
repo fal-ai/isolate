@@ -9,6 +9,8 @@ from isolate.logs import LogLevel, LogSource
 # but it handling `source` would be not trivial, so we are better off
 # just keeping it simple for now.
 class IsolateLogger:
+    extra_labels: Dict[str, str] = {}
+
     def __init__(self, log_labels: Dict[str, str]):
         self.log_labels = log_labels
 
@@ -18,6 +20,7 @@ class IsolateLogger:
             "level": level.name,
             "message": message,
             **self.log_labels,
+            **self.extra_labels,
         }
         print(json.dumps(record))
 
