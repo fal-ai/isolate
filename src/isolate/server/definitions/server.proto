@@ -6,7 +6,7 @@ import "google/protobuf/struct.proto";
 service Isolate {
     // Run the given function on the specified environment. Streams logs
     // and the result originating from that function.
-    rpc Run (BoundFunction) returns (stream PartialRunResult) {}
+    rpc Run (RunRequest) returns (stream PartialRunResult) {}
 
     // Submit a function to be run without waiting for results.
     rpc Submit (SubmitRequest) returns (SubmitResponse) {}
@@ -25,6 +25,11 @@ message BoundFunction {
     repeated EnvironmentDefinition environments = 1;
     SerializedObject function = 2;
     optional SerializedObject setup_func = 3;
+}
+
+message RunRequest {
+    BoundFunction function = 1;
+    TaskMetadata metadata = 2;
 }
 
 message EnvironmentDefinition {
@@ -46,6 +51,7 @@ message SubmitRequest {
 message TaskMetadata {
     // Labels to attach to the logs.
     map<string, string> logger_labels = 1;
+    bool stream_logs = 2;
 }
 
 message SubmitResponse {
