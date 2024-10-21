@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Any, Iterator, List, Optional, cast
+from typing import Any, Iterator, List, Optional, Union, cast
 
 import grpc
 import pytest
@@ -118,7 +118,7 @@ _NOT_SET = object()
 
 def run_request(
     stub: definitions.IsolateStub,
-    request: definitions.BoundFunction,
+    request: Union[definitions.BoundFunction, definitions.RunRequest],
     *,
     build_logs: Optional[List[Log]] = None,
     bridge_logs: Optional[List[Log]] = None,
@@ -270,6 +270,50 @@ def test_user_logs_immediate(stub: definitions.IsolateStub, monkeypatch: Any) ->
     assert by_stream[LogLevel.INFO] == "0.6.0"
     assert by_stream[LogLevel.ERROR] == "error error!"
     assert by_stream[LogLevel.DEBUG] == "[debug] error!"
+
+
+def test_no_stream_logs(stub: definitions.IsolateStub, monkeypatch: Any) -> None:
+    inherit_from_local(monkeypatch)
+
+    env_definition = define_environment("virtualenv", requirements=["pyjokes==0.6.0"])
+    request = definitions.RunRequest(
+        function=definitions.BoundFunction(
+            function=to_serialized_object(
+                partial(
+                    exec,
+                    textwrap.dedent(
+                        """
+                import sys, pyjokes
+                print(pyjokes.__version__)
+                print("error error!", file=sys.stderr)
+                """
+                    ),
+                ),
+                method="dill",
+            ),
+            environments=[env_definition],
+        ),
+        metadata=definitions.TaskMetadata(
+            logger_labels={},
+            # the default is True
+            stream_logs=False,
+        ),
+    )
+
+    user_logs: List[Log] = []
+    build_logs: List[Log] = []
+    bridge_logs: List[Log] = []
+    run_request(
+        stub,
+        request,
+        user_logs=user_logs,
+        build_logs=build_logs,
+        bridge_logs=bridge_logs,
+    )
+
+    assert len(user_logs) == 0
+    assert len(build_logs) == 0
+    assert len(bridge_logs) == 0
 
 
 def test_unknown_environment(stub: definitions.IsolateStub, monkeypatch: Any) -> None:
