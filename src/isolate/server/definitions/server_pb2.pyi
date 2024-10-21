@@ -45,6 +45,27 @@ class BoundFunction(google.protobuf.message.Message):
 global___BoundFunction = BoundFunction
 
 @typing_extensions.final
+class RunRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FUNCTION_FIELD_NUMBER: builtins.int
+    METADATA_FIELD_NUMBER: builtins.int
+    @property
+    def function(self) -> global___BoundFunction: ...
+    @property
+    def metadata(self) -> global___TaskMetadata: ...
+    def __init__(
+        self,
+        *,
+        function: global___BoundFunction | None = ...,
+        metadata: global___TaskMetadata | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["function", b"function", "metadata", b"metadata"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["function", b"function", "metadata", b"metadata"]) -> None: ...
+
+global___RunRequest = RunRequest
+
+@typing_extensions.final
 class EnvironmentDefinition(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -114,15 +135,18 @@ class TaskMetadata(google.protobuf.message.Message):
         def ClearField(self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]) -> None: ...
 
     LOGGER_LABELS_FIELD_NUMBER: builtins.int
+    STREAM_LOGS_FIELD_NUMBER: builtins.int
     @property
     def logger_labels(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
         """Labels to attach to the logs."""
+    stream_logs: builtins.bool
     def __init__(
         self,
         *,
         logger_labels: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        stream_logs: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["logger_labels", b"logger_labels"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["logger_labels", b"logger_labels", "stream_logs", b"stream_logs"]) -> None: ...
 
 global___TaskMetadata = TaskMetadata
 

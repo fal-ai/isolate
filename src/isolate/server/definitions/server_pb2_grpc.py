@@ -42,7 +42,7 @@ class IsolateStub(object):
         """
         self.Run = channel.unary_stream(
                 '/Isolate/Run',
-                request_serializer=server__pb2.BoundFunction.SerializeToString,
+                request_serializer=server__pb2.RunRequest.SerializeToString,
                 response_deserializer=common__pb2.PartialRunResult.FromString,
                 _registered_method=True)
         self.Submit = channel.unary_unary(
@@ -111,7 +111,7 @@ def add_IsolateServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Run': grpc.unary_stream_rpc_method_handler(
                     servicer.Run,
-                    request_deserializer=server__pb2.BoundFunction.FromString,
+                    request_deserializer=server__pb2.RunRequest.FromString,
                     response_serializer=common__pb2.PartialRunResult.SerializeToString,
             ),
             'Submit': grpc.unary_unary_rpc_method_handler(
@@ -160,7 +160,7 @@ class Isolate(object):
             request,
             target,
             '/Isolate/Run',
-            server__pb2.BoundFunction.SerializeToString,
+            server__pb2.RunRequest.SerializeToString,
             common__pb2.PartialRunResult.FromString,
             options,
             channel_credentials,
