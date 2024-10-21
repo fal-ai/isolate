@@ -29,7 +29,7 @@ from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 from isolate.connections.grpc import AgentError, LocalPythonGRPC
 from isolate.connections.grpc.configuration import get_default_options
-from isolate.logger import ENV_LOGGER, IsolateLogger
+from isolate.logger import IsolateLogger
 from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions, health
 from isolate.server.health_server import HealthServicer
@@ -172,7 +172,8 @@ class RunTask:
     request: definitions.BoundFunction
     future: futures.Future | None = None
     agent: RunnerAgent | None = None
-    logger: IsolateLogger = ENV_LOGGER
+    logger: IsolateLogger = field(default_factory=IsolateLogger.from_env)
+    stream_logs: bool = False
 
     def cancel(self):
         while True:
@@ -319,16 +320,9 @@ class IsolateServicer(definitions.IsolateServicer):
         request: definitions.SubmitRequest,
         context: ServicerContext,
     ) -> definitions.SubmitResponse:
-        logger = ENV_LOGGER
-        if request.metadata.logger_labels:
-            logger_labels_dict = dict(request.metadata.logger_labels)
-            try:
-                logger = IsolateLogger.with_env_expanded(logger_labels_dict)
-            except BaseException:
-                # Ignore the error if the logger couldn't be created.
-                pass
+        task = RunTask(request=request.function, stream_logs=False)
+        self.set_metadata(task, request.metadata)
 
-        task = RunTask(request=request.function, logger=logger)
         task.future = RUNNER_THREAD_POOL.submit(self._run_task_in_background, task)
         task_id = str(uuid.uuid4())
 
@@ -360,21 +354,35 @@ class IsolateServicer(definitions.IsolateServicer):
                 StatusCode.NOT_FOUND,
             )
 
-        task = self.background_tasks[request.task_id]
-
-        task.logger.extra_labels = dict(request.metadata.logger_labels)
+        self.set_metadata(self.background_tasks[request.task_id], request.metadata)
 
         return definitions.SetMetadataResponse()
 
+    def set_metadata(self, task: RunTask, metadata: definitions.TaskMetadata) -> None:
+        task.logger.extra_labels = dict(metadata.logger_labels)
+
+        if metadata.HasField("stream_logs"):
+            task.stream_logs = metadata.stream_logs
+
     def Run(
         self,
-        request: definitions.BoundFunction,
+        request: definitions.RunRequest,
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
         try:
+            if isinstance(request, definitions.RunRequest):
+                task = RunTask(request=request.function)
+                self.set_metadata(task, request.metadata)
+            elif isinstance(request, definitions.BoundFunction):
+                task = RunTask(request=request)
+            else:
+                raise GRPCException(
+                    "Invalid request type.",
+                    StatusCode.INVALID_ARGUMENT,
+                )
+
             # HACK: we can support only one task at a time for Run
             # TODO: move away from this when we use submit for env-aware tasks
-            task = RunTask(request=request)
             self.background_tasks["RUN"] = task
             yield from self._run_task(task)
         except GRPCException as exc:
@@ -490,6 +498,11 @@ class LogHandler:
             self._add_log_to_queue(log)
 
     def _add_log_to_queue(self, log: Log) -> None:
+        if not self.task.stream_logs:
+            # We do not queue the logs if the stream_logs is disabled
+            # but still log them to the logger.
+            return
+
         grpc_log = cast(definitions.Log, to_grpc(log))
         grpc_result = definitions.PartialRunResult(
             is_complete=False,
