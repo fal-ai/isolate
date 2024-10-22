@@ -6,7 +6,9 @@ import "google/protobuf/struct.proto";
 service Isolate {
     // Run the given function on the specified environment. Streams logs
     // and the result originating from that function.
-    rpc Run (RunRequest) returns (stream PartialRunResult) {}
+    rpc Run (BoundFunction) returns (stream PartialRunResult) {}
+
+    rpc RunFunction (RunRequest) returns (stream PartialRunResult) {}
 
     // Submit a function to be run without waiting for results.
     rpc Submit (SubmitRequest) returns (SubmitResponse) {}

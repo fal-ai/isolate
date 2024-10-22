@@ -42,6 +42,11 @@ class IsolateStub(object):
         """
         self.Run = channel.unary_stream(
                 '/Isolate/Run',
+                request_serializer=server__pb2.BoundFunction.SerializeToString,
+                response_deserializer=common__pb2.PartialRunResult.FromString,
+                _registered_method=True)
+        self.RunFunction = channel.unary_stream(
+                '/Isolate/RunFunction',
                 request_serializer=server__pb2.RunRequest.SerializeToString,
                 response_deserializer=common__pb2.PartialRunResult.FromString,
                 _registered_method=True)
@@ -74,6 +79,12 @@ class IsolateServicer(object):
         """Run the given function on the specified environment. Streams logs
         and the result originating from that function.
         """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RunFunction(self, request, context):
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -111,6 +122,11 @@ def add_IsolateServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Run': grpc.unary_stream_rpc_method_handler(
                     servicer.Run,
+                    request_deserializer=server__pb2.BoundFunction.FromString,
+                    response_serializer=common__pb2.PartialRunResult.SerializeToString,
+            ),
+            'RunFunction': grpc.unary_stream_rpc_method_handler(
+                    servicer.RunFunction,
                     request_deserializer=server__pb2.RunRequest.FromString,
                     response_serializer=common__pb2.PartialRunResult.SerializeToString,
             ),
@@ -160,6 +176,33 @@ class Isolate(object):
             request,
             target,
             '/Isolate/Run',
+            server__pb2.BoundFunction.SerializeToString,
+            common__pb2.PartialRunResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RunFunction(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/Isolate/RunFunction',
             server__pb2.RunRequest.SerializeToString,
             common__pb2.PartialRunResult.FromString,
             options,

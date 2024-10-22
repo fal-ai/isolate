@@ -363,24 +363,37 @@ class IsolateServicer(definitions.IsolateServicer):
         # Stream_logs defaults to False if not set
         task.stream_logs = metadata.stream_logs
 
-    def Run(
+    def RunFunction(
         self,
         request: definitions.RunRequest,
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
         try:
-            if isinstance(request, definitions.RunRequest):
-                task = RunTask(request=request.function)
-                self.set_metadata(task, request.metadata)
-            elif isinstance(request, definitions.BoundFunction):
-                task = RunTask(request=request)
-            else:
-                raise GRPCException(
-                    "Invalid request type.",
-                    StatusCode.INVALID_ARGUMENT,
-                )
+            task = RunTask(request=request.function)
+            self.set_metadata(task, request.metadata)
 
-            # HACK: we can support only one task at a time for Run
+            # HACK: we can support only one task at a time
+            # TODO: move away from this when we use submit for env-aware tasks
+            self.background_tasks["RUN"] = task
+            yield from self._run_task(task)
+        except GRPCException as exc:
+            return self.abort_with_msg(
+                exc.message,
+                context,
+                code=exc.code,
+            )
+        finally:
+            self.background_tasks.pop("RUN", None)
+
+    def Run(
+        self,
+        request: definitions.BoundFunction,
+        context: ServicerContext,
+    ) -> Iterator[definitions.PartialRunResult]:
+        try:
+            task = RunTask(request=request)
+
+            # HACK: we can support only one task at a time
             # TODO: move away from this when we use submit for env-aware tasks
             self.background_tasks["RUN"] = task
             yield from self._run_task(task)
