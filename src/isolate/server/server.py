@@ -173,7 +173,7 @@ class RunTask:
     future: futures.Future | None = None
     agent: RunnerAgent | None = None
     logger: IsolateLogger = field(default_factory=IsolateLogger.from_env)
-    stream_logs: bool = False
+    stream_logs: bool = True
 
     def cancel(self):
         while True:
@@ -360,9 +360,8 @@ class IsolateServicer(definitions.IsolateServicer):
 
     def set_metadata(self, task: RunTask, metadata: definitions.TaskMetadata) -> None:
         task.logger.extra_labels = dict(metadata.logger_labels)
-
-        if metadata.HasField("stream_logs"):
-            task.stream_logs = metadata.stream_logs
+        # Stream_logs defaults to False if not set
+        task.stream_logs = metadata.stream_logs
 
     def Run(
         self,
