@@ -131,7 +131,14 @@ def run_request(
     }
 
     return_value = _NOT_SET
-    for result in stub.Run(request):
+    if isinstance(request, definitions.BoundFunction):
+        func = stub.Run
+    elif isinstance(request, definitions.RunRequest):
+        func = stub.RunFunction
+    else:
+        raise ValueError(f"Unknown request type: {type(request)}")
+
+    for result in func(request):
         for _log in result.logs:
             log = from_grpc(_log)
             log_store[log.source].append(log)
