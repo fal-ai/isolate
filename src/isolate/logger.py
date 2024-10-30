@@ -19,7 +19,7 @@ class IsolateLogger:
         record = {
             # Set the timestamp from source so we can be sure no buffering or
             # latency is affecting the timestamp.
-            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "logged_at": datetime.now(tz=timezone.utc).isoformat(),
             "isolate_source": source.name,
             "level": level.name,
             "message": message,
