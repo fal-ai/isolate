@@ -29,7 +29,7 @@ from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 from isolate.connections.grpc import AgentError, LocalPythonGRPC
 from isolate.connections.grpc.configuration import get_default_options
-from isolate.logger import ENV_LOGGER, IsolateLogger
+from isolate.logger import IsolateLogger
 from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions, health
 from isolate.server.health_server import HealthServicer
@@ -72,7 +72,6 @@ class GRPCException(Exception):
 @dataclass
 class RunnerAgent:
     stub: definitions.AgentStub
-    message_queue: Queue
     _bound_context: ExitStack
     _channel_state_history: list[grpc.ChannelConnectivity] = field(default_factory=list)
 
@@ -118,9 +117,8 @@ class BridgeManager:
     def establish(
         self,
         connection: LocalPythonGRPC,
-        queue: Queue,
     ) -> Iterator[RunnerAgent]:
-        agent = self._allocate_new_agent(connection, queue)
+        agent = self._allocate_new_agent(connection)
 
         try:
             yield agent
@@ -138,7 +136,6 @@ class BridgeManager:
     def _allocate_new_agent(
         self,
         connection: LocalPythonGRPC,
-        queue: Queue,
     ) -> RunnerAgent:
         with self._agent_access_lock:
             available_agents = self._agents[self._identify(connection)]
@@ -153,7 +150,7 @@ class BridgeManager:
         stub = bound_context.enter_context(
             connection._establish_bridge(max_wait_timeout=MAX_GRPC_WAIT_TIMEOUT)
         )
-        return RunnerAgent(stub, queue, bound_context)
+        return RunnerAgent(stub, bound_context)
 
     def _identify(self, connection: LocalPythonGRPC) -> tuple[Any, ...]:
         return (
@@ -175,7 +172,8 @@ class RunTask:
     request: definitions.BoundFunction
     future: futures.Future | None = None
     agent: RunnerAgent | None = None
-    logger: IsolateLogger = ENV_LOGGER
+    logger: IsolateLogger = field(default_factory=IsolateLogger.from_env)
+    stream_logs: bool = True
 
     def cancel(self):
         while True:
@@ -266,7 +264,7 @@ class IsolateServicer(definitions.IsolateServicer):
                 extra_inheritance_paths=inheritance_paths,
             )
 
-            with self.bridge_manager.establish(connection, queue=messages) as agent:
+            with self.bridge_manager.establish(connection) as agent:
                 task.agent = agent
                 function_call = definitions.FunctionCall(
                     function=task.request.function,
@@ -277,7 +275,7 @@ class IsolateServicer(definitions.IsolateServicer):
 
                 future = local_pool.submit(
                     _proxy_to_queue,
-                    queue=agent.message_queue,
+                    queue=messages,
                     bridge=agent.stub,
                     input=function_call,
                 )
@@ -285,9 +283,7 @@ class IsolateServicer(definitions.IsolateServicer):
                 # Unlike above; we are not interested in the result value of future
                 # here, since it will be already transferred to other side without
                 # us even seeing (through the queue).
-                yield from self.watch_queue_until_completed(
-                    agent.message_queue, future.done
-                )
+                yield from self.watch_queue_until_completed(messages, future.done)
 
                 # But we still have to check whether there were any errors raised
                 # during the execution, and handle them accordingly.
@@ -324,16 +320,9 @@ class IsolateServicer(definitions.IsolateServicer):
         request: definitions.SubmitRequest,
         context: ServicerContext,
     ) -> definitions.SubmitResponse:
-        logger = ENV_LOGGER
-        if request.metadata.logger_labels:
-            logger_labels_dict = dict(request.metadata.logger_labels)
-            try:
-                logger = IsolateLogger.with_env_expanded(logger_labels_dict)
-            except BaseException:
-                # Ignore the error if the logger couldn't be created.
-                pass
+        task = RunTask(request=request.function, stream_logs=False)
+        self.set_metadata(task, request.metadata)
 
-        task = RunTask(request=request.function, logger=logger)
         task.future = RUNNER_THREAD_POOL.submit(self._run_task_in_background, task)
         task_id = str(uuid.uuid4())
 
@@ -365,11 +354,36 @@ class IsolateServicer(definitions.IsolateServicer):
                 StatusCode.NOT_FOUND,
             )
 
-        task = self.background_tasks[request.task_id]
-
-        task.logger.extra_labels = dict(request.metadata.logger_labels)
+        self.set_metadata(self.background_tasks[request.task_id], request.metadata)
 
         return definitions.SetMetadataResponse()
+
+    def set_metadata(self, task: RunTask, metadata: definitions.TaskMetadata) -> None:
+        task.logger.extra_labels = dict(metadata.logger_labels)
+        # Stream_logs defaults to False if not set
+        task.stream_logs = metadata.stream_logs
+
+    def RunFunction(
+        self,
+        request: definitions.RunRequest,
+        context: ServicerContext,
+    ) -> Iterator[definitions.PartialRunResult]:
+        try:
+            task = RunTask(request=request.function)
+            self.set_metadata(task, request.metadata)
+
+            # HACK: we can support only one task at a time
+            # TODO: move away from this when we use submit for env-aware tasks
+            self.background_tasks["RUN"] = task
+            yield from self._run_task(task)
+        except GRPCException as exc:
+            return self.abort_with_msg(
+                exc.message,
+                context,
+                code=exc.code,
+            )
+        finally:
+            self.background_tasks.pop("RUN", None)
 
     def Run(
         self,
@@ -377,9 +391,10 @@ class IsolateServicer(definitions.IsolateServicer):
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
         try:
-            # HACK: we can support only one task at a time for Run
-            # TODO: move away from this when we use submit for env-aware tasks
             task = RunTask(request=request)
+
+            # HACK: we can support only one task at a time
+            # TODO: move away from this when we use submit for env-aware tasks
             self.background_tasks["RUN"] = task
             yield from self._run_task(task)
         except GRPCException as exc:
@@ -495,6 +510,11 @@ class LogHandler:
             self._add_log_to_queue(log)
 
     def _add_log_to_queue(self, log: Log) -> None:
+        if not self.task.stream_logs:
+            # We do not queue the logs if the stream_logs is disabled
+            # but still log them to the logger.
+            return
+
         grpc_log = cast(definitions.Log, to_grpc(log))
         grpc_result = definitions.PartialRunResult(
             is_complete=False,

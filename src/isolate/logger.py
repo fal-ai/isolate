@@ -51,6 +51,3 @@ class IsolateLogger:
                 print("Failed to parse ISOLATE_LOG_LABELS")
 
         return cls.with_env_expanded(labels=_labels)
-
-
-ENV_LOGGER = IsolateLogger.from_env()
