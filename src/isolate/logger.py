@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timezone
 from typing import Dict
 
 from isolate.logs import LogLevel, LogSource
@@ -16,6 +17,9 @@ class IsolateLogger:
 
     def log(self, level: LogLevel, message: str, source: LogSource) -> None:
         record = {
+            # Set the timestamp from source so we can be sure no buffering or
+            # latency is affecting the timestamp.
+            "logged_at": datetime.now(tz=timezone.utc).isoformat(),
             "isolate_source": source.name,
             "level": level.name,
             "message": message,
