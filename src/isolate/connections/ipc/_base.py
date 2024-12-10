@@ -13,7 +13,6 @@ from typing import (
     Any,
     Callable,
     ContextManager,
-    Optional,
 )
 
 from isolate.backends import (
@@ -221,6 +220,6 @@ class PythonIPC(PythonExecutionBase[AgentListener], IsolatedProcessConnection):
         ]
 
     def handle_agent_log(
-        self, line: str, *, level: Optional[LogLevel], source: LogSource
+        self, line: str, *, level: LogLevel, source: LogSource
     ) -> None:
-        self.log(line, level=level or self.infer_log_level(line, source), source=source)
+        self.log(line, level=level, source=source)

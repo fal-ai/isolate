@@ -12,7 +12,6 @@ from typing import (
     Any,
     Generic,
     Iterator,
-    Optional,
     TypeVar,
 )
 
@@ -116,9 +115,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
         python_executable = get_executable_path(self.environment_path, "python")
         with logged_io(
             partial(
-                self.handle_agent_log,
-                source=LogSource.USER,
-                level=None,  # Will be inferred
+                self.handle_agent_log, source=LogSource.USER, level=LogLevel.STDOUT
             ),
             partial(
                 self.handle_agent_log, source=LogSource.USER, level=LogLevel.STDERR
@@ -176,29 +173,8 @@ class PythonExecutionBase(Generic[ConnectionType]):
         """Return the command to run the agent process with."""
         raise NotImplementedError
 
-    def infer_log_level(self, line: str, source: LogSource) -> LogLevel:
-        """Infer the log level of the given line."""
-        if source in (LogSource.BUILDER, LogSource.BRIDGE):
-            return LogLevel.TRACE
-        else:
-            if "[error]" in line.lower():
-                return LogLevel.ERROR
-            elif "[warning]" in line.lower():
-                return LogLevel.WARNING
-            elif "[warn]" in line.lower():
-                return LogLevel.WARNING
-            elif "[info]" in line.lower():
-                return LogLevel.INFO
-            elif "[debug]" in line.lower():
-                return LogLevel.DEBUG
-            elif "[trace]" in line.lower():
-                return LogLevel.TRACE
-
-        # Default
-        return LogLevel.INFO
-
     def handle_agent_log(
-        self, line: str, *, level: Optional[LogLevel], source: LogSource
+        self, line: str, *, level: LogLevel, source: LogSource
     ) -> None:
         """Handle a log line emitted by the agent process. The level will be either
         STDOUT or STDERR."""

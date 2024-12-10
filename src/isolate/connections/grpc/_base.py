@@ -2,7 +2,7 @@ import socket
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ContextManager, Iterator, List, Optional, Tuple, Union, cast
+from typing import Any, ContextManager, Iterator, List, Tuple, Union, cast
 
 import grpc
 
@@ -148,6 +148,6 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
         ]
 
     def handle_agent_log(
-        self, line: str, *, level: Optional[LogLevel], source: LogSource
+        self, line: str, *, level: LogLevel, source: LogSource
     ) -> None:
-        self.log(line, level=level or self.infer_log_level(line, source), source=source)
+        self.log(line, level=level, source=source)
