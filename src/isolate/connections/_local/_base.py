@@ -12,6 +12,7 @@ from typing import (
     Any,
     Generic,
     Iterator,
+    Optional,
     TypeVar,
 )
 
@@ -197,7 +198,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
         return LogLevel.INFO
 
     def handle_agent_log(
-        self, line: str, *, level: LogLevel | None, source: LogSource
+        self, line: str, *, level: Optional[LogLevel], source: LogSource
     ) -> None:
         """Handle a log line emitted by the agent process. The level will be either
         STDOUT or STDERR."""
