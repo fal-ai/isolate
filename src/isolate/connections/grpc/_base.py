@@ -147,5 +147,7 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
             str(log_fd),
         ]
 
-    def handle_agent_log(self, line: str, level: LogLevel, source: LogSource) -> None:
-        self.log(line, level=level, source=source)
+    def handle_agent_log(
+        self, line: str, *, level: LogLevel | None, source: LogSource
+    ) -> None:
+        self.log(line, level=level or self.infer_log_level(line, source), source=source)
