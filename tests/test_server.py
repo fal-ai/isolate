@@ -252,6 +252,7 @@ def test_user_logs_immediate(stub: definitions.IsolateStub, monkeypatch: Any) ->
                 import sys, pyjokes
                 print(pyjokes.__version__)
                 print("error error!", file=sys.stderr)
+                print("[debug] error!", file=sys.stderr)
                 """
                 ),
             ),
@@ -263,11 +264,12 @@ def test_user_logs_immediate(stub: definitions.IsolateStub, monkeypatch: Any) ->
     user_logs: List[Log] = []
     run_request(stub, request, user_logs=user_logs)
 
-    assert len(user_logs) == 2
+    assert len(user_logs) == 3
 
     by_stream = {log.level: log.message for log in user_logs}
-    assert by_stream[LogLevel.STDOUT] == "0.6.0"
-    assert by_stream[LogLevel.STDERR] == "error error!"
+    assert by_stream[LogLevel.INFO] == "0.6.0"
+    assert by_stream[LogLevel.ERROR] == "error error!"
+    assert by_stream[LogLevel.DEBUG] == "[debug] error!"
 
 
 def test_unknown_environment(stub: definitions.IsolateStub, monkeypatch: Any) -> None:
