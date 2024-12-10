@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Callable, Iterator
 from platformdirs import user_cache_dir
 
 from isolate.backends.common import lock_build_path
-from isolate.logs import Log
+from isolate.logs import Log, LogLevel, LogSource
 
 if TYPE_CHECKING:
     from isolate.backends import BaseEnvironment
@@ -28,7 +28,37 @@ class IsolateSettings:
     strict_cache: bool = _STRICT_CACHE
 
     def log(self, log: Log) -> None:
-        self.log_hook(log)
+        self.log_hook(self._infer_log_level(log))
+
+    def _infer_log_level(self, log: Log) -> Log:
+        """Infer the log level if it's correctly set."""
+        if log.level not in (LogLevel.STDOUT, LogLevel.STDERR):
+            # We should only infer the log level for stdout/stderr logs.
+            return log
+
+        if log.source in (LogSource.BUILDER, LogSource.BRIDGE):
+            return replace(log, level=LogLevel.TRACE)
+
+        line = log.message.lower()
+
+        if "[error]" in line:
+            return replace(log, level=LogLevel.ERROR)
+        if "[warning]" in line:
+            return replace(log, level=LogLevel.WARNING)
+        if "[warn]" in line:
+            return replace(log, level=LogLevel.WARNING)
+        if "[info]" in line:
+            return replace(log, level=LogLevel.INFO)
+        if "[debug]" in line:
+            return replace(log, level=LogLevel.DEBUG)
+        if "[trace]" in line:
+            return replace(log, level=LogLevel.TRACE)
+
+        if log.level == LogLevel.STDERR:
+            return replace(log, level=LogLevel.ERROR)
+
+        # Default to INFO level
+        return replace(log, level=LogLevel.INFO)
 
     def _get_temp_base(self) -> Path:
         """Return the base path for creating temporary files/directories.

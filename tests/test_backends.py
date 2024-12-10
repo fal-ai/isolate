@@ -16,6 +16,7 @@ from isolate.backends.pyenv import PyenvEnvironment, _get_pyenv_executable
 from isolate.backends.remote import IsolateServer
 from isolate.backends.settings import IsolateSettings
 from isolate.backends.virtualenv import VirtualPythonEnvironment
+from isolate.logs import LogLevel, LogSource
 
 
 class GenericEnvironmentTests:
@@ -658,6 +659,46 @@ def test_isolate_server_logs(isolate_server):
         )
 
     assert "hello!!!" in [log.message for log in collected_logs]
+
+
+def test_isolate_server_logs_level_inference(isolate_server):
+    collected_logs = []
+    environment = IsolateServer(
+        host=isolate_server,
+        target_environments=[
+            {
+                "kind": "virtualenv",
+                "configuration": {"requirements": ["pyjokes==0.5.0"]},
+            }
+        ],
+    )
+
+    environment.apply_settings(IsolateSettings(log_hook=collected_logs.append))
+
+    with environment.connect() as connection:
+        connection.run(
+            partial(
+                eval,
+                "print('[debug] hello!!!') or "
+                "print('[error] bad!!!') or "
+                "print('[trace] hide!!!') or "
+                "print('[warning] warn1!!!') or "
+                "print('warn2!!! [warn]') or "
+                "print('default') or "
+                "__import__('time').sleep(0.5)",
+            )
+        )
+
+    user_logs = [log for log in collected_logs if log.source == LogSource.USER]
+    assert len(user_logs) == 6
+    assert [log.level for log in user_logs] == [
+        LogLevel.DEBUG,
+        LogLevel.ERROR,
+        LogLevel.TRACE,
+        LogLevel.WARNING,
+        LogLevel.WARNING,
+        LogLevel.INFO,
+    ]
 
 
 def test_isolate_server_demo(isolate_server):
