@@ -3,7 +3,10 @@ repos:
   rev: 'v0.3.4'
   hooks:
   - id: ruff
-    args: [--fix, --exit-non-zero-on-fix]
+    args:
+    - --fix
+    - --exit-non-zero-on-fix
+    - --exclude=UP007
     exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"
   - id: ruff-format
     exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"

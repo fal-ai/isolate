@@ -173,7 +173,9 @@ class PythonExecutionBase(Generic[ConnectionType]):
         """Return the command to run the agent process with."""
         raise NotImplementedError
 
-    def handle_agent_log(self, line: str, level: LogLevel, source: LogSource) -> None:
+    def handle_agent_log(
+        self, line: str, *, level: LogLevel, source: LogSource
+    ) -> None:
         """Handle a log line emitted by the agent process. The level will be either
         STDOUT or STDERR."""
         raise NotImplementedError
