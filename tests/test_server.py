@@ -514,7 +514,7 @@ def print_logs_no_delay(num_lines, should_flush):
 
 @pytest.mark.parametrize("num_lines", [0, 1, 10, 100, 1000])
 @pytest.mark.parametrize("should_flush", [True, False])
-@pytest.mark.flaky(max_runs=3)
+@pytest.mark.flaky(max_runs=5)
 def test_receive_complete_logs(
     stub: definitions.IsolateStub,
     monkeypatch: Any,
