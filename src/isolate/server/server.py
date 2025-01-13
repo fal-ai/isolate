@@ -72,6 +72,7 @@ class GRPCException(Exception):
 @dataclass
 class RunnerAgent:
     stub: definitions.AgentStub
+    message_queue: Queue[definitions.PartialRunResult]
     _bound_context: ExitStack
     _channel_state_history: list[grpc.ChannelConnectivity] = field(default_factory=list)
 
@@ -117,8 +118,9 @@ class BridgeManager:
     def establish(
         self,
         connection: LocalPythonGRPC,
+        queue: Queue,
     ) -> Iterator[RunnerAgent]:
-        agent = self._allocate_new_agent(connection)
+        agent = self._allocate_new_agent(connection, queue)
 
         try:
             yield agent
@@ -136,6 +138,7 @@ class BridgeManager:
     def _allocate_new_agent(
         self,
         connection: LocalPythonGRPC,
+        queue: Queue,
     ) -> RunnerAgent:
         with self._agent_access_lock:
             available_agents = self._agents[self._identify(connection)]
@@ -150,7 +153,7 @@ class BridgeManager:
         stub = bound_context.enter_context(
             connection._establish_bridge(max_wait_timeout=MAX_GRPC_WAIT_TIMEOUT)
         )
-        return RunnerAgent(stub, bound_context)
+        return RunnerAgent(stub, queue, bound_context)
 
     def _identify(self, connection: LocalPythonGRPC) -> tuple[Any, ...]:
         return (
@@ -264,7 +267,7 @@ class IsolateServicer(definitions.IsolateServicer):
                 extra_inheritance_paths=inheritance_paths,
             )
 
-            with self.bridge_manager.establish(connection) as agent:
+            with self.bridge_manager.establish(connection, queue=messages) as agent:
                 task.agent = agent
                 function_call = definitions.FunctionCall(
                     function=task.request.function,
@@ -275,7 +278,8 @@ class IsolateServicer(definitions.IsolateServicer):
 
                 future = local_pool.submit(
                     _proxy_to_queue,
-                    queue=messages,
+                    # The agent may have been cached, so use the agent's message queue
+                    queue=agent.message_queue,
                     bridge=agent.stub,
                     input=function_call,
                 )
@@ -283,7 +287,9 @@ class IsolateServicer(definitions.IsolateServicer):
                 # Unlike above; we are not interested in the result value of future
                 # here, since it will be already transferred to other side without
                 # us even seeing (through the queue).
-                yield from self.watch_queue_until_completed(messages, future.done)
+                yield from self.watch_queue_until_completed(
+                    agent.message_queue, future.done
+                )
 
                 # But we still have to check whether there were any errors raised
                 # during the execution, and handle them accordingly.
