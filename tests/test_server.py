@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Any, Iterator, List, Optional, Union, cast
+from typing import Any, Iterator, List, Optional, cast
 
 import grpc
 import pytest
@@ -118,8 +118,9 @@ _NOT_SET = object()
 
 def run_request(
     stub: definitions.IsolateStub,
-    request: Union[definitions.BoundFunction, definitions.RunRequest],
+    request: definitions.BoundFunction,
     *,
+    stream_logs: bool = True,
     build_logs: Optional[List[Log]] = None,
     bridge_logs: Optional[List[Log]] = None,
     user_logs: Optional[List[Log]] = None,
@@ -130,15 +131,10 @@ def run_request(
         LogSource.USER: user_logs if user_logs is not None else [],
     }
 
-    return_value = _NOT_SET
-    if isinstance(request, definitions.BoundFunction):
-        func = stub.Run
-    elif isinstance(request, definitions.RunRequest):
-        func = stub.RunFunction
-    else:
-        raise ValueError(f"Unknown request type: {type(request)}")
+    request.stream_logs = stream_logs
 
-    for result in func(request):
+    return_value = _NOT_SET
+    for result in stub.Run(request):
         for _log in result.logs:
             log = from_grpc(_log)
             log_store[log.source].append(log)
@@ -283,28 +279,21 @@ def test_no_stream_logs(stub: definitions.IsolateStub, monkeypatch: Any) -> None
     inherit_from_local(monkeypatch)
 
     env_definition = define_environment("virtualenv", requirements=["pyjokes==0.6.0"])
-    request = definitions.RunRequest(
-        function=definitions.BoundFunction(
-            function=to_serialized_object(
-                partial(
-                    exec,
-                    textwrap.dedent(
-                        """
+    request = definitions.BoundFunction(
+        function=to_serialized_object(
+            partial(
+                exec,
+                textwrap.dedent(
+                    """
                 import sys, pyjokes
                 print(pyjokes.__version__)
                 print("error error!", file=sys.stderr)
                 """
-                    ),
                 ),
-                method="dill",
             ),
-            environments=[env_definition],
+            method="dill",
         ),
-        metadata=definitions.TaskMetadata(
-            logger_labels={},
-            # the default is True
-            stream_logs=False,
-        ),
+        environments=[env_definition],
     )
 
     user_logs: List[Log] = []
@@ -316,6 +305,7 @@ def test_no_stream_logs(stub: definitions.IsolateStub, monkeypatch: Any) -> None
         user_logs=user_logs,
         build_logs=build_logs,
         bridge_logs=bridge_logs,
+        stream_logs=False,
     )
 
     assert len(user_logs) == 0
