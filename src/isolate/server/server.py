@@ -176,7 +176,6 @@ class RunTask:
     future: futures.Future | None = None
     agent: RunnerAgent | None = None
     logger: IsolateLogger = field(default_factory=IsolateLogger.from_env)
-    stream_logs: bool = True
 
     def cancel(self):
         while True:
@@ -188,6 +187,10 @@ class RunTask:
                 return
             except futures.TimeoutError:
                 pass
+
+    @property
+    def stream_logs(self) -> bool:
+        return self.request.stream_logs
 
 
 @dataclass
@@ -326,7 +329,7 @@ class IsolateServicer(definitions.IsolateServicer):
         request: definitions.SubmitRequest,
         context: ServicerContext,
     ) -> definitions.SubmitResponse:
-        task = RunTask(request=request.function, stream_logs=False)
+        task = RunTask(request=request.function)
         self.set_metadata(task, request.metadata)
 
         task.future = RUNNER_THREAD_POOL.submit(self._run_task_in_background, task)
@@ -366,30 +369,6 @@ class IsolateServicer(definitions.IsolateServicer):
 
     def set_metadata(self, task: RunTask, metadata: definitions.TaskMetadata) -> None:
         task.logger.extra_labels = dict(metadata.logger_labels)
-        # Stream_logs defaults to False if not set
-        task.stream_logs = metadata.stream_logs
-
-    def RunFunction(
-        self,
-        request: definitions.RunRequest,
-        context: ServicerContext,
-    ) -> Iterator[definitions.PartialRunResult]:
-        try:
-            task = RunTask(request=request.function)
-            self.set_metadata(task, request.metadata)
-
-            # HACK: we can support only one task at a time
-            # TODO: move away from this when we use submit for env-aware tasks
-            self.background_tasks["RUN"] = task
-            yield from self._run_task(task)
-        except GRPCException as exc:
-            return self.abort_with_msg(
-                exc.message,
-                context,
-                code=exc.code,
-            )
-        finally:
-            self.background_tasks.pop("RUN", None)
 
     def Run(
         self,
