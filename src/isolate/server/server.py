@@ -29,7 +29,7 @@ from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 from isolate.connections.grpc import AgentError, LocalPythonGRPC
 from isolate.connections.grpc.configuration import get_default_options
-from isolate.logger import ENV_LOGGER, IsolateLogger
+from isolate.logger import IsolateLogger
 from isolate.logs import Log, LogLevel, LogSource
 from isolate.server import definitions, health
 from isolate.server.health_server import HealthServicer
@@ -72,7 +72,7 @@ class GRPCException(Exception):
 @dataclass
 class RunnerAgent:
     stub: definitions.AgentStub
-    message_queue: Queue
+    message_queue: Queue[definitions.PartialRunResult]
     _bound_context: ExitStack
     _channel_state_history: list[grpc.ChannelConnectivity] = field(default_factory=list)
 
@@ -175,7 +175,7 @@ class RunTask:
     request: definitions.BoundFunction
     future: futures.Future | None = None
     agent: RunnerAgent | None = None
-    logger: IsolateLogger = ENV_LOGGER
+    logger: IsolateLogger = field(default_factory=IsolateLogger.from_env)
 
     def cancel(self):
         while True:
@@ -187,6 +187,10 @@ class RunTask:
                 return
             except futures.TimeoutError:
                 pass
+
+    @property
+    def stream_logs(self) -> bool:
+        return self.request.stream_logs
 
 
 @dataclass
@@ -277,6 +281,7 @@ class IsolateServicer(definitions.IsolateServicer):
 
                 future = local_pool.submit(
                     _proxy_to_queue,
+                    # The agent may have been cached, so use the agent's message queue
                     queue=agent.message_queue,
                     bridge=agent.stub,
                     input=function_call,
@@ -324,16 +329,9 @@ class IsolateServicer(definitions.IsolateServicer):
         request: definitions.SubmitRequest,
         context: ServicerContext,
     ) -> definitions.SubmitResponse:
-        logger = ENV_LOGGER
-        if request.metadata.logger_labels:
-            logger_labels_dict = dict(request.metadata.logger_labels)
-            try:
-                logger = IsolateLogger.with_env_expanded(logger_labels_dict)
-            except BaseException:
-                # Ignore the error if the logger couldn't be created.
-                pass
+        task = RunTask(request=request.function)
+        self.set_metadata(task, request.metadata)
 
-        task = RunTask(request=request.function, logger=logger)
         task.future = RUNNER_THREAD_POOL.submit(self._run_task_in_background, task)
         task_id = str(uuid.uuid4())
 
@@ -365,11 +363,12 @@ class IsolateServicer(definitions.IsolateServicer):
                 StatusCode.NOT_FOUND,
             )
 
-        task = self.background_tasks[request.task_id]
-
-        task.logger.extra_labels = dict(request.metadata.logger_labels)
+        self.set_metadata(self.background_tasks[request.task_id], request.metadata)
 
         return definitions.SetMetadataResponse()
+
+    def set_metadata(self, task: RunTask, metadata: definitions.TaskMetadata) -> None:
+        task.logger.extra_labels = dict(metadata.logger_labels)
 
     def Run(
         self,
@@ -377,9 +376,10 @@ class IsolateServicer(definitions.IsolateServicer):
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
         try:
-            # HACK: we can support only one task at a time for Run
-            # TODO: move away from this when we use submit for env-aware tasks
             task = RunTask(request=request)
+
+            # HACK: we can support only one task at a time
+            # TODO: move away from this when we use submit for env-aware tasks
             self.background_tasks["RUN"] = task
             yield from self._run_task(task)
         except GRPCException as exc:
@@ -495,6 +495,11 @@ class LogHandler:
             self._add_log_to_queue(log)
 
     def _add_log_to_queue(self, log: Log) -> None:
+        if not self.task.stream_logs:
+            # We do not queue the logs if the stream_logs is disabled
+            # but still log them to the logger.
+            return
+
         grpc_log = cast(definitions.Log, to_grpc(log))
         grpc_result = definitions.PartialRunResult(
             is_complete=False,

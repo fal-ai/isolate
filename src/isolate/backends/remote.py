@@ -115,6 +115,7 @@ class IsolateServerConnection(EnvironmentConnection):
                 was_it_raised=False,
             ),
             environments=self.definitions,
+            stream_logs=True,  # Default to streaming logs
         )
 
         return_value = []
