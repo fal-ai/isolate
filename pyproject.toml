@@ -47,6 +47,7 @@ test = [
     "pytest",
     "cloudpickle>=2.2.0",
     "dill>=0.3.5.1",
+    "flaky",
 ]
 dev = [
     "isolate[test]",
