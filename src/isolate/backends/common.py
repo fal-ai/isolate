@@ -110,7 +110,7 @@ def _io_observer(
 
     def forward_lines(fd: int) -> None:
         hook = hooks[fd]
-        with open(fd, closefd=False) as stream:
+        with open(fd, closefd=False, errors="backslashreplace") as stream:
             # TODO: we probably should pass the real line endings
             raw_data = stream.read()
             if not raw_data:
