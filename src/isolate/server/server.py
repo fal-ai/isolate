@@ -56,7 +56,6 @@ else:
 # Number of seconds to observe the queue before checking the termination
 # event.
 _Q_WAIT_DELAY = 0.1
-RUNNER_THREAD_POOL = futures.ThreadPoolExecutor(max_workers=MAX_THREADS)
 
 
 class GRPCException(Exception):
@@ -199,6 +198,10 @@ class IsolateServicer(definitions.IsolateServicer):
     default_settings: IsolateSettings = field(default_factory=IsolateSettings)
     background_tasks: dict[str, RunTask] = field(default_factory=dict)
 
+    _thread_pool: futures.ThreadPoolExecutor = field(
+        default_factory=lambda: futures.ThreadPoolExecutor(max_workers=MAX_THREADS)
+    )
+
     def _run_task(self, task: RunTask) -> Iterator[definitions.PartialRunResult]:
         messages: Queue[definitions.PartialRunResult] = Queue()
         environments = []
@@ -332,7 +335,7 @@ class IsolateServicer(definitions.IsolateServicer):
         task = RunTask(request=request.function)
         self.set_metadata(task, request.metadata)
 
-        task.future = RUNNER_THREAD_POOL.submit(self._run_task_in_background, task)
+        task.future = self._thread_pool.submit(self._run_task_in_background, task)
         task_id = str(uuid.uuid4())
 
         print(f"Submitted a task {task_id}")
