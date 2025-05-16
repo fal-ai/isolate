@@ -6,6 +6,7 @@ import os
 import runpy
 import site
 import sys
+import traceback
 
 
 def load_pth_files() -> None:
@@ -28,7 +29,13 @@ def load_pth_files() -> None:
     # will need to be fixed once we are dealing with more than 2 nodes and editable
     # packages.
     for site_dir in python_path.split(os.pathsep):
-        site.addsitedir(site_dir)
+        try:
+            site.addsitedir(site_dir)
+        except Exception:
+            # NOTE: there could be .pth files that are model weights and not
+            # python path configuration files.
+            traceback.print_exc()
+            print(f"Error adding site directory {site_dir}, skipping...")
 
 
 def main():
