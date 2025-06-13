@@ -19,6 +19,7 @@ class ContainerizedPythonEnvironment(BaseEnvironment[Path]):
     python_version: str | None = None
     requirements: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    resolver: str | None = None
 
     @classmethod
     def from_config(
@@ -28,14 +29,27 @@ class ContainerizedPythonEnvironment(BaseEnvironment[Path]):
     ) -> BaseEnvironment:
         environment = cls(**config)
         environment.apply_settings(settings)
+        if environment.resolver not in ("uv", None):
+            raise ValueError(
+                "Only 'uv' is supported as a resolver for container environments."
+            )
         return environment
 
     @property
     def key(self) -> str:
+        extras = []
+        if self.resolver is not None:
+            extras.append(f"resolver={self.resolver}")
+
         # dockerfile_str is always there, but the validation is handled by the
         # controller.
         dockerfile_str = self.image.get("dockerfile_str", "")
-        return sha256_digest_of(dockerfile_str, *self.requirements, *sorted(self.tags))
+        return sha256_digest_of(
+            dockerfile_str,
+            *self.requirements,
+            *sorted(self.tags),
+            *extras,
+        )
 
     def create(self, *, force: bool = False) -> Path:
         return Path(sys.exec_prefix)
