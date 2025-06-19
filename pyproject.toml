@@ -20,7 +20,7 @@ requires-python = ">=3.8"
 dependencies = [
     # NOTE: make sure you re-generate python bindings (see tools/regen_grpc.py)
     # when updating grpcio version.
-    "grpcio==1.64.0",
+    "grpcio>=1.64.0,<2",
     "protobuf",
     # These are non-intrusive packages with no transitive dependencies.
     # They are also used in the agents themselves.
