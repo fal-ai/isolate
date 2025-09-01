@@ -16,7 +16,7 @@ from typing import (
 )
 
 from isolate import __version__ as isolate_version
-from isolate.backends.common import get_executable_path, logged_io
+from isolate.backends.common import active_python, get_executable_path, logged_io
 from isolate.connections.common import AGENT_SIGNATURE
 from isolate.logs import LogLevel, LogSource
 
@@ -112,7 +112,16 @@ class PythonExecutionBase(Generic[ConnectionType]):
         """Start the agent process with the Python binary available inside the
         bound environment."""
 
-        python_executable = get_executable_path(self.environment_path, "python")
+        python_version = getattr(self.environment, "python_version", active_python())
+        try:
+            # prefer the specific version if available.
+            python_executable = get_executable_path(
+                self.environment_path, f"python{python_version}"
+            )
+        except FileNotFoundError:
+            # fallback to the generic binary.
+            python_executable = get_executable_path(self.environment_path, "python")
+
         with logged_io(
             partial(
                 self.handle_agent_log, source=LogSource.USER, level=LogLevel.STDOUT
