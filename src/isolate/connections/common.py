@@ -9,8 +9,6 @@ from typing import TYPE_CHECKING, Any, Iterator, cast
 from tblib import Traceback, TracebackParseError
 from tblib.pickling_support import install as tblib_install
 
-tblib_install()
-
 if TYPE_CHECKING:
     from typing import Protocol
 
@@ -28,6 +26,11 @@ class SerializationError(Exception):
     """An error that happened during the serialization process."""
 
     message: str
+
+
+# NOTE: tblib's install() will search for BaseException subclasses,
+# so we have to call it after the SerializationError is defined.
+tblib_install()
 
 
 @contextmanager
