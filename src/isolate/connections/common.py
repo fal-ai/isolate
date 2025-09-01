@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Iterator, cast
 
 from tblib import Traceback, TracebackParseError
+from tblib.pickling_support import install as tblib_install
+
+tblib_install()
 
 if TYPE_CHECKING:
     from typing import Protocol
