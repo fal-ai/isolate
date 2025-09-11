@@ -1,9 +1,11 @@
+from signal import signal
 import socket
+import subprocess
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ContextManager, Iterator, List, Tuple, Union, cast
-
+import os
 import grpc
 
 from isolate.backends import (
@@ -27,7 +29,7 @@ class AgentError(Exception):
 class GRPCExecutionBase(EnvironmentConnection):
     """A customizable gRPC-based execution backend."""
 
-    def start_agent(self) -> ContextManager[Tuple[str, grpc.ChannelCredentials]]:
+    def start_agent(self, shutdown_grace_period: float) -> ContextManager[Tuple[str, grpc.ChannelCredentials]]:
         """Starts the gRPC agent and returns the address it is listening on and
         the required credentials to connect to it."""
         raise NotImplementedError
@@ -37,8 +39,9 @@ class GRPCExecutionBase(EnvironmentConnection):
         self,
         *,
         max_wait_timeout: float = 20.0,
+        shutdown_grace_period: float = 0.1,
     ) -> Iterator[definitions.AgentStub]:
-        with self.start_agent() as (address, credentials):
+        with self.start_agent(shutdown_grace_period) as (address, credentials):
             with grpc.secure_channel(
                 address,
                 credentials,
@@ -113,8 +116,10 @@ class GRPCExecutionBase(EnvironmentConnection):
 
 
 class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
+    """A gRPC-based execution backend that runs Python code in a local
+    environment."""
     @contextmanager
-    def start_agent(self) -> Iterator[Tuple[str, grpc.ChannelCredentials]]:
+    def start_agent(self, shutdown_grace_period: float) -> Iterator[Tuple[str, grpc.ChannelCredentials]]:
         def find_free_port() -> Tuple[str, int]:
             """Find a free port in the system."""
             with socket.socket() as _temp_socket:
@@ -129,8 +134,19 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
                 yield address, grpc.local_channel_credentials()
         finally:
             if process is not None:
-                # TODO: should we check the status code here?
-                process.terminate()
+                self.terminate_proc(process, shutdown_grace_period)
+
+    def terminate_proc(self, proc, shutdown_grace_period: float) -> None:
+        if not proc or proc.poll() is not None:
+            return
+        try:
+            print(f"Terminating agent PID {proc.pid}")
+            proc.terminate()
+            proc.wait(timeout=shutdown_grace_period)
+        except subprocess.TimeoutExpired:
+            # Process didn't die within timeout
+            print(f"killing agent PID {proc.pid}")
+            proc.kill()
 
     def get_python_cmd(
         self,

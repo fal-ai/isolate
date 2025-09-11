@@ -62,6 +62,9 @@ def make_server(
     with BridgeManager() as bridge:
         servicer = IsolateServicer(bridge, test_settings)
 
+        # Set up signal handlers (needed for graceful shutdown)
+        servicer.register_signal_handlers(server)
+
         for interceptor in interceptors:
             interceptor.register_servicer(servicer)
 

@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import functools
 import os
+import signal
 import threading
 import time
 import traceback
+from unittest import result
 import uuid
 from argparse import ArgumentParser
 from collections import defaultdict
 from concurrent import futures
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from queue import Empty as QueueEmpty
@@ -38,6 +40,9 @@ from isolate.server.interface import from_grpc, to_grpc
 EMPTY_MESSAGE_INTERVAL = float(os.getenv("ISOLATE_EMPTY_MESSAGE_INTERVAL", "600"))
 SKIP_EMPTY_LOGS = os.getenv("ISOLATE_SKIP_EMPTY_LOGS") == "1"
 MAX_GRPC_WAIT_TIMEOUT = float(os.getenv("ISOLATE_MAX_GRPC_WAIT_TIMEOUT", "10.0"))
+
+# Graceful shutdown timeout in seconds (default: 60 minutes = 3600 seconds)
+SHUTDOWN_GRACE_PERIOD = int(os.getenv("ISOLATE_SHUTDOWN_GRACE_PERIOD", "3600"))
 
 # Whether to inherit all the packages from the current environment or not.
 INHERIT_FROM_LOCAL = os.getenv("ISOLATE_INHERIT_FROM_LOCAL") == "1"
@@ -85,6 +90,7 @@ class RunnerAgent:
     def channel(self) -> grpc.Channel:
         return self.stub._channel  # type: ignore
 
+
     @property
     def is_accessible(self) -> bool:
         try:
@@ -104,9 +110,10 @@ class RunnerAgent:
     def terminate(self) -> None:
         self._bound_context.close()
 
-
 @dataclass
 class BridgeManager:
+    """Manages a pool of reusable gRPC agents for isolated Python environments."""
+
     _agent_access_lock: threading.Lock = field(default_factory=threading.Lock)
     _agents: dict[tuple[Any, ...], list[RunnerAgent]] = field(
         default_factory=lambda: defaultdict(list)
@@ -150,8 +157,10 @@ class BridgeManager:
 
         bound_context = ExitStack()
         stub = bound_context.enter_context(
-            connection._establish_bridge(max_wait_timeout=MAX_GRPC_WAIT_TIMEOUT)
+            connection._establish_bridge(max_wait_timeout=MAX_GRPC_WAIT_TIMEOUT,
+                                         shutdown_grace_period=SHUTDOWN_GRACE_PERIOD)
         )
+
         return RunnerAgent(stub, queue, bound_context)
 
     def _identify(self, connection: LocalPythonGRPC) -> tuple[Any, ...]:
@@ -163,11 +172,10 @@ class BridgeManager:
     def __enter__(self) -> BridgeManager:
         return self
 
-    def __exit__(self, *exc_info: Any) -> None:
+    def __exit__(self, *_: Any) -> None:
         for agents in self._agents.values():
             for agent in agents:
                 agent.terminate()
-
 
 @dataclass
 class RunTask:
@@ -194,6 +202,11 @@ class RunTask:
 
 @dataclass
 class IsolateServicer(definitions.IsolateServicer):
+    """gRPC service handler for executing Python functions in isolated environments.
+
+      Orchestrates task execution by creating environments, managing agent connections
+      via BridgeManager, and streaming real-time results back to clients. Handles
+      graceful shutdown with signal propagation and agent cleanup."""
     bridge_manager: BridgeManager
     default_settings: IsolateSettings = field(default_factory=IsolateSettings)
     background_tasks: dict[str, RunTask] = field(default_factory=dict)
@@ -201,6 +214,8 @@ class IsolateServicer(definitions.IsolateServicer):
     _thread_pool: futures.ThreadPoolExecutor = field(
         default_factory=lambda: futures.ThreadPoolExecutor(max_workers=MAX_THREADS)
     )
+    _shutting_down: bool = field(default=False)
+    _server: grpc.Server | None = field(default=None)
 
     def _run_task(self, task: RunTask) -> Iterator[definitions.PartialRunResult]:
         messages: Queue[definitions.PartialRunResult] = Queue()
@@ -472,10 +487,47 @@ class IsolateServicer(definitions.IsolateServicer):
         return None
 
     def cancel_tasks(self):
+        """Cancel all tasks with optional graceful shutdown"""
         tasks_copy = self.background_tasks.copy()
         for task in tasks_copy.values():
             task.cancel()
 
+    def register_signal_handlers(self, server: grpc.Server) -> None:
+        """Set up signal handlers for graceful shutdown"""
+        self._server = server
+
+        def signal_handler(signum, _):
+            """Handle SIGTERM and SIGINT by gracefully shutting down server"""
+            print(f"Received signal {signum}, shutting down server")
+            self.initiate_shutdown()
+
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+
+    def initiate_shutdown(self, grace_period: float | None = None) -> None:
+        if self._shutting_down:
+            return
+        self._shutting_down = True
+        if grace_period is None:
+            grace_period = SHUTDOWN_GRACE_PERIOD
+
+        print(f"Initiating shutdown with grace period: {grace_period}s")
+        # Collect all active agents from running tasks
+        shutdown_threads = []
+        for task in self.background_tasks.values():
+            if task.agent is not None:
+                thread = threading.Thread(target=task.agent.terminate)
+                thread.start()
+                shutdown_threads.append(thread)
+
+        # Wait for all agents to terminate
+        for thread in shutdown_threads:
+            thread.join()
+        print("All active agents have been shut down")
+
+        if self._server:
+            print("Stopping gRPC server")
+            self._server.stop(grace=0.1)  # Short grace period for server shutdown
 
 def _proxy_to_queue(
     queue: Queue,
@@ -583,9 +635,8 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
             def _wrapper(request: Any, context: grpc.ServicerContext) -> Any:
                 def termination() -> None:
                     if is_run:
-                        print("Stopping server since run is finished")
-                        # Stop the server after the Run task is finished
-                        self.server.stop(grace=0.1)
+                        # Trigger graceful shutdown instead of immediate stop
+                        self.servicer.initiate_shutdown()
 
                     elif is_submit:
                         # Wait until the task_id is assigned
@@ -606,11 +657,11 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                                         "Task future was not assigned in time."
                                     )
 
-                            def _stop(*args):
+                            def _stop(*_):
                                 # Small sleep to make sure the cancellation is processed
                                 time.sleep(0.1)
                                 print("Stopping server since the task is finished")
-                                self.server.stop(grace=0.1)
+                                self.servicer.initiate_shutdown()
 
                             # Add a callback which will stop the server
                             # after the task is finished
@@ -665,18 +716,20 @@ def main(argv: list[str] | None = None) -> None:
     with BridgeManager() as bridge_manager:
         servicer = IsolateServicer(bridge_manager)
 
+        servicer.register_signal_handlers(server)
+
         for interceptor in interceptors:
             interceptor.register_servicer(servicer)
 
         definitions.register_isolate(servicer, server)
         health.register_health(HealthServicer(), server)
 
-        server.add_insecure_port("[::]:50001")
-        print("Started listening at localhost:50001")
+        server.add_insecure_port(f"[::]:{options.port}")
+        print(f"Started listening at localhost:{options.port}")
 
         server.start()
         server.wait_for_termination()
-
+        print("Server shutdown complete")
 
 if __name__ == "__main__":
     main()

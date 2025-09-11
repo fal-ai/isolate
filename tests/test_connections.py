@@ -1,9 +1,17 @@
+import subprocess
+from contextlib import ExitStack
+import os
+import time
+import threading
+from multiprocessing import process
 import operator
+import sys
 import traceback
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
 from typing import Any, List
+from unittest.mock import Mock
 
 import pytest
 from isolate.backends import BaseEnvironment, EnvironmentConnection
@@ -193,6 +201,7 @@ class TestPythonIPC(GenericPythonConnectionTests):
 
 
 class TestPythonGRPC(GenericPythonConnectionTests):
+
     def open_connection(
         self,
         environment: BaseEnvironment,
@@ -209,3 +218,76 @@ class TestPythonGRPC(GenericPythonConnectionTests):
         env = VirtualPythonEnvironment(requirements + [f"{REPO_DIR}[grpc]"])
         env.apply_settings(IsolateSettings(Path(tmp_path)))
         return env
+
+    def test_process_termination(self):
+        local_env = LocalPythonEnvironment()
+        connection = LocalPythonGRPC(local_env, local_env.create())
+
+        # Mock terminate_proc on the connection instance before starting agent
+        connection.terminate_proc = Mock(wraps=connection.terminate_proc)
+
+        # Use ExitStack to manage the start_agent context manager
+        bound_context = ExitStack()
+        agent_context = bound_context.enter_context(connection.start_agent(0.1))
+
+        # Confirm with active context terminate_proc is not called yet
+        connection.terminate_proc.assert_not_called()
+
+        # Explicitly close the context to trigger cleanup
+        bound_context.close()
+
+        # After closing context, terminate_proc should have been called
+        connection.terminate_proc.assert_called_once()
+
+    def test_terminate_proc(self):
+        """Test that LocalPythonGRPC.terminate_proc() successfully kills a process with SIGTERM."""
+
+        local_env = LocalPythonEnvironment()
+        connection = LocalPythonGRPC(local_env, local_env.create())
+        # Create a process that responds to SIGTERM
+        code = """import signal, time, sys
+while True:
+    time.sleep(0.1)"""
+
+        proc = subprocess.Popen([sys.executable, "-c", code])
+        # Verify process is running initially
+        assert proc.poll() is None, "Process should be running initially"
+
+        # terminate_proc() should send SIGTERM and wait for process to die
+        connection.terminate_proc(proc, shutdown_grace_period=3.0)
+
+        # Process should be terminated after terminate_proc() returns
+        assert proc.poll() is not None, "Process should be terminated by SIGTERM"
+
+
+    def test_force_terminate(self):
+        """Test that LocalPythonGRPC.force_terminate() kills a process immediately."""
+        local_env = LocalPythonEnvironment()
+        connection = LocalPythonGRPC(local_env, local_env.create())
+
+        # Start a process that ignores SIGTERM
+        code = f"""import signal, time, os
+# Set up signal handler to ignore SIGTERM
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+# Signal that setup is complete
+print("R", flush=True)
+while True:
+    time.sleep(0.1)"""
+
+        proc = subprocess.Popen([sys.executable, "-c", code],
+                                stdout=subprocess.PIPE,
+                                )
+        assert proc.poll() is None, "Process should be running initially"
+
+        # Wait for "READY" signal from process because signal handling requires it
+        assert proc.stdout is not None
+        ready_line = proc.stdout.read(1)
+        assert ready_line == b"R"
+
+        # run terminate_proc in background thread since it will block
+        # waiting for the process to terminate (which it won't since it ignores SIGTERM)
+        threading.Thread(target=connection.terminate_proc, args=(proc, 0.5)).start()
+        time.sleep(0.35)
+        assert proc.poll() is None, "Process should ignore SIGTERM initially"
+        time.sleep(0.35)
+        assert proc.poll() is not None, "Process should be terminated by force_terminate"
