@@ -1,11 +1,10 @@
-from signal import signal
 import socket
 import subprocess
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ContextManager, Iterator, List, Tuple, Union, cast
-import os
+
 import grpc
 
 from isolate.backends import (
@@ -29,7 +28,9 @@ class AgentError(Exception):
 class GRPCExecutionBase(EnvironmentConnection):
     """A customizable gRPC-based execution backend."""
 
-    def start_agent(self, shutdown_grace_period: float) -> ContextManager[Tuple[str, grpc.ChannelCredentials]]:
+    def start_agent(
+        self, shutdown_grace_period: float
+    ) -> ContextManager[Tuple[str, grpc.ChannelCredentials]]:
         """Starts the gRPC agent and returns the address it is listening on and
         the required credentials to connect to it."""
         raise NotImplementedError
@@ -118,8 +119,11 @@ class GRPCExecutionBase(EnvironmentConnection):
 class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
     """A gRPC-based execution backend that runs Python code in a local
     environment."""
+
     @contextmanager
-    def start_agent(self, shutdown_grace_period: float) -> Iterator[Tuple[str, grpc.ChannelCredentials]]:
+    def start_agent(
+        self, shutdown_grace_period: float
+    ) -> Iterator[Tuple[str, grpc.ChannelCredentials]]:
         def find_free_port() -> Tuple[str, int]:
             """Find a free port in the system."""
             with socket.socket() as _temp_socket:
@@ -136,7 +140,9 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
             if process is not None:
                 self.terminate_proc(process, shutdown_grace_period)
 
-    def terminate_proc(self, proc, shutdown_grace_period: float) -> None:
+    def terminate_proc(
+        self, proc: subprocess.Popen, shutdown_grace_period: float
+    ) -> None:
         if not proc or proc.poll() is not None:
             return
         try:

@@ -6,12 +6,11 @@ import signal
 import threading
 import time
 import traceback
-from unittest import result
 import uuid
 from argparse import ArgumentParser
 from collections import defaultdict
 from concurrent import futures
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from queue import Empty as QueueEmpty
@@ -90,7 +89,6 @@ class RunnerAgent:
     def channel(self) -> grpc.Channel:
         return self.stub._channel  # type: ignore
 
-
     @property
     def is_accessible(self) -> bool:
         try:
@@ -109,6 +107,7 @@ class RunnerAgent:
 
     def terminate(self) -> None:
         self._bound_context.close()
+
 
 @dataclass
 class BridgeManager:
@@ -157,8 +156,10 @@ class BridgeManager:
 
         bound_context = ExitStack()
         stub = bound_context.enter_context(
-            connection._establish_bridge(max_wait_timeout=MAX_GRPC_WAIT_TIMEOUT,
-                                         shutdown_grace_period=SHUTDOWN_GRACE_PERIOD)
+            connection._establish_bridge(
+                max_wait_timeout=MAX_GRPC_WAIT_TIMEOUT,
+                shutdown_grace_period=SHUTDOWN_GRACE_PERIOD,
+            )
         )
 
         return RunnerAgent(stub, queue, bound_context)
@@ -176,6 +177,7 @@ class BridgeManager:
         for agents in self._agents.values():
             for agent in agents:
                 agent.terminate()
+
 
 @dataclass
 class RunTask:
@@ -204,9 +206,10 @@ class RunTask:
 class IsolateServicer(definitions.IsolateServicer):
     """gRPC service handler for executing Python functions in isolated environments.
 
-      Orchestrates task execution by creating environments, managing agent connections
-      via BridgeManager, and streaming real-time results back to clients. Handles
-      graceful shutdown with signal propagation and agent cleanup."""
+    Orchestrates task execution by creating environments, managing agent connections
+    via BridgeManager, and streaming real-time results back to clients. Handles
+    graceful shutdown with signal propagation and agent cleanup."""
+
     bridge_manager: BridgeManager
     default_settings: IsolateSettings = field(default_factory=IsolateSettings)
     background_tasks: dict[str, RunTask] = field(default_factory=dict)
@@ -215,7 +218,6 @@ class IsolateServicer(definitions.IsolateServicer):
         default_factory=lambda: futures.ThreadPoolExecutor(max_workers=MAX_THREADS)
     )
     _shutting_down: bool = field(default=False)
-    _server: grpc.Server | None = field(default=None)
 
     def _run_task(self, task: RunTask) -> Iterator[definitions.PartialRunResult]:
         messages: Queue[definitions.PartialRunResult] = Queue()
@@ -492,26 +494,12 @@ class IsolateServicer(definitions.IsolateServicer):
         for task in tasks_copy.values():
             task.cancel()
 
-    def register_signal_handlers(self, server: grpc.Server) -> None:
-        """Set up signal handlers for graceful shutdown"""
-        self._server = server
-
-        def signal_handler(signum, _):
-            """Handle SIGTERM and SIGINT by gracefully shutting down server"""
-            print(f"Received signal {signum}, shutting down server")
-            self.initiate_shutdown()
-
-        signal.signal(signal.SIGTERM, signal_handler)
-        signal.signal(signal.SIGINT, signal_handler)
-
-    def initiate_shutdown(self, grace_period: float | None = None) -> None:
+    def initiate_shutdown(self) -> None:
         if self._shutting_down:
             return
         self._shutting_down = True
-        if grace_period is None:
-            grace_period = SHUTDOWN_GRACE_PERIOD
 
-        print(f"Initiating shutdown with grace period: {grace_period}s")
+        print(f"Initiating shutdown with grace period: {SHUTDOWN_GRACE_PERIOD}s")
         # Collect all active agents from running tasks
         shutdown_threads = []
         for task in self.background_tasks.values():
@@ -525,9 +513,6 @@ class IsolateServicer(definitions.IsolateServicer):
             thread.join()
         print("All active agents have been shut down")
 
-        if self._server:
-            print("Stopping gRPC server")
-            self._server.stop(grace=0.1)  # Short grace period for server shutdown
 
 def _proxy_to_queue(
     queue: Queue,
@@ -637,6 +622,8 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                     if is_run:
                         # Trigger graceful shutdown instead of immediate stop
                         self.servicer.initiate_shutdown()
+                        if self._server:
+                            self._server.stop(grace=0.1)
 
                     elif is_submit:
                         # Wait until the task_id is assigned
@@ -680,6 +667,16 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
         return wrap_server_method_handler(wrapper, handler)
 
 
+def register_signal_handlers(servicer: IsolateServicer, server: grpc.Server) -> None:
+    def handle_signal(signum, frame):
+        print(f"Received signal {signum}, initiating shutdown...")
+        servicer.initiate_shutdown()
+        server.stop(grace=0.1)
+
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = ArgumentParser()
     parser.add_argument("--host", default="0.0.0.0")
@@ -715,12 +712,9 @@ def main(argv: list[str] | None = None) -> None:
 
     with BridgeManager() as bridge_manager:
         servicer = IsolateServicer(bridge_manager)
-
-        servicer.register_signal_handlers(server)
-
+        register_signal_handlers(servicer, server)
         for interceptor in interceptors:
             interceptor.register_servicer(servicer)
-
         definitions.register_isolate(servicer, server)
         health.register_health(HealthServicer(), server)
 
@@ -730,6 +724,7 @@ def main(argv: list[str] | None = None) -> None:
         server.start()
         server.wait_for_termination()
         print("Server shutdown complete")
+
 
 if __name__ == "__main__":
     main()

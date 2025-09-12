@@ -1,12 +1,10 @@
-import subprocess
-from contextlib import ExitStack
-import os
-import time
-import threading
-from multiprocessing import process
 import operator
+import subprocess
 import sys
+import threading
+import time
 import traceback
+from contextlib import ExitStack
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
@@ -201,7 +199,6 @@ class TestPythonIPC(GenericPythonConnectionTests):
 
 
 class TestPythonGRPC(GenericPythonConnectionTests):
-
     def open_connection(
         self,
         environment: BaseEnvironment,
@@ -228,7 +225,7 @@ class TestPythonGRPC(GenericPythonConnectionTests):
 
         # Use ExitStack to manage the start_agent context manager
         bound_context = ExitStack()
-        agent_context = bound_context.enter_context(connection.start_agent(0.1))
+        bound_context.enter_context(connection.start_agent(0.1))
 
         # Confirm with active context terminate_proc is not called yet
         connection.terminate_proc.assert_not_called()
@@ -240,7 +237,8 @@ class TestPythonGRPC(GenericPythonConnectionTests):
         connection.terminate_proc.assert_called_once()
 
     def test_terminate_proc(self):
-        """Test that LocalPythonGRPC.terminate_proc() successfully kills a process with SIGTERM."""
+        """Test that LocalPythonGRPC.terminate_proc() successfully kills
+        a process with SIGTERM."""
 
         local_env = LocalPythonEnvironment()
         connection = LocalPythonGRPC(local_env, local_env.create())
@@ -259,14 +257,13 @@ while True:
         # Process should be terminated after terminate_proc() returns
         assert proc.poll() is not None, "Process should be terminated by SIGTERM"
 
-
     def test_force_terminate(self):
         """Test that LocalPythonGRPC.force_terminate() kills a process immediately."""
         local_env = LocalPythonEnvironment()
         connection = LocalPythonGRPC(local_env, local_env.create())
 
         # Start a process that ignores SIGTERM
-        code = f"""import signal, time, os
+        code = """import signal, time, os
 # Set up signal handler to ignore SIGTERM
 signal.signal(signal.SIGTERM, signal.SIG_IGN)
 # Signal that setup is complete
@@ -274,9 +271,10 @@ print("R", flush=True)
 while True:
     time.sleep(0.1)"""
 
-        proc = subprocess.Popen([sys.executable, "-c", code],
-                                stdout=subprocess.PIPE,
-                                )
+        proc = subprocess.Popen(
+            [sys.executable, "-c", code],
+            stdout=subprocess.PIPE,
+        )
         assert proc.poll() is None, "Process should be running initially"
 
         # Wait for "READY" signal from process because signal handling requires it
@@ -290,4 +288,6 @@ while True:
         time.sleep(0.35)
         assert proc.poll() is None, "Process should ignore SIGTERM initially"
         time.sleep(0.35)
-        assert proc.poll() is not None, "Process should be terminated by force_terminate"
+        assert (
+            proc.poll() is not None
+        ), "Process should be terminated by force_terminate"

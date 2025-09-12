@@ -20,6 +20,7 @@ from isolate.server.server import (
     IsolateServicer,
     ServerBoundInterceptor,
     SingleTaskInterceptor,
+    register_signal_handlers,
 )
 
 REPO_DIR = Path(__file__).parent.parent
@@ -63,7 +64,7 @@ def make_server(
         servicer = IsolateServicer(bridge, test_settings)
 
         # Set up signal handlers (needed for graceful shutdown)
-        servicer.register_signal_handlers(server)
+        register_signal_handlers(servicer, server)
 
         for interceptor in interceptors:
             interceptor.register_servicer(servicer)
