@@ -10,19 +10,21 @@ but then runs it in the context of the frozen agent built environment.
 
 from __future__ import annotations
 
+import asyncio
 import os
+import signal
 import sys
 import traceback
 from argparse import ArgumentParser
-from concurrent import futures
 from dataclasses import dataclass
 from typing import (
     Any,
+    AsyncIterator,
     Iterable,
-    Iterator,
 )
 
 import grpc
+import grpc.aio
 from grpc import ServicerContext, StatusCode
 
 try:
@@ -33,7 +35,6 @@ except ImportError:
 from isolate.backends.common import sha256_digest_of
 from isolate.connections.common import SerializationError, serialize_object
 from isolate.connections.grpc import definitions
-from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc
 
 
@@ -49,11 +50,11 @@ class AgentServicer(definitions.AgentServicer):
         self._run_cache: dict[str, Any] = {}
         self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
 
-    def Run(
+    async def Run(
         self,
         request: definitions.FunctionCall,
         context: ServicerContext,
-    ) -> Iterator[definitions.PartialRunResult]:
+    ) -> AsyncIterator[definitions.PartialRunResult]:
         self.log(f"A connection has been established: {context.peer()}!")
         server_version = os.getenv("ISOLATE_SERVER_VERSION") or "unknown"
         self.log(f"Isolate info: server {server_version}, agent {agent_version}")
@@ -87,7 +88,8 @@ class AgentServicer(definitions.AgentServicer):
                         )
                         raise AbortException("The setup function has thrown an error.")
                 except AbortException as exc:
-                    return self.abort_with_msg(context, exc.message)
+                    self.abort_with_msg(context, exc.message)
+                    return
                 else:
                     assert not was_it_raised
                     self._run_cache[cache_key] = result
@@ -107,7 +109,8 @@ class AgentServicer(definitions.AgentServicer):
                 stringized_tb,
             )
         except AbortException as exc:
-            return self.abort_with_msg(context, exc.message)
+            self.abort_with_msg(context, exc.message)
+            return
 
     def execute_function(
         self,
@@ -205,14 +208,10 @@ class AgentServicer(definitions.AgentServicer):
         return None
 
 
-def create_server(address: str) -> grpc.Server:
+def create_server(address: str) -> grpc.aio.Server:
     """Create a new (temporary) gRPC server listening on the given
     address."""
-    server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=1),
-        maximum_concurrent_rpcs=1,
-        options=get_default_options(),
-    )
+    server = grpc.aio.server()
 
     # Local server credentials allow us to ensure that the
     # connection is established by a local process.
@@ -221,7 +220,9 @@ def create_server(address: str) -> grpc.Server:
     return server
 
 
-def run_agent(address: str, log_fd: int | None = None) -> int:
+async def run_agent(
+    address: str, log_fd: int | None = None, shutdown_grace_period: float = 3600.0
+) -> int:
     """Run the agent servicer on the given address."""
     server = create_server(address)
     servicer = AgentServicer(log_fd=log_fd)
@@ -231,19 +232,66 @@ def run_agent(address: str, log_fd: int | None = None) -> int:
     # not have any global side effects.
     definitions.register_agent(servicer, server)
 
-    server.start()
-    server.wait_for_termination()
+    # Use environment variable if available, otherwise use the parameter default
+    env_grace_period = os.getenv("ISOLATE_SHUTDOWN_GRACE_PERIOD")
+    if env_grace_period is not None:
+        shutdown_grace_period = float(env_grace_period)
+
+    # Set up graceful shutdown on SIGTERM
+    shutdown_event = asyncio.Event()
+
+    def signal_handler():
+        servicer.log("Received SIGTERM, initiating graceful shutdown")
+        shutdown_event.set()
+
+    # Register signal handler for SIGTERM
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGTERM, signal_handler)
+
+    await server.start()
+
+    # Wait for either server termination or shutdown signal
+    termination_task = asyncio.create_task(server.wait_for_termination())
+    shutdown_task = asyncio.create_task(shutdown_event.wait())
+
+    try:
+        done, pending = await asyncio.wait(
+            [termination_task, shutdown_task], return_when=asyncio.FIRST_COMPLETED
+        )
+
+        # If shutdown signal received, stop the server gracefully
+        if shutdown_task in done:
+            servicer.log(
+                f"Shutting down gRPC server with \
+                {shutdown_grace_period}s grace period..."
+            )
+            await server.stop(grace=shutdown_grace_period)
+
+        # Cancel any pending tasks
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    finally:
+        # Ensure server is stopped
+        await server.stop(grace=0)
+
     return 0
 
 
-def main() -> int:
+async def main() -> int:
     parser = ArgumentParser()
     parser.add_argument("address", type=str)
     parser.add_argument("--log-fd", type=int)
 
     options = parser.parse_args()
-    return run_agent(options.address, log_fd=options.log_fd)
+    return await run_agent(options.address, log_fd=options.log_fd)
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+
+    asyncio.run(main())

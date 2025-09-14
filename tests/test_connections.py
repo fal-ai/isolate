@@ -1,4 +1,7 @@
 import operator
+import os
+import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -11,13 +14,15 @@ from pathlib import Path
 from typing import Any, List
 from unittest.mock import Mock
 
+import grpc
 import pytest
 from isolate.backends import BaseEnvironment, EnvironmentConnection
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.settings import IsolateSettings
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 from isolate.connections import LocalPythonGRPC, PythonIPC
-from isolate.connections.common import is_agent
+from isolate.connections.common import is_agent, serialize_object
+from isolate.connections.grpc import definitions
 
 REPO_DIR = Path(__file__).parent.parent
 assert (
@@ -291,3 +296,108 @@ while True:
         assert (
             proc.poll() is not None
         ), "Process should be terminated by force_terminate"
+
+    def test_agent_function_receives_signal(self):
+        """Test that an agent function properly receives and handles SIGTERM."""
+
+        def find_free_port() -> str:
+            with socket.socket() as sock:
+                sock.bind(("", 0))
+                host, port = sock.getsockname()
+                return f"{host}:{port}"
+
+        # This function will be passed to a test agent subprocess. It sets an exit
+        # code can be used to confirm it received a signal
+        def fn_with_sigterm_handler():
+            def handle_sigterm(_signum, _frame):
+                print(
+                    f"SIGTERM in execute_function received by PID {os.getpid()}",
+                    flush=True,
+                )
+                sys.exit(42)  # Use specific exit code to verify handler was called
+
+            signal.signal(signal.SIGTERM, handle_sigterm)
+
+            # Keep running until SIGTERM is received
+            for _ in range(10):  # Max 10 seconds
+                time.sleep(0.1)
+
+            # If we exit the loop without receiving SIGTERM, exit with different code
+            sys.exit(99)
+
+        # Start agent process directly with short grace period for testing
+        address = find_free_port()
+        agent_proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "isolate.connections.grpc.agent",
+                address,
+            ],
+            cwd=REPO_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env={**os.environ, "ISOLATE_SHUTDOWN_GRACE_PERIOD": "1"},
+        )
+        time.sleep(0.5)  # Give agent time to start
+
+        try:
+            assert agent_proc.poll() is None, "Agent should be running"
+            # start a client to the agent service
+            with grpc.secure_channel(
+                address, grpc.local_channel_credentials()
+            ) as channel:
+                stub = definitions.AgentStub(channel)
+
+                method = "cloudpickle"
+                function = definitions.SerializedObject(
+                    method=method,
+                    definition=serialize_object(method, fn_with_sigterm_handler),
+                    was_it_raised=False,
+                    stringized_traceback=None,
+                )
+                function_call = definitions.FunctionCall(function=function)
+
+                def run_function():
+                    for _ in stub.Run(function_call):
+                        pass  # Consume responses until agent exits
+
+                # Start client receiver function in background thread
+                run_thread = threading.Thread(target=run_function)
+                run_thread.daemon = True
+                run_thread.start()
+
+                # Give the function time to set up signal handler
+                time.sleep(0.5)
+
+                # Send SIGTERM to the agent process using the PID we have
+                os.kill(agent_proc.pid, signal.SIGTERM)
+
+                # Give some time for signal handling and server shutdown
+                time.sleep(2.0)
+
+                # Check if agent shut down gracefully
+                if agent_proc.poll() is None:
+                    # If still running, kill it and read output
+                    agent_proc.kill()
+                    output = agent_proc.stdout.read() if agent_proc.stdout else ""
+                    assert (
+                        False
+                    ), f"Agent should have shut down gracefully, output: {output}"
+                else:
+                    # Agent shut down gracefully, read the output
+                    output = agent_proc.stdout.read() if agent_proc.stdout else ""
+
+                # Check that both SIGTERM messages were received
+                assert (
+                    "SIGTERM in execute_function" in output
+                ), f"Expected user function SIGTERM message in output, got: {output}"
+
+                assert (
+                    "Received SIGTERM, initiating graceful shutdown" in output
+                ), f"Expected agent SIGTERM message in output, got: {output}"
+
+        finally:
+            if agent_proc.poll() is None:
+                agent_proc.kill()  # Force kill if still running
