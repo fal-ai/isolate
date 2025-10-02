@@ -10,20 +10,21 @@ but then runs it in the context of the frozen agent built environment.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 import traceback
 from argparse import ArgumentParser
-from concurrent import futures
 from dataclasses import dataclass
 from typing import (
     Any,
+    AsyncGenerator,
     Iterable,
-    Iterator,
 )
 
-import grpc
-from grpc import ServicerContext, StatusCode
+from grpc import StatusCode, aio, local_server_credentials
+
+from isolate.connections.grpc.definitions import PartialRunResult
 
 try:
     from isolate import __version__ as agent_version
@@ -49,11 +50,11 @@ class AgentServicer(definitions.AgentServicer):
         self._run_cache: dict[str, Any] = {}
         self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
 
-    def Run(
+    async def Run(
         self,
         request: definitions.FunctionCall,
-        context: ServicerContext,
-    ) -> Iterator[definitions.PartialRunResult]:
+        context: aio.ServicerContext,
+    ) -> AsyncGenerator[PartialRunResult, None]:
         self.log(f"A connection has been established: {context.peer()}!")
         server_version = os.getenv("ISOLATE_SERVER_VERSION") or "unknown"
         self.log(f"Isolate info: server {server_version}, agent {agent_version}")
@@ -87,7 +88,8 @@ class AgentServicer(definitions.AgentServicer):
                         )
                         raise AbortException("The setup function has thrown an error.")
                 except AbortException as exc:
-                    return self.abort_with_msg(context, exc.message)
+                    self.abort_with_msg(context, exc.message)
+                    return
                 else:
                     assert not was_it_raised
                     self._run_cache[cache_key] = result
@@ -107,7 +109,8 @@ class AgentServicer(definitions.AgentServicer):
                 stringized_tb,
             )
         except AbortException as exc:
-            return self.abort_with_msg(context, exc.message)
+            self.abort_with_msg(context, exc.message)
+            return
 
     def execute_function(
         self,
@@ -195,7 +198,7 @@ class AgentServicer(definitions.AgentServicer):
 
     def abort_with_msg(
         self,
-        context: ServicerContext,
+        context: aio.ServicerContext,
         message: str,
         *,
         code: StatusCode = StatusCode.INVALID_ARGUMENT,
@@ -205,23 +208,26 @@ class AgentServicer(definitions.AgentServicer):
         return None
 
 
-def create_server(address: str) -> grpc.Server:
+def create_server(address: str) -> aio.Server:
     """Create a new (temporary) gRPC server listening on the given
     address."""
-    server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=1),
-        maximum_concurrent_rpcs=1,
+    # Use asyncio server so requests can run in the main thread and intercept signals
+    # There seems to be a weird bug with grpcio that makes subsequent requests fail with
+    # concurrent rpc limit exceeded if we set maximum_current_rpcs to 1. Setting it to 2
+    # fixes it, even though in practice, we only run one request at a time.
+    server = aio.server(
+        maximum_concurrent_rpcs=2,
         options=get_default_options(),
     )
 
     # Local server credentials allow us to ensure that the
     # connection is established by a local process.
-    server_credentials = grpc.local_server_credentials()
+    server_credentials = local_server_credentials()
     server.add_secure_port(address, server_credentials)
     return server
 
 
-def run_agent(address: str, log_fd: int | None = None) -> int:
+async def run_agent(address: str, log_fd: int | None = None) -> int:
     """Run the agent servicer on the given address."""
     server = create_server(address)
     servicer = AgentServicer(log_fd=log_fd)
@@ -231,19 +237,19 @@ def run_agent(address: str, log_fd: int | None = None) -> int:
     # not have any global side effects.
     definitions.register_agent(servicer, server)
 
-    server.start()
-    server.wait_for_termination()
+    await server.start()
+    await server.wait_for_termination()
     return 0
 
 
-def main() -> int:
+async def main() -> int:
     parser = ArgumentParser()
     parser.add_argument("address", type=str)
     parser.add_argument("--log-fd", type=int)
 
     options = parser.parse_args()
-    return run_agent(options.address, log_fd=options.log_fd)
+    return await run_agent(options.address, log_fd=options.log_fd)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

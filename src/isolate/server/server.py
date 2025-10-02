@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import os
+import signal
 import threading
 import time
 import traceback
@@ -197,6 +198,7 @@ class IsolateServicer(definitions.IsolateServicer):
     bridge_manager: BridgeManager
     default_settings: IsolateSettings = field(default_factory=IsolateSettings)
     background_tasks: dict[str, RunTask] = field(default_factory=dict)
+    _shutting_down: bool = field(default=False)
 
     _thread_pool: futures.ThreadPoolExecutor = field(
         default_factory=lambda: futures.ThreadPoolExecutor(max_workers=MAX_THREADS)
@@ -420,6 +422,16 @@ class IsolateServicer(definitions.IsolateServicer):
 
         return definitions.CancelResponse()
 
+    def shutdown(self) -> None:
+        if self._shutting_down:
+            return
+
+        self._shutting_down = True
+        print("Shutting down, canceling all tasks...")
+        self.cancel_tasks()
+        self._thread_pool.shutdown(wait=True)
+        print("All tasks canceled.")
+
     def watch_queue_until_completed(
         self, queue: Queue, is_completed: Callable[[], bool]
     ) -> Iterator[definitions.PartialRunResult]:
@@ -584,6 +596,7 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                 def termination() -> None:
                     if is_run:
                         print("Stopping server since run is finished")
+                        self.servicer.shutdown()
                         # Stop the server after the Run task is finished
                         self.server.stop(grace=0.1)
 
@@ -610,6 +623,7 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                                 # Small sleep to make sure the cancellation is processed
                                 time.sleep(0.1)
                                 print("Stopping server since the task is finished")
+                                self.servicer.shutdown()
                                 self.server.stop(grace=0.1)
 
                             # Add a callback which will stop the server
@@ -671,11 +685,20 @@ def main(argv: list[str] | None = None) -> None:
         definitions.register_isolate(servicer, server)
         health.register_health(HealthServicer(), server)
 
+        def handle_termination(*args):
+            print("Termination signal received, shutting down...")
+            servicer.shutdown()
+            server.stop(grace=0.1)
+
+        signal.signal(signal.SIGINT, handle_termination)
+        signal.signal(signal.SIGTERM, handle_termination)
+
         server.add_insecure_port("[::]:50001")
         print("Started listening at localhost:50001")
 
         server.start()
         server.wait_for_termination()
+        print("Server shut down")
 
 
 if __name__ == "__main__":
