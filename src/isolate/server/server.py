@@ -179,11 +179,17 @@ class RunTask:
 
     def cancel(self):
         while True:
-            self.future.cancel()
+            # Cancelling a running future is not possible, and it sometimes blocks,
+            # which means we never terminate the agent. So check if it's not running
+            if self.future and not self.future.running():
+                self.future.cancel()
+
             if self.agent:
                 self.agent.terminate()
+
             try:
-                self.future.exception(timeout=0.1)
+                if self.future:
+                    self.future.exception(timeout=0.1)
                 return
             except futures.TimeoutError:
                 pass
@@ -424,12 +430,13 @@ class IsolateServicer(definitions.IsolateServicer):
 
     def shutdown(self) -> None:
         if self._shutting_down:
+            print("Shutdown already in progress...")
             return
 
         self._shutting_down = True
-        print("Shutting down, canceling all tasks...")
+        task_count = len(self.background_tasks)
+        print(f"Shutting down, canceling {task_count} tasks...")
         self.cancel_tasks()
-        self._thread_pool.shutdown(wait=True)
         print("All tasks canceled.")
 
     def watch_queue_until_completed(
@@ -599,6 +606,7 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                         self.servicer.shutdown()
                         # Stop the server after the Run task is finished
                         self.server.stop(grace=0.1)
+                        print("Server stopped")
 
                     elif is_submit:
                         # Wait until the task_id is assigned
@@ -625,6 +633,7 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                                 print("Stopping server since the task is finished")
                                 self.servicer.shutdown()
                                 self.server.stop(grace=0.1)
+                                print("Server stopped")
 
                             # Add a callback which will stop the server
                             # after the task is finished
@@ -693,8 +702,8 @@ def main(argv: list[str] | None = None) -> None:
         signal.signal(signal.SIGINT, handle_termination)
         signal.signal(signal.SIGTERM, handle_termination)
 
-        server.add_insecure_port("[::]:50001")
-        print("Started listening at localhost:50001")
+        server.add_insecure_port(f"[::]:{options.port}")
+        print(f"Started listening at {options.host}:{options.port}")
 
         server.start()
         server.wait_for_termination()

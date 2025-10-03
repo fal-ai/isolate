@@ -18,7 +18,7 @@ from argparse import ArgumentParser
 from dataclasses import dataclass
 from typing import (
     Any,
-    AsyncGenerator,
+    AsyncIterator,
     Iterable,
 )
 
@@ -54,7 +54,7 @@ class AgentServicer(definitions.AgentServicer):
         self,
         request: definitions.FunctionCall,
         context: aio.ServicerContext,
-    ) -> AsyncGenerator[PartialRunResult, None]:
+    ) -> AsyncIterator[PartialRunResult]:
         self.log(f"A connection has been established: {context.peer()}!")
         server_version = os.getenv("ISOLATE_SERVER_VERSION") or "unknown"
         self.log(f"Isolate info: server {server_version}, agent {agent_version}")

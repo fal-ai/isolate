@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 
 import grpc
@@ -13,24 +12,9 @@ environment = definitions.EnvironmentDefinition(kind="local")
 
 
 def func_to_submit() -> str:
-    import pathlib
-    import signal
     import time
 
-    path = pathlib.Path("sigterm_received")
-    if path.exists():
-        os.unlink(path)
-
-    def handle_sigterm(signum, frame):
-        print("Received SIGTERM, exiting gracefully...")
-        path.touch()
-        sys.exit(0)
-
-    try:
-        signal.signal(signal.SIGTERM, handle_sigterm)
-    except Exception as e:
-        print(f"Failed to set signal handler: {e}")
-
+    print("Task started, sleeping for 10 seconds...")
     time.sleep(10)
     return "hello"
 
