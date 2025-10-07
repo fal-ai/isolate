@@ -252,4 +252,10 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    # The fal app sdk runs its own asyncio evet loop, so we need to patch asyncio
+    # here to allow nested event loops to avoid "loop is already running" errors.
+    import nest_asyncio
+
+    nest_asyncio.apply()
+
     asyncio.run(main())

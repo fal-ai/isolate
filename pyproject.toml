@@ -41,6 +41,7 @@ build = [
     # guarded with optional_import() calls.
     "virtualenv>=20.4",
     "PyYAML>=6.0",
+    "nest-asyncio>=1.6.0"
 ]
 test = [
     "isolate[build]",
