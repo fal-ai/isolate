@@ -142,28 +142,25 @@ def test_running_function_receives_sigterm(isolate_server_subprocess, tmp_path):
     # Send SIGTERM to the current process
     assert process.poll() is None, "Server should be running initially"
 
-    def func_with_sigterm_handler(filepath):
-        import os
+    sigterm_file_path = tmp_path.joinpath("sigterm_test")
+
+    def teardown(path):
         import pathlib
-        import signal
+
+        pathlib.Path(path).touch()
+
+    def func_with_teardown():
         import time
-
-        def handle_term(signum, frame):
-            print("Received SIGTERM, exiting gracefully...")
-            pathlib.Path(filepath).touch()
-            os._exit(0)
-
-        signal.signal(signal.SIGTERM, handle_term)
 
         time.sleep(30)  # Simulate long-running task
 
-    sigterm_file_path = tmp_path.joinpath("sigterm_test")
+    func_with_teardown.__shutdown__ = functools.partial(
+        teardown, str(sigterm_file_path)
+    )
 
     assert not sigterm_file_path.exists()
 
-    responses = stub.Run(
-        create_run_request(func_with_sigterm_handler, str(sigterm_file_path))
-    )
+    responses = stub.Run(create_run_request(func_with_teardown))
     consume_responses(responses)
     time.sleep(2)  # Give task time to start
 
