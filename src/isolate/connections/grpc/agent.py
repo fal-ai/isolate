@@ -92,7 +92,8 @@ class AgentServicer(definitions.AgentServicer):
                         )
                         raise AbortException("The setup function has thrown an error.")
                 except AbortException as exc:
-                    return self.abort_with_msg(context, exc.message)
+                    self.abort_with_msg(context, exc.message)
+                    return
                 else:
                     assert not was_it_raised
                     self._run_cache[cache_key] = result
@@ -112,7 +113,8 @@ class AgentServicer(definitions.AgentServicer):
                 stringized_tb,
             )
         except AbortException as exc:
-            return self.abort_with_msg(context, exc.message)
+            self.abort_with_msg(context, exc.message)
+            return
 
     def execute_function(
         self,
@@ -149,6 +151,13 @@ class AgentServicer(definitions.AgentServicer):
         stringized_tb = None
         try:
             self._current_callable = function
+            shutdown_registered = hasattr(function, "__shutdown__")
+            is_partial = isinstance(function, functools.partial)
+            func_type = type(function)
+            self.log(
+                f"Shutdown registered: {shutdown_registered}, "
+                f"is_partial: {is_partial}, type: {func_type}"
+            )
             result = function(*extra_args)
         except BaseException as exc:
             result = exc
@@ -213,25 +222,29 @@ class AgentServicer(definitions.AgentServicer):
         return None
 
     def handle_shutdown(self) -> None:
-        if self._current_callable is not None:
-            # Check for teardown on the callable itself or on the wrapped function
-            # (in case it's a functools.partial)
-            shutdown_callable = None
+        if self._current_callable is None:
+            return
 
-            if hasattr(self._current_callable, "__shutdown__"):
-                shutdown_callable = self._current_callable.__shutdown__
-            elif isinstance(self._current_callable, functools.partial) and hasattr(
-                self._current_callable.func, "__shutdown__"
-            ):
-                shutdown_callable = self._current_callable.func.__shutdown__
+        # Check for teardown on the callable itself or on the wrapped function
+        # (in case it's a functools.partial)
+        shutdown_callable = None
 
-            if shutdown_callable is not None and callable(shutdown_callable):
-                self.log("Calling shutdown callback on the current callable.")
-                try:
-                    shutdown_callable()
-                except Exception as exc:
-                    self.log(f"Error during shutdown: {exc}")
-                    self.log(traceback.format_exc())
+        if hasattr(self._current_callable, "__shutdown__"):
+            shutdown_callable = self._current_callable.__shutdown__
+        elif isinstance(self._current_callable, functools.partial) and hasattr(
+            self._current_callable.func, "__shutdown__"
+        ):
+            shutdown_callable = self._current_callable.func.__shutdown__
+
+        if shutdown_callable is not None and callable(shutdown_callable):
+            self.log("Calling shutdown callback.")
+            try:
+                shutdown_callable()
+            except Exception as exc:
+                self.log(f"Error during shutdown: {exc}")
+                self.log(traceback.format_exc())
+        else:
+            self.log("No shutdown callback found, skipping.")
 
 
 def create_server(address: str) -> tuple[grpc.Server, futures.ThreadPoolExecutor]:
