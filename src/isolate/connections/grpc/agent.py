@@ -10,7 +10,9 @@ but then runs it in the context of the frozen agent built environment.
 
 from __future__ import annotations
 
+import functools
 import os
+import signal
 import sys
 import traceback
 from argparse import ArgumentParser
@@ -23,7 +25,9 @@ from typing import (
 )
 
 import grpc
-from grpc import ServicerContext, StatusCode
+from grpc import StatusCode, local_server_credentials
+
+from isolate.connections.grpc.definitions import PartialRunResult
 
 try:
     from isolate import __version__ as agent_version
@@ -48,12 +52,13 @@ class AgentServicer(definitions.AgentServicer):
 
         self._run_cache: dict[str, Any] = {}
         self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
+        self._current_callable: Any = None
 
     def Run(
         self,
         request: definitions.FunctionCall,
-        context: ServicerContext,
-    ) -> Iterator[definitions.PartialRunResult]:
+        context: grpc.ServicerContext,
+    ) -> Iterator[PartialRunResult]:
         self.log(f"A connection has been established: {context.peer()}!")
         server_version = os.getenv("ISOLATE_SERVER_VERSION") or "unknown"
         self.log(f"Isolate info: server {server_version}, agent {agent_version}")
@@ -87,7 +92,8 @@ class AgentServicer(definitions.AgentServicer):
                         )
                         raise AbortException("The setup function has thrown an error.")
                 except AbortException as exc:
-                    return self.abort_with_msg(context, exc.message)
+                    self.abort_with_msg(context, exc.message)
+                    return
                 else:
                     assert not was_it_raised
                     self._run_cache[cache_key] = result
@@ -107,7 +113,8 @@ class AgentServicer(definitions.AgentServicer):
                 stringized_tb,
             )
         except AbortException as exc:
-            return self.abort_with_msg(context, exc.message)
+            self.abort_with_msg(context, exc.message)
+            return
 
     def execute_function(
         self,
@@ -143,12 +150,22 @@ class AgentServicer(definitions.AgentServicer):
         was_it_raised = False
         stringized_tb = None
         try:
+            self._current_callable = function
+            shutdown_registered = hasattr(function, "__shutdown__")
+            is_partial = isinstance(function, functools.partial)
+            func_type = type(function)
+            self.log(
+                f"Shutdown registered: {shutdown_registered}, "
+                f"is_partial: {is_partial}, type: {func_type}"
+            )
             result = function(*extra_args)
         except BaseException as exc:
             result = exc
             was_it_raised = True
             num_frames = len(traceback.extract_stack()[:-5])
             stringized_tb = "".join(traceback.format_exc(limit=-num_frames))
+        finally:
+            self._current_callable = None
 
         self.log(f"Completed the execution of the {function_kind} function.")
         return result, was_it_raised, stringized_tb
@@ -195,7 +212,7 @@ class AgentServicer(definitions.AgentServicer):
 
     def abort_with_msg(
         self,
-        context: ServicerContext,
+        context: grpc.ServicerContext,
         message: str,
         *,
         code: StatusCode = StatusCode.INVALID_ARGUMENT,
@@ -204,27 +221,61 @@ class AgentServicer(definitions.AgentServicer):
         context.set_details(message)
         return None
 
+    def handle_shutdown(self) -> None:
+        if self._current_callable is None:
+            return
 
-def create_server(address: str) -> grpc.Server:
+        # Check for teardown on the callable itself or on the wrapped function
+        # (in case it's a functools.partial)
+        shutdown_callable = None
+
+        if hasattr(self._current_callable, "__shutdown__"):
+            shutdown_callable = self._current_callable.__shutdown__
+        elif isinstance(self._current_callable, functools.partial) and hasattr(
+            self._current_callable.func, "__shutdown__"
+        ):
+            shutdown_callable = self._current_callable.func.__shutdown__
+
+        if shutdown_callable is not None and callable(shutdown_callable):
+            self.log("Calling shutdown callback.")
+            try:
+                shutdown_callable()
+            except Exception as exc:
+                self.log(f"Error during shutdown: {exc}")
+                self.log(traceback.format_exc())
+        else:
+            self.log("No shutdown callback found, skipping.")
+
+
+def create_server(address: str) -> tuple[grpc.Server, futures.ThreadPoolExecutor]:
     """Create a new (temporary) gRPC server listening on the given
-    address."""
+    address. Returns the server and its executor."""
+    executor = futures.ThreadPoolExecutor(max_workers=1)
     server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=1),
+        executor,
         maximum_concurrent_rpcs=1,
         options=get_default_options(),
     )
 
     # Local server credentials allow us to ensure that the
     # connection is established by a local process.
-    server_credentials = grpc.local_server_credentials()
+    server_credentials = local_server_credentials()
     server.add_secure_port(address, server_credentials)
-    return server
+    return server, executor
 
 
 def run_agent(address: str, log_fd: int | None = None) -> int:
     """Run the agent servicer on the given address."""
-    server = create_server(address)
+    server, executor = create_server(address)
     servicer = AgentServicer(log_fd=log_fd)
+
+    # Set up SIGTERM handler
+    def sigterm_handler(signum, frame):
+        servicer.handle_shutdown()
+        server.stop(grace=0.1)
+        executor.shutdown(wait=False, cancel_futures=True)
+
+    signal.signal(signal.SIGTERM, sigterm_handler)
 
     # This function just calls some methods on the server
     # and register a generic handler for the bridge. It does
@@ -242,7 +293,9 @@ def main() -> int:
     parser.add_argument("--log-fd", type=int)
 
     options = parser.parse_args()
-    return run_agent(options.address, log_fd=options.log_fd)
+    ret_code = run_agent(options.address, log_fd=options.log_fd)
+    print("Agent process exiting.")
+    sys.exit(ret_code)
 
 
 if __name__ == "__main__":
