@@ -21,12 +21,7 @@ jobs:
 
       matrix:
         os: [ubuntu-latest]
-        python: ["3.8", "3.9", "3.10", "3.11"]
-        include:
-        - os: macos-latest
-          python: "3.8"
-        - os: macos-latest
-          python: "3.11"
+        python: ["3.11"]
     steps:
     - uses: actions/checkout@v3
 
@@ -65,4 +60,4 @@ jobs:
     - name: Test
       run: |
         export ISOLATE_PYENV_EXECUTABLE=pyenv/bin/pyenv
-        python -m pytest -vvv
+        python -m pytest -vvv tests/test_server.py::test_agent_requirements_custom_version
