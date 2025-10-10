@@ -156,6 +156,7 @@ class AgentServicer(definitions.AgentServicer):
             func_type = type(function)
             self.log(
                 f"Shutdown registered: {shutdown_registered}, "
+                f"fname: {getattr(function, '__name__', repr(function))},"
                 f"is_partial: {is_partial}, type: {func_type}"
             )
             result = function(*extra_args)
