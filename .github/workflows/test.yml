@@ -60,4 +60,4 @@ jobs:
     - name: Test
       run: |
         export ISOLATE_PYENV_EXECUTABLE=pyenv/bin/pyenv
-        python -m pytest -vvv tests/test_server.py::test_agent_requirements_custom_version
+        python -m pytest -vvv
