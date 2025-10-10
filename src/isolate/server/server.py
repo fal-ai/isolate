@@ -185,6 +185,7 @@ class RunTask:
                 self.future.cancel()
 
             if self.agent:
+                print("Terminating the agent...")
                 self.agent.terminate()
 
             try:

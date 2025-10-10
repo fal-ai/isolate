@@ -224,6 +224,7 @@ class AgentServicer(definitions.AgentServicer):
 
     def handle_shutdown(self) -> None:
         if self._current_callable is None:
+            print("No current callable, skipping shutdown.")
             return
 
         # Check for teardown on the callable itself or on the wrapped function
@@ -272,7 +273,9 @@ def run_agent(address: str, log_fd: int | None = None) -> int:
 
     # Set up SIGTERM handler
     def sigterm_handler(signum, frame):
+        print("Received SIGTERM, shutting down the agent...")
         servicer.handle_shutdown()
+        print("Shutdown complete, stopping the agent server.")
         server.stop(grace=0.1)
         executor.shutdown(wait=False, cancel_futures=True)
 
