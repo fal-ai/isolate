@@ -394,11 +394,12 @@ class IsolateServicer(definitions.IsolateServicer):
             self.background_tasks["RUN"] = task
             yield from self._run_task(task)
         except GRPCException as exc:
-            return self.abort_with_msg(
+            self.abort_with_msg(
                 exc.message,
                 context,
                 code=exc.code,
             )
+            return
         finally:
             self.background_tasks.pop("RUN", None)
 
