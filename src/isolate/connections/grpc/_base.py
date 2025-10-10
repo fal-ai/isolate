@@ -1,3 +1,4 @@
+import os
 import socket
 import subprocess
 from contextlib import contextmanager
@@ -24,7 +25,9 @@ class AgentError(Exception):
     """An internal problem caused by (most probably) the agent."""
 
 
-PROCESS_SHUTDOWN_TIMEOUT = 5  # seconds
+PROCESS_SHUTDOWN_TIMEOUT_SECONDS = float(
+    os.getenv("ISOLATE_SHUTDOWN_GRACE_PERIOD", "60")
+)
 
 
 @dataclass
@@ -139,13 +142,11 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
             try:
                 print("Terminating the agent process...")
                 process.terminate()
-                process.wait(timeout=PROCESS_SHUTDOWN_TIMEOUT)
+                process.wait(timeout=PROCESS_SHUTDOWN_TIMEOUT_SECONDS)
                 print("Agent process shutdown gracefully")
             except Exception as exc:
                 print(f"Failed to shutdown the agent process gracefully: {exc}")
-                if process:
-                    process.kill()
-                print("Agent process was forcefully killed")
+                process.kill()
 
     def get_python_cmd(
         self,
