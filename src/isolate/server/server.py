@@ -699,6 +699,7 @@ def main(argv: list[str] | None = None) -> None:
         def handle_termination(*args):
             print("Termination signal received, shutting down...")
             servicer.shutdown()
+            time.sleep(10)
             server.stop(grace=0.1)
 
         signal.signal(signal.SIGINT, handle_termination)
