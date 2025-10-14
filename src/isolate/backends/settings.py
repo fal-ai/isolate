@@ -41,23 +41,20 @@ class IsolateSettings:
 
         line = log.message.lower()
 
-        if "[error]" in line:
+        if line.startswith("error") or "[error]" in line:
             return replace(log, level=LogLevel.ERROR)
-        if "[warning]" in line:
+        if line.startswith("warning") or "[warning]" in line:
             return replace(log, level=LogLevel.WARNING)
-        if "[warn]" in line:
+        if line.startswith("warn") or "[warn]" in line:
             return replace(log, level=LogLevel.WARNING)
-        if "[info]" in line:
+        if line.startswith("info") or "[info]" in line:
             return replace(log, level=LogLevel.INFO)
-        if "[debug]" in line:
+        if line.startswith("debug") or "[debug]" in line:
             return replace(log, level=LogLevel.DEBUG)
-        if "[trace]" in line:
+        if line.startswith("trace") or "[trace]" in line:
             return replace(log, level=LogLevel.TRACE)
 
-        if log.level == LogLevel.STDERR:
-            return replace(log, level=LogLevel.ERROR)
-
-        # Default to INFO level
+        # Default all to INFO level, even STDERR
         return replace(log, level=LogLevel.INFO)
 
     def _get_temp_base(self) -> Path:
