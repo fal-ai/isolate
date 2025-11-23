@@ -174,8 +174,9 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                 args.append(f"--python={self._decide_python()}")
 
             try:
+                # This is not an official API, so it can throw anything at us.
                 virtualenv.cli_run(args)
-            except (RuntimeError, OSError) as exc:
+            except (SystemExit, RuntimeError, OSError) as exc:
                 raise EnvironmentCreationError(
                     f"Failed to create the environment at '{venv_path}': {exc}"
                 )
