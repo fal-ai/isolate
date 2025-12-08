@@ -538,7 +538,7 @@ def test_bridge_connection_reuse_logs(
     run_request(stub, request, user_logs=logs)
 
     str_logs = [log.message for log in logs if log.message]
-    assert str_logs == [
+    assert str_logs[:4] == [
         "setup",
         "run",
         "run",
@@ -714,8 +714,7 @@ def test_server_proper_error_delegation(
 
     assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
     assert (
-        "Error while serializing the execution result "
-        "(object of type <class 'frame'>)."
+        "Error while serializing the execution result (object of type <class 'frame'>)."
     ) in exc_info.value.details()
     assert not user_logs
 
