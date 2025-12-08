@@ -26,6 +26,7 @@ message BoundFunction {
     SerializedObject function = 2;
     optional SerializedObject setup_func = 3;
     bool stream_logs = 4;
+    optional SerializedObject teardown_func = 5;
 }
 
 message EnvironmentDefinition {

@@ -15,4 +15,6 @@ message FunctionCall {
     // has to be an idempotent step since the result for
     // this executable will be cached.
     optional SerializedObject setup_func = 2;
+
+    optional SerializedObject teardown_func = 3;
 }
