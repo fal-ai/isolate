@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import os
+import signal
 import threading
 import time
 import traceback
@@ -178,11 +179,17 @@ class RunTask:
 
     def cancel(self):
         while True:
-            self.future.cancel()
+            # Cancelling a running future is not possible, and it sometimes blocks,
+            # which means we never terminate the agent. So check if it's not running
+            if self.future and not self.future.running():
+                self.future.cancel()
+
             if self.agent:
                 self.agent.terminate()
+
             try:
-                self.future.exception(timeout=0.1)
+                if self.future:
+                    self.future.exception(timeout=0.1)
                 return
             except futures.TimeoutError:
                 pass
@@ -197,6 +204,7 @@ class IsolateServicer(definitions.IsolateServicer):
     bridge_manager: BridgeManager
     default_settings: IsolateSettings = field(default_factory=IsolateSettings)
     background_tasks: dict[str, RunTask] = field(default_factory=dict)
+    _shutting_down: bool = field(default=False)
 
     _thread_pool: futures.ThreadPoolExecutor = field(
         default_factory=lambda: futures.ThreadPoolExecutor(max_workers=MAX_THREADS)
@@ -278,9 +286,12 @@ class IsolateServicer(definitions.IsolateServicer):
                 function_call = definitions.FunctionCall(
                     function=task.request.function,
                     setup_func=task.request.setup_func,
+                    teardown_func=task.request.teardown_func,
                 )
                 if not task.request.HasField("setup_func"):
                     function_call.ClearField("setup_func")
+                if not task.request.HasField("teardown_func"):
+                    function_call.ClearField("teardown_func")
 
                 future = local_pool.submit(
                     _proxy_to_queue,
@@ -386,11 +397,12 @@ class IsolateServicer(definitions.IsolateServicer):
             self.background_tasks["RUN"] = task
             yield from self._run_task(task)
         except GRPCException as exc:
-            return self.abort_with_msg(
+            self.abort_with_msg(
                 exc.message,
                 context,
                 code=exc.code,
             )
+            return
         finally:
             self.background_tasks.pop("RUN", None)
 
@@ -419,6 +431,17 @@ class IsolateServicer(definitions.IsolateServicer):
             task.cancel()
 
         return definitions.CancelResponse()
+
+    def shutdown(self) -> None:
+        if self._shutting_down:
+            print("Shutdown already in progress...")
+            return
+
+        self._shutting_down = True
+        task_count = len(self.background_tasks)
+        print(f"Shutting down, canceling {task_count} tasks...")
+        self.cancel_tasks()
+        print("All tasks canceled.")
 
     def watch_queue_until_completed(
         self, queue: Queue, is_completed: Callable[[], bool]
@@ -584,6 +607,7 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                 def termination() -> None:
                     if is_run:
                         print("Stopping server since run is finished")
+                        self.servicer.shutdown()
                         # Stop the server after the Run task is finished
                         self.server.stop(grace=0.1)
 
@@ -610,6 +634,7 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                                 # Small sleep to make sure the cancellation is processed
                                 time.sleep(0.1)
                                 print("Stopping server since the task is finished")
+                                self.servicer.shutdown()
                                 self.server.stop(grace=0.1)
 
                             # Add a callback which will stop the server
@@ -671,8 +696,15 @@ def main(argv: list[str] | None = None) -> None:
         definitions.register_isolate(servicer, server)
         health.register_health(HealthServicer(), server)
 
-        server.add_insecure_port("[::]:50001")
-        print("Started listening at localhost:50001")
+        def handle_termination(*args):
+            servicer.shutdown()
+            server.stop(grace=0.1)
+
+        signal.signal(signal.SIGINT, handle_termination)
+        signal.signal(signal.SIGTERM, handle_termination)
+
+        server.add_insecure_port(f"[::]:{options.port}")
+        print(f"Started listening at {options.host}:{options.port}")
 
         server.start()
         server.wait_for_termination()

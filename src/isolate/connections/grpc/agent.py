@@ -11,6 +11,7 @@ but then runs it in the context of the frozen agent built environment.
 from __future__ import annotations
 
 import os
+import signal
 import sys
 import traceback
 from argparse import ArgumentParser
@@ -23,7 +24,7 @@ from typing import (
 )
 
 import grpc
-from grpc import ServicerContext, StatusCode
+from grpc import ServicerContext, StatusCode, local_server_credentials
 
 try:
     from isolate import __version__ as agent_version
@@ -48,6 +49,7 @@ class AgentServicer(definitions.AgentServicer):
 
         self._run_cache: dict[str, Any] = {}
         self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
+        self._teardown_func = None
 
     def Run(
         self,
@@ -57,6 +59,9 @@ class AgentServicer(definitions.AgentServicer):
         self.log(f"A connection has been established: {context.peer()}!")
         server_version = os.getenv("ISOLATE_SERVER_VERSION") or "unknown"
         self.log(f"Isolate info: server {server_version}, agent {agent_version}")
+
+        if request.HasField("teardown_func"):
+            self._teardown_func = request.teardown_func
 
         extra_args = []
         if request.HasField("setup_func"):
@@ -87,7 +92,8 @@ class AgentServicer(definitions.AgentServicer):
                         )
                         raise AbortException("The setup function has thrown an error.")
                 except AbortException as exc:
-                    return self.abort_with_msg(context, exc.message)
+                    self.abort_with_msg(context, exc.message)
+                    return
                 else:
                     assert not was_it_raised
                     self._run_cache[cache_key] = result
@@ -107,7 +113,8 @@ class AgentServicer(definitions.AgentServicer):
                 stringized_tb,
             )
         except AbortException as exc:
-            return self.abort_with_msg(context, exc.message)
+            self.abort_with_msg(context, exc.message)
+            return
 
     def execute_function(
         self,
@@ -204,27 +211,46 @@ class AgentServicer(definitions.AgentServicer):
         context.set_details(message)
         return None
 
+    def shutdown(self) -> None:
+        if self._teardown_func is None:
+            return
 
-def create_server(address: str) -> grpc.Server:
+        try:
+            self.execute_function(self._teardown_func, "teardown")
+        except Exception as exc:
+            self.log(f"Error during teardown: {exc}")
+            self.log(traceback.format_exc())
+
+
+def create_server(address: str) -> tuple[grpc.Server, futures.ThreadPoolExecutor]:
     """Create a new (temporary) gRPC server listening on the given
-    address."""
+    address. Returns the server and its executor."""
+    executor = futures.ThreadPoolExecutor(max_workers=1)
     server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=1),
+        executor,
         maximum_concurrent_rpcs=1,
         options=get_default_options(),
     )
 
     # Local server credentials allow us to ensure that the
     # connection is established by a local process.
-    server_credentials = grpc.local_server_credentials()
+    server_credentials = local_server_credentials()
     server.add_secure_port(address, server_credentials)
-    return server
+    return server, executor
 
 
 def run_agent(address: str, log_fd: int | None = None) -> int:
     """Run the agent servicer on the given address."""
-    server = create_server(address)
+    server, executor = create_server(address)
     servicer = AgentServicer(log_fd=log_fd)
+
+    # Set up SIGTERM handler
+    def sigterm_handler(signum, frame):
+        servicer.shutdown()
+        server.stop(grace=0.1)
+        executor.shutdown(wait=False, cancel_futures=True)
+
+    signal.signal(signal.SIGTERM, sigterm_handler)
 
     # This function just calls some methods on the server
     # and register a generic handler for the bridge. It does
@@ -242,7 +268,8 @@ def main() -> int:
     parser.add_argument("--log-fd", type=int)
 
     options = parser.parse_args()
-    return run_agent(options.address, log_fd=options.log_fd)
+    ret_code = run_agent(options.address, log_fd=options.log_fd)
+    sys.exit(ret_code)
 
 
 if __name__ == "__main__":
