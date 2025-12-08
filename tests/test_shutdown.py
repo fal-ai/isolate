@@ -11,7 +11,6 @@ from unittest.mock import Mock
 
 import grpc
 import pytest
-
 from isolate.server.definitions.server_pb2 import BoundFunction, EnvironmentDefinition
 from isolate.server.definitions.server_pb2_grpc import IsolateStub
 from isolate.server.interface import to_serialized_object
@@ -135,9 +134,9 @@ def test_exit_on_client_close(isolate_server_subprocess):
     except subprocess.TimeoutExpired:
         raise AssertionError("Server did not shut down after client disconnect")
 
-    assert process.poll() is not None, (
-        "Server should have shut down after client disconnect"
-    )
+    assert (
+        process.poll() is not None
+    ), "Server should have shut down after client disconnect"
 
 
 def test_running_function_receives_sigterm(isolate_server_subprocess, tmp_path):
@@ -174,9 +173,9 @@ def test_running_function_receives_sigterm(isolate_server_subprocess, tmp_path):
     os.kill(process.pid, signal.SIGTERM)
     process.wait(timeout=5)
     assert process.poll() is not None, "Server should have shut down after SIGTERM"
-    assert sigterm_file_path.exists(), (
-        "Function should have received SIGTERM and created the file"
-    )
+    assert (
+        sigterm_file_path.exists()
+    ), "Function should have received SIGTERM and created the file"
 
 
 if __name__ == "__main__":
