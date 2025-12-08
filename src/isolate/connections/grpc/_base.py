@@ -1,4 +1,6 @@
+import os
 import socket
+import subprocess
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +23,11 @@ from isolate.logs import LogLevel, LogSource
 
 class AgentError(Exception):
     """An internal problem caused by (most probably) the agent."""
+
+
+PROCESS_SHUTDOWN_TIMEOUT_SECONDS = float(
+    os.getenv("ISOLATE_SHUTDOWN_GRACE_PERIOD", "60")
+)
 
 
 @dataclass
@@ -128,9 +135,18 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
             with self.start_process(address) as process:
                 yield address, grpc.local_channel_credentials()
         finally:
-            if process is not None:
-                # TODO: should we check the status code here?
+            self.terminate_process(process)
+
+    def terminate_process(self, process: Union[None, subprocess.Popen]) -> None:
+        if process is not None:
+            try:
+                print("Terminating the agent process...")
                 process.terminate()
+                process.wait(timeout=PROCESS_SHUTDOWN_TIMEOUT_SECONDS)
+                print("Agent process shutdown gracefully")
+            except Exception as exc:
+                print(f"Failed to shutdown the agent process gracefully: {exc}")
+                process.kill()
 
     def get_python_cmd(
         self,
