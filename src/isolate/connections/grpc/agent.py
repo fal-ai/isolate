@@ -49,7 +49,7 @@ class AgentServicer(definitions.AgentServicer):
 
         self._run_cache: dict[str, Any] = {}
         self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
-        self._teardown_func = None
+        self._teardown_func: definitions.SerializedObject | None = None
 
     def Run(
         self,
