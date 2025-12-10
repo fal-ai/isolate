@@ -15,6 +15,7 @@ import os
 import sys
 import traceback
 from argparse import ArgumentParser
+from concurrent import futures
 from dataclasses import dataclass
 from typing import (
     Any,
@@ -49,6 +50,7 @@ class AgentServicer(definitions.AgentServicer):
 
         self._run_cache: dict[str, Any] = {}
         self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
+        self._thread_pool = futures.ThreadPoolExecutor(max_workers=1)
 
     async def Run(
         self,
@@ -146,11 +148,12 @@ class AgentServicer(definitions.AgentServicer):
         was_it_raised = False
         stringized_tb = None
         try:
-            result = function(*extra_args)
+            if getattr(function, "_run_as_main_thread", False):
+                result = function(*extra_args)
+            else:
+                result = self._thread_pool.submit(function, *extra_args).result()
 
-            is_coroutine = asyncio.iscoroutine(result)
-            self.log(f"is_coroutine: {is_coroutine}, {type(result)}, {result}")
-            if is_coroutine:
+            if asyncio.iscoroutine(result):
                 result = await result
 
         except BaseException as exc:
