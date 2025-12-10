@@ -11,7 +11,6 @@ but then runs it in the context of the frozen agent built environment.
 from __future__ import annotations
 
 import asyncio
-import inspect
 import os
 import sys
 import traceback
@@ -147,11 +146,12 @@ class AgentServicer(definitions.AgentServicer):
         was_it_raised = False
         stringized_tb = None
         try:
-            is_coroutine = inspect.iscoroutinefunction(function)
+            is_coroutine = asyncio.iscoroutinefunction(function)
+            self.log(f"is_coroutine: {is_coroutine}, {type(function)}, {function}")
             if is_coroutine:
                 result = await function(*extra_args)
             else:
-                result = function(*extra_args)
+                result = await function(*extra_args)
 
         except BaseException as exc:
             result = exc
