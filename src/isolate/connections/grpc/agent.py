@@ -11,6 +11,7 @@ but then runs it in the context of the frozen agent built environment.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 import sys
 import traceback
@@ -71,7 +72,7 @@ class AgentServicer(definitions.AgentServicer):
                         result,
                         was_it_raised,
                         stringized_tb,
-                    ) = self.execute_function(
+                    ) = await self.execute_function(
                         request.setup_func,
                         "setup",
                     )
@@ -97,7 +98,7 @@ class AgentServicer(definitions.AgentServicer):
             extra_args.append(self._run_cache[cache_key])
 
         try:
-            result, was_it_raised, stringized_tb = self.execute_function(
+            result, was_it_raised, stringized_tb = await self.execute_function(
                 request.function,
                 "function",
                 extra_args=extra_args,
@@ -112,7 +113,7 @@ class AgentServicer(definitions.AgentServicer):
             self.abort_with_msg(context, exc.message)
             return
 
-    def execute_function(
+    async def execute_function(
         self,
         function: definitions.SerializedObject,
         function_kind: str,
@@ -146,7 +147,12 @@ class AgentServicer(definitions.AgentServicer):
         was_it_raised = False
         stringized_tb = None
         try:
-            result = function(*extra_args)
+            is_coroutine = inspect.iscoroutinefunction(function)
+            if is_coroutine:
+                result = await function(*extra_args)
+            else:
+                result = function(*extra_args)
+
         except BaseException as exc:
             result = exc
             was_it_raised = True
