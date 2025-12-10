@@ -153,7 +153,13 @@ class AgentServicer(definitions.AgentServicer):
             num_frames = len(traceback.extract_stack()[:-5])
             stringized_tb = "".join(traceback.format_exc(limit=-num_frames))
 
-        self.log(f"Completed the execution of the {function_kind} function.")
+        if not was_it_raised:
+            self.log(f"Completed the execution of the {function_kind} function.")
+        else:
+            self.log(
+                f"Completed the execution of the {function_kind} function"
+                f" with an error: {result}\nTraceback:\n{stringized_tb}"
+            )
         return result, was_it_raised, stringized_tb
 
     def send_object(
