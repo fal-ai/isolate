@@ -146,12 +146,12 @@ class AgentServicer(definitions.AgentServicer):
         was_it_raised = False
         stringized_tb = None
         try:
-            is_coroutine = asyncio.iscoroutinefunction(function)
-            self.log(f"is_coroutine: {is_coroutine}, {type(function)}, {function}")
+            result = function(*extra_args)
+
+            is_coroutine = asyncio.iscoroutine(result)
+            self.log(f"is_coroutine: {is_coroutine}, {type(result)}, {result}")
             if is_coroutine:
-                result = await function(*extra_args)
-            else:
-                result = await function(*extra_args)
+                result = await result
 
         except BaseException as exc:
             result = exc
