@@ -203,6 +203,7 @@ class PythonIPC(PythonExecutionBase[AgentListener], IsolatedProcessConnection):
         executable: Path,
         connection: AgentListener,
         log_fd: int,
+        json_logs: bool = False,
     ) -> list[str | Path]:
         assert isinstance(connection.address, tuple)
         return [
@@ -217,6 +218,7 @@ class PythonIPC(PythonExecutionBase[AgentListener], IsolatedProcessConnection):
             self.environment.settings.serialization_method,
             "--log-fd",
             str(log_fd),
+            *(["--json-logs"] if json_logs else []),
         ]
 
     def handle_agent_log(

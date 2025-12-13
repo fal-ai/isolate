@@ -97,7 +97,13 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
         source: LogSource = LogSource.BUILDER,
     ) -> None:
         """Log a message."""
-        log_msg = Log(message, level=level, source=source, bound_env=self)
+        log_msg = Log(
+            message,
+            level=level,
+            source=source,
+            bound_env=self,
+            is_json=self.settings.json_logs,
+        )
         self.settings.log(log_msg)
 
 

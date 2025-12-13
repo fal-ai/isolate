@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -63,6 +64,7 @@ class Log:
     level: LogLevel = LogLevel.INFO
     bound_env: BaseEnvironment | None = field(default=None, repr=False)
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    is_json: bool = field(default=False)
 
     def __str__(self) -> str:
         parts = [self.timestamp.strftime("%m/%d/%Y %H:%M:%S")]
@@ -74,3 +76,23 @@ class Log:
         parts.append(f"[{self.source}]".ljust(10))
         parts.append(f"[{self.level}]".ljust(10))
         return " ".join(parts) + self.message
+
+    def message_str(self) -> str:
+        if self.is_json:
+            try:
+                parsed = json.loads(self.message)
+                return parsed["line"] if "line" in parsed else self.message
+            except json.JSONDecodeError:
+                return self.message
+        return self.message
+
+    def message_meta(self) -> dict:
+        if self.is_json:
+            try:
+                parsed = json.loads(self.message)
+                # return everything except the "line" field
+                del parsed["line"]
+                return parsed
+            except json.JSONDecodeError:
+                return {}
+        return {}
