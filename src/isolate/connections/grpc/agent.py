@@ -11,6 +11,8 @@ but then runs it in the context of the frozen agent built environment.
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import json
 import os
 import signal
 import sys
@@ -22,6 +24,8 @@ from typing import (
     Any,
     AsyncIterator,
     Iterable,
+    Iterator,
+    TextIO,
 )
 
 from grpc import StatusCode, aio, local_server_credentials
@@ -42,13 +46,43 @@ from isolate.connections.grpc.interface import from_grpc
 IDLE_TIMEOUT_SECONDS = int(os.getenv("ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS", "0"))
 
 
+def get_log_context() -> dict[str, Any]:
+    """Extract all contextvars that start with LOG_ prefix."""
+    result = {}
+    for var in contextvars.copy_context():
+        if var.name.startswith("LOG_"):
+            key = var.name[4:].lower()
+            try:
+                result[key] = var.get()
+            except LookupError:
+                pass
+    return result
+
+
+class JsonLogWriter:
+    """Wraps a file object to output JSON-formatted log lines."""
+
+    def __init__(self, wrapped: TextIO):
+        self._wrapped = wrapped
+
+    def write(self, message: str) -> int:
+        line = message.rstrip("\n")
+        record = {"line": line}
+        record.update(get_log_context())
+        self._wrapped.write(json.dumps(record) + "\n")
+        return len(message)
+
+    def flush(self) -> None:
+        self._wrapped.flush()
+
+
 @dataclass
 class AbortException(Exception):
     message: str
 
 
 class AgentServicer(definitions.AgentServicer):
-    def __init__(self, log_fd: int | None = None):
+    def __init__(self, log_file: TextIO | None = None):
         super().__init__()
 
         self._run_cache: dict[str, Any] = {}
@@ -58,6 +92,7 @@ class AgentServicer(definitions.AgentServicer):
         self._is_running = asyncio.Event()
         self._is_idle = asyncio.Event()
         self._is_idle.set()
+        self._log = log_file if log_file is not None else sys.stdout
 
         def handle_sigint(*args):
             self.log("SIGINT signal received, shutting down...")
@@ -305,10 +340,22 @@ def create_server(address: str) -> aio.Server:
     return server
 
 
-async def run_agent(address: str, log_fd: int | None = None) -> int:
+async def run_agent(address: str, log_fd: int | None = None, json_logs: bool = False) -> int:
     """Run the agent servicer on the given address."""
+    # Determine the base log file
+    if log_fd is None:
+        log_file: TextIO = sys.stdout
+    else:
+        log_file = os.fdopen(log_fd, "w")
+
+    # Apply JSON wrapper if requested
+    if json_logs:
+        sys.stdout = JsonLogWriter(sys.__stdout__)  # type: ignore[assignment]
+        sys.stderr = JsonLogWriter(sys.__stderr__)  # type: ignore[assignment]
+        log_file = JsonLogWriter(log_file)  # type: ignore[assignment]
+
     server = create_server(address)
-    servicer = AgentServicer(log_fd=log_fd)
+    servicer = AgentServicer(log_file=log_file)
 
     # This function just calls some methods on the server
     # and register a generic handler for the bridge. It does
@@ -335,9 +382,12 @@ async def main() -> int:
     parser = ArgumentParser()
     parser.add_argument("address", type=str)
     parser.add_argument("--log-fd", type=int)
+    parser.add_argument("--json-logs", action="store_true", default=False)
 
     options = parser.parse_args()
-    return await run_agent(options.address, log_fd=options.log_fd)
+    return await run_agent(
+        options.address, log_fd=options.log_fd, json_logs=options.json_logs
+    )
 
 
 if __name__ == "__main__":

@@ -102,6 +102,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
     environment: BaseEnvironment
     environment_path: Path
     extra_inheritance_paths: list[Path] = field(default_factory=list)
+    json_logs: bool = True
 
     @contextmanager
     def start_process(
@@ -191,6 +192,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
         executable: Path,
         connection: ConnectionType,
         log_fd: int,
+        json_logs: bool = False,
     ) -> list[str | Path]:
         """Return the command to run the agent process with."""
         raise NotImplementedError
