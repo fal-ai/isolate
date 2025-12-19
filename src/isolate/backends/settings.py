@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 _SYSTEM_TEMP_DIR = Path(tempfile.gettempdir())
 _STRICT_CACHE = os.getenv("ISOLATE_STRICT_CACHE", "0") == "1"
-JSON_LOGS = os.getenv("ISOLATE_JSON_LOGS", "false") == "true"
+JSON_LOGS = os.getenv("ISOLATE_JSON_LOGS", "0") == "1"
 
 
 @dataclass(frozen=True)
