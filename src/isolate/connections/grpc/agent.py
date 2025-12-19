@@ -47,7 +47,9 @@ def get_log_context() -> dict[str, Any]:
         if var.name.startswith("LOG_"):
             key = var.name[4:].lower()
             try:
-                result[key] = var.get()
+                value = var.get()
+                if value is not Ellipsis:
+                    result[key] = var.get()
             except LookupError:
                 pass
     return result

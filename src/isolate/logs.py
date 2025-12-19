@@ -65,6 +65,7 @@ class Log:
     bound_env: BaseEnvironment | None = field(default=None, repr=False)
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     is_json: bool = field(default=False)
+    _parsed_message: dict | None = field(default=None, init=False, repr=False)
 
     def __str__(self) -> str:
         parts = [self.timestamp.strftime("%m/%d/%Y %H:%M:%S")]
@@ -78,21 +79,24 @@ class Log:
         return " ".join(parts) + self.message
 
     def message_str(self) -> str:
-        if self.is_json:
-            try:
-                parsed = json.loads(self.message)
-                return parsed["line"] if "line" in parsed else self.message
-            except json.JSONDecodeError:
-                return self.message
-        return self.message
+        parsed = self.from_json()
+        return parsed["line"] if "line" in parsed else self.message
 
     def message_meta(self) -> dict:
-        if self.is_json:
-            try:
-                parsed = json.loads(self.message)
-                # return everything except the "line" field
-                del parsed["line"]
-                return parsed
-            except json.JSONDecodeError:
-                return {}
-        return {}
+        parsed = self.from_json()
+        if "line" in parsed:
+            # The metadata is everything except the actual log line.
+            return {k: v for k, v in parsed.items() if k != "line"}
+        return parsed
+
+    def from_json(self) -> dict[str, str]:
+        if not self.is_json:
+            return {}
+        if self._parsed_message is not None:
+            return self._parsed_message
+        try:
+            self._parsed_message = json.loads(self.message)
+            return self._parsed_message
+        except json.JSONDecodeError:
+            self._parsed_message = {}
+            return self._parsed_message
