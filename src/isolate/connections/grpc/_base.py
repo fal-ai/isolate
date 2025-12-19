@@ -20,6 +20,10 @@ from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc
 from isolate.logs import LogLevel, LogSource
 
+PROCESS_SHUTDOWN_TIMEOUT_SECONDS = float(
+    os.getenv("ISOLATE_SHUTDOWN_GRACE_PERIOD", "60")
+)
+
 
 class AgentError(Exception):
     """An internal problem caused by (most probably) the agent."""
@@ -37,6 +41,9 @@ class GRPCExecutionBase(EnvironmentConnection):
     def start_agent(self) -> ContextManager[Tuple[str, grpc.ChannelCredentials]]:
         """Starts the gRPC agent and returns the address it is listening on and
         the required credentials to connect to it."""
+        raise NotImplementedError
+
+    def abort_agent(self) -> None:
         raise NotImplementedError
 
     @contextmanager
@@ -120,6 +127,8 @@ class GRPCExecutionBase(EnvironmentConnection):
 
 
 class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
+    _process: Union[None, subprocess.Popen] = None
+
     @contextmanager
     def start_agent(self) -> Iterator[Tuple[str, grpc.ChannelCredentials]]:
         def find_free_port() -> Tuple[str, int]:
@@ -130,23 +139,24 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
 
         host, port = find_free_port()
         address = f"{host}:{port}"
-        process = None
+        self._process = None
         try:
             with self.start_process(address) as process:
+                self._process = process
                 yield address, grpc.local_channel_credentials()
         finally:
-            self.terminate_process(process)
+            self.abort_agent()
 
-    def terminate_process(self, process: Union[None, subprocess.Popen]) -> None:
-        if process is not None:
+    def abort_agent(self) -> None:
+        if self._process is not None:
             try:
                 print("Terminating the agent process...")
-                process.terminate()
-                process.wait(timeout=PROCESS_SHUTDOWN_TIMEOUT_SECONDS)
+                self._process.terminate()
+                self._process.wait(timeout=PROCESS_SHUTDOWN_TIMEOUT_SECONDS)
                 print("Agent process shutdown gracefully")
             except Exception as exc:
                 print(f"Failed to shutdown the agent process gracefully: {exc}")
-                process.kill()
+                self._process.kill()
 
     def get_python_cmd(
         self,

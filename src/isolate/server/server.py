@@ -75,6 +75,8 @@ class RunnerAgent:
     message_queue: Queue[definitions.PartialRunResult]
     _bound_context: ExitStack
     _channel_state_history: list[grpc.ChannelConnectivity] = field(default_factory=list)
+    _connection: LocalPythonGRPC | None = None
+    _aborted: bool = False
 
     def __post_init__(self):
         def switch_state(connectivity_update: grpc.ChannelConnectivity) -> None:
@@ -103,6 +105,9 @@ class RunnerAgent:
         return self.is_accessible
 
     def terminate(self) -> None:
+        self._aborted = True
+        if self._connection:
+            self._connection.abort_agent()
         self._bound_context.close()
 
 
@@ -153,7 +158,7 @@ class BridgeManager:
         stub = bound_context.enter_context(
             connection._establish_bridge(max_wait_timeout=MAX_GRPC_WAIT_TIMEOUT)
         )
-        return RunnerAgent(stub, queue, bound_context)
+        return RunnerAgent(stub, queue, bound_context, [], connection)
 
     def _identify(self, connection: LocalPythonGRPC) -> tuple[Any, ...]:
         return (
@@ -311,7 +316,15 @@ class IsolateServicer(definitions.IsolateServicer):
                 if exception is not None:
                     # If this is an RPC error, propagate it as is without any
                     # further processing.
+
                     if isinstance(exception, grpc.RpcError):
+                        # on abort, we terminate the process before we close the channel
+                        # because we need to populate SIGTERM to the agent process
+                        if (
+                            agent._aborted
+                            and exception.code() == StatusCode.UNAVAILABLE
+                        ):
+                            return
                         raise GRPCException(
                             str(exception),
                             exception.code(),
