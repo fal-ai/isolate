@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
 import sys
 import traceback
 from argparse import ArgumentParser
@@ -51,6 +52,12 @@ class AgentServicer(definitions.AgentServicer):
         self._run_cache: dict[str, Any] = {}
         self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
         self._thread_pool = futures.ThreadPoolExecutor(max_workers=1)
+
+        def handle_termination(*args):
+            self.log("Termination signal received, shutting down...")
+            signal.raise_signal(signal.SIGTERM)
+
+        signal.signal(signal.SIGINT, handle_termination)
 
     async def Run(
         self,
