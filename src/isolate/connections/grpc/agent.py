@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import signal
 import sys
 import traceback
 from argparse import ArgumentParser
@@ -235,15 +234,6 @@ def create_server(address: str) -> aio.Server:
         maximum_concurrent_rpcs=2,
         options=get_default_options(),
     )
-
-    loop = asyncio.get_event_loop()
-
-    def shutdown(*args):
-        print("Shutting down...", args)
-        exit(0)
-
-    loop.add_signal_handler(signal.SIGINT, shutdown)
-    loop.add_signal_handler(signal.SIGTERM, shutdown)
 
     # Local server credentials allow us to ensure that the
     # connection is established by a local process.
