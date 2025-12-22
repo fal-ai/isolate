@@ -51,8 +51,9 @@ def isolate_server_subprocess(monkeypatch):
 
     monkeypatch.setenv("ISOLATE_SHUTDOWN_GRACE_PERIOD", "2")
 
+    # Bind only to the loopback interface to avoid exposing the socket on all interfaces
     with socket.socket() as s:
-        s.bind(("", 0))
+        s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
 
     process = subprocess.Popen(
