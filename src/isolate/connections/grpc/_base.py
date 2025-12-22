@@ -20,10 +20,6 @@ from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc
 from isolate.logs import LogLevel, LogSource
 
-PROCESS_SHUTDOWN_TIMEOUT_SECONDS = float(
-    os.getenv("ISOLATE_SHUTDOWN_GRACE_PERIOD", "60")
-)
-
 
 class AgentError(Exception):
     """An internal problem caused by (most probably) the agent."""
