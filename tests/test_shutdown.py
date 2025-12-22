@@ -20,6 +20,8 @@ from isolate.server.server import BridgeManager, IsolateServicer, RunnerAgent, R
 def create_run_request(func, *args, **kwargs):
     """Convert a Python function into a BoundFunction request for stub.Run()."""
     bound_function = functools.partial(func, *args, **kwargs)
+    if getattr(func, "_run_as_main_thread", False):
+        setattr(bound_function, "_run_as_main_thread", True)
     serialized_function = to_serialized_object(bound_function, method="cloudpickle")
 
     env_def = EnvironmentDefinition()
@@ -156,6 +158,8 @@ def test_running_function_receives_sigterm(isolate_server_subprocess, tmp_path):
         signal.signal(signal.SIGTERM, handle_term)
 
         time.sleep(30)  # Simulate long-running task
+
+    func_with_sigterm_handler._run_as_main_thread = True
 
     sigterm_file_path = tmp_path.joinpath("sigterm_test")
 

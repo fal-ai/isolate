@@ -19,6 +19,108 @@ def func_to_submit() -> str:
     return "hello"
 
 
+async def app_to_submit() -> None:
+    import os
+    import time
+    from contextlib import asynccontextmanager
+    from typing import Any, AsyncGenerator, Callable, ClassVar
+
+    import uvicorn
+    from fastapi import FastAPI
+
+    class BaseServable:
+        version: ClassVar[str] = "unknown"
+
+        def collect_routes(self) -> dict[str, Callable[..., Any]]:
+            raise NotImplementedError
+
+        def _add_extra_middlewares(self, app: FastAPI) -> None:
+            """
+            For subclasses to add extra middlewares to the app.
+            """
+            pass
+
+        def _add_extra_routes(self, app: FastAPI) -> None:
+            pass
+
+        @asynccontextmanager
+        async def lifespan(self, app: FastAPI) -> AsyncGenerator[None, None]:
+            yield
+
+        def _build_app(self) -> FastAPI:
+            from fastapi.middleware.cors import CORSMiddleware
+
+            _app = FastAPI(
+                lifespan=self.lifespan,
+                root_path=os.getenv("FAL_APP_ROOT_PATH") or "",
+            )
+
+            _app.add_middleware(
+                CORSMiddleware,
+                allow_credentials=True,
+                allow_headers=("*"),
+                allow_methods=("*"),
+                allow_origins=("*"),
+            )
+
+            self._add_extra_middlewares(_app)
+
+            routes = self.collect_routes()
+            if not routes:
+                raise ValueError("An application must have at least one route!")
+
+            for path, endpoint in routes.items():
+                _app.add_api_route(
+                    path,
+                    endpoint,
+                    name=endpoint.__name__,
+                    methods=["POST"],
+                )
+
+            self._add_extra_routes(_app)
+
+            return _app
+
+        async def serve(self) -> None:
+            app = self._build_app()
+
+            server = uvicorn.Server(
+                config=uvicorn.Config(
+                    app,
+                    host="0.0.0.0",
+                    port=8080,
+                    timeout_keep_alive=300,
+                    lifespan="on",
+                )
+            )
+
+            await server.serve()
+
+    class FalApp(BaseServable):
+        def collect_routes(self) -> dict[str, Callable[..., Any]]:
+            return {
+                "/": self.index,
+                "/run": self.run,
+            }
+
+        def index(self) -> dict[str, Any]:
+            return {"message": "Hello, World!"}
+
+        def run(self) -> dict[str, Any]:
+            sleep = 5
+            for i in range(sleep):
+                time.sleep(1)
+                print(f"sleeping {i} of {sleep}")
+
+            return {"message": f"Done sleeping for {sleep} seconds"}
+
+    app = FalApp()
+    await app.serve()
+
+
+setattr(app_to_submit, "_run_as_main_thread", True)
+
+
 def describe_rpc_error(error: grpc.RpcError) -> str:
     detail = error.details() if hasattr(error, "details") else ""
     if detail:
