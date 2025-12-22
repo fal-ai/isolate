@@ -537,7 +537,20 @@ def test_bridge_connection_reuse_logs(
     run_request(stub, request, user_logs=logs)
     run_request(stub, request, user_logs=logs)
 
-    str_logs = [log.message for log in logs if log.message]
+    str_logs = [
+        log.message
+        for log in logs
+        if log.message
+        and not any(
+            warning in log.message
+            for warning in [
+                "WARNING: All log messages before absl::InitializeLog() is called are "
+                "written to STDERR",
+                "Other threads are currently calling into gRPC, skipping fork() "
+                "handlers",
+            ]
+        )
+    ]
     assert str_logs[:4] == [
         "setup",
         "run",
@@ -714,8 +727,7 @@ def test_server_proper_error_delegation(
 
     assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
     assert (
-        "Error while serializing the execution result "
-        "(object of type <class 'frame'>)."
+        "Error while serializing the execution result (object of type <class 'frame'>)."
     ) in exc_info.value.details()
     assert not user_logs
 
