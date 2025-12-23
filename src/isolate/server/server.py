@@ -76,7 +76,7 @@ class RunnerAgent:
     _bound_context: ExitStack
     _channel_state_history: list[grpc.ChannelConnectivity] = field(default_factory=list)
     _connection: LocalPythonGRPC | None = None
-    _aborted: bool = False
+    _terminated: bool = False
 
     def __post_init__(self):
         def switch_state(connectivity_update: grpc.ChannelConnectivity) -> None:
@@ -105,7 +105,15 @@ class RunnerAgent:
         return self.is_accessible
 
     def terminate(self) -> None:
-        self._aborted = True
+        """
+        Abort the agent first, then close the bound context.
+
+        Closing the ExitStack tears down the gRPC channel; doing that before
+        terminating the agent triggers an asyncio.CancelledError mid-request and
+        the agent never receives SIGTERM. By aborting first we deliver SIGTERM
+        while the connection is still alive, then close it.
+        """
+        self._terminated = True
         if self._connection:
             self._connection.abort_agent()
         self._bound_context.close()
@@ -321,7 +329,7 @@ class IsolateServicer(definitions.IsolateServicer):
                         # on abort, we terminate the process before we close the channel
                         # because we need to populate SIGTERM to the agent process
                         if (
-                            agent._aborted
+                            agent._terminated
                             and exception.code() == StatusCode.UNAVAILABLE
                         ):
                             return

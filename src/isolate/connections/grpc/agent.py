@@ -155,6 +155,13 @@ class AgentServicer(definitions.AgentServicer):
         was_it_raised = False
         stringized_tb = None
         try:
+            # Newer fal SDK will mark async entrypoints with `_run_as_main_thread` so
+            # we execute on the main loop and can await the coroutine they return.
+            # Older fal SDK still call `asyncio.run(...)`.
+            # To avoid error "asyncio.run() cannot be called from a running event loop"
+            # and be backward compatible,
+            # we offload those unflagged functions to a thread pool.
+
             if getattr(function, "_run_as_main_thread", False):
                 result = function(*extra_args)
             else:
