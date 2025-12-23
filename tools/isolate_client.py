@@ -118,7 +118,7 @@ async def app_to_submit() -> None:
     await app.serve()
 
 
-setattr(app_to_submit, "_run_as_main_thread", True)
+setattr(app_to_submit, "_run_on_main_thread", True)
 
 
 def describe_rpc_error(error: grpc.RpcError) -> str:
