@@ -27,7 +27,7 @@ class IsolateSettings:
     serialization_method: str = "pickle"
     log_hook: Callable[[Log], None] = print
     strict_cache: bool = _STRICT_CACHE
-    json_logs: bool = JSON_LOGS
+    json_logs: bool = True
 
     def log(self, log: Log) -> None:
         self.log_hook(self._infer_log_level(log))

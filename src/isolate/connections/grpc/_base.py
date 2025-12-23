@@ -139,6 +139,7 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
         log_fd: int,
         json_logs: bool = False,
     ) -> List[Union[str, Path]]:
+        json_logs = True
         return [
             executable,
             agent_startup.__file__,

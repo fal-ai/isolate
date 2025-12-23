@@ -102,7 +102,7 @@ class BaseEnvironment(Generic[ConnectionKeyType]):
             level=level,
             source=source,
             bound_env=self,
-            is_json=self.settings.json_logs,
+            is_json=True,
         )
         self.settings.log(log_msg)
 
