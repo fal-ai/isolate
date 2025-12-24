@@ -62,14 +62,15 @@ def test_json_logs():
     assert meta == {}
 
     malformed_json_log = Log(
-        message='{"line": "This is a log line", "user_id": 123, "task": "test"',  # Missing closing brace
+        # Missing closing brace
+        message='{"line": "This is a line", "user_id": 123, "task": "test"',
         source=LogSource.USER,
         level=LogLevel.INFO,
         is_json=True,
     )
     assert (
         malformed_json_log.message_str()
-        == '{"line": "This is a log line", "user_id": 123, "task": "test"'
+        == '{"line": "This is a line", "user_id": 123, "task": "test"'
     )
     meta = malformed_json_log.message_meta()
     assert meta == {}
