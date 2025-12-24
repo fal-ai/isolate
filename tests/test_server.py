@@ -1,5 +1,7 @@
+import asyncio
 import copy
 import textwrap
+import threading
 from concurrent import futures
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -164,6 +166,8 @@ def prepare_request(function, *args, **kwargs):
     function.__qualname__ = f"__main__.{function.__name__}"
 
     basic_function = partial(function, *args, **kwargs)
+    if getattr(function, "_run_on_main_thread", False):
+        setattr(basic_function, "_run_on_main_thread", True)
     environment = define_environment("virtualenv", requirements=[])
     return definitions.BoundFunction(
         function=to_serialized_object(basic_function, method="dill"),
@@ -873,3 +877,64 @@ def test_server_single_use_run(
         stub.List(definitions.ListRequest())
 
     assert exc_info.value.code() == grpc.StatusCode.UNAVAILABLE
+
+
+def test_server_run_on_main_thread(
+    stub: definitions.IsolateStub,
+    monkeypatch: Any,
+) -> None:
+    inherit_from_local(monkeypatch)
+
+    def func_should_fail_on_main_thread():
+        if threading.current_thread() == threading.main_thread():
+            raise RuntimeError("should fail on main thread")
+        else:
+            return "should succeed on non-main thread"
+
+    result = from_grpc(
+        run_request(stub, prepare_request(func_should_fail_on_main_thread))
+    )
+    assert result == "should succeed on non-main thread"
+
+    setattr(func_should_fail_on_main_thread, "_run_on_main_thread", True)
+    with pytest.raises(RuntimeError):
+        from_grpc(run_request(stub, prepare_request(func_should_fail_on_main_thread)))
+
+
+def test_server_async_function(
+    stub: definitions.IsolateStub,
+    monkeypatch: Any,
+) -> None:
+    inherit_from_local(monkeypatch)
+
+    async def myasyncfunc():
+        await asyncio.sleep(0.1)
+        return "async function"
+
+    result = from_grpc(run_request(stub, prepare_request(myasyncfunc)))
+    assert result == "async function"
+
+    setattr(myasyncfunc, "_run_on_main_thread", True)
+    result = from_grpc(run_request(stub, prepare_request(myasyncfunc)))
+    assert result == "async function"
+
+
+def test_server_asyncio_run_function(
+    stub: definitions.IsolateStub,
+    monkeypatch: Any,
+) -> None:
+    inherit_from_local(monkeypatch)
+
+    def asyncio_run_function():
+        async def myasyncfunc():
+            await asyncio.sleep(0.1)
+            return "async function"
+
+        return asyncio.run(myasyncfunc())
+
+    result = from_grpc(run_request(stub, prepare_request(asyncio_run_function)))
+    assert result == "async function"
+
+    setattr(asyncio_run_function, "_run_on_main_thread", True)
+    with pytest.raises(RuntimeError):
+        from_grpc(run_request(stub, prepare_request(asyncio_run_function)))
