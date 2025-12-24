@@ -16,6 +16,7 @@ import json
 import os
 import signal
 import sys
+import threading
 import traceback
 from argparse import ArgumentParser
 from concurrent import futures
@@ -61,21 +62,91 @@ def get_log_context() -> dict[str, Any]:
     return result
 
 
-class JsonLogWriter:
-    """Wraps a file object to output JSON-formatted log lines."""
+class JsonStdoutProxy:
+    """
+    A proxy around a real text stream (usually sys.__stdout__).
+    - Intercepts write/writelines and emits JSON lines with contextvars
+    - Delegates everything else to the wrapped stream to preserve compatibility.
+    - Avoids recursion by always writing to the underlying stream.
+    """
 
-    def __init__(self, wrapped: TextIO):
-        self._wrapped = wrapped
+    def __init__(self, underlying):
+        self._u = underlying
+        self._local = threading.local()
 
-    def write(self, message: str) -> int:
-        line = message.rstrip("\n")
-        record = {"line": line}
-        record.update(get_log_context())
-        self._wrapped.write(json.dumps(record) + "\n")
-        return len(message)
+    def write(self, s: str) -> int:
+        # Many libs call write(""); keep semantics cheap.
+        if not s:
+            return 0
+
+        # Prevent re-entrancy if something in encoding/IO calls back into sys.stdout.
+        if getattr(self._local, "in_write", False):
+            return self._u.write(s)
+
+        self._local.in_write = True
+        try:
+            # Preserve "print" behavior: print() typically writes text
+            # possibly with '\n'
+            # Emit one JSON object per line. Keep partial lines buffered per-thread.
+            buf = getattr(self._local, "buf", "")
+            buf += s
+            lines = buf.splitlines(keepends=True)
+
+            out_count = 0
+            new_buf = ""
+
+            for chunk in lines:
+                if chunk.endswith("\n") or chunk.endswith("\r\n"):
+                    msg = chunk.rstrip("\r\n")
+                    payload = self._format_record(msg)
+                    out_count += self._u.write(payload + "\n")
+                else:
+                    # Incomplete line: keep buffering
+                    new_buf += chunk
+
+            self._local.buf = new_buf
+            return len(s)
+        finally:
+            self._local.in_write = False
 
     def flush(self) -> None:
-        self._wrapped.flush()
+        # Flush any buffered partial line as a final record (optional choice).
+        if getattr(self._local, "in_write", False):
+            return self._u.flush()
+
+        buf = getattr(self._local, "buf", "")
+        if buf:
+            self._local.buf = ""
+            payload = self._format_record(buf)
+            self._u.write(payload + "\n")
+        self._u.flush()
+
+    def writelines(self, lines: list[str]) -> None:
+        for line in lines:
+            self.write(line)
+
+    def _format_record(self, message: str) -> str:
+        record = {
+            "line": message,
+        }
+        # Add the log context to the json so we propagate contextvars
+        record.update(get_log_context())
+        return json.dumps(record, ensure_ascii=False)
+
+    def __getattr__(self, name: str) -> Any:
+        # Delegate missing attrs/methods to underlying stream
+        # (isatty, fileno, encoding, etc.)
+        return getattr(self._u, name)
+
+    def __iter__(self):
+        return iter(self._u)
+
+    def __enter__(self):
+        self._u.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return self._u.__exit__(exc_type, exc, tb)
 
 
 @dataclass
@@ -352,9 +423,9 @@ async def run_agent(address: str, log_fd: int | None = None, json_logs: bool = F
 
     # Apply JSON wrapper if requested
     if json_logs:
-        sys.stdout = JsonLogWriter(sys.__stdout__)  # type: ignore[assignment]
-        sys.stderr = JsonLogWriter(sys.__stderr__)  # type: ignore[assignment]
-        log_file = JsonLogWriter(log_file)  # type: ignore[assignment]
+        sys.stdout = JsonStdoutProxy(sys.__stdout__)  # type: ignore[assignment]
+        sys.stderr = JsonStdoutProxy(sys.__stderr__)  # type: ignore[assignment]
+        log_file = JsonStdoutProxy(log_file)  # type: ignore[assignment]
 
     server = create_server(address)
     servicer = AgentServicer(log_file=log_file)
