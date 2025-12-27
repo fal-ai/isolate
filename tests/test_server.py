@@ -610,6 +610,13 @@ def kill_machine():
     os._exit(1)
 
 
+def long_running():
+    import time
+
+    while True:
+        time.sleep(0.1)
+
+
 def get_pid_as_exc():
     import os
 
@@ -729,6 +736,37 @@ def test_server_proper_error_delegation(
         "(object of type <class 'Exception'>)."
     ) in exc_info.value.details()
     assert "relevant information" in "\n".join(log.message for log in user_logs)
+
+
+@pytest.mark.parametrize(
+    "interceptors",
+    [
+        [SingleTaskInterceptor()],
+    ],
+)
+def test_run_single_use_cancellation_clears_task(
+    stub: definitions.IsolateStub, monkeypatch: Any
+) -> None:
+    import time
+
+    inherit_from_local(monkeypatch)
+
+    call = stub.Run(prepare_request(long_running))
+
+    # Give the call a moment to start and register the task/agent.
+    time.sleep(0.2)
+    call.cancel()
+
+    with pytest.raises(grpc.RpcError) as exc_info:
+        list(call)
+
+    assert exc_info.value.code() == grpc.StatusCode.CANCELLED
+
+    # In single-use mode the server should shut down after the first Run
+    # (even if cancelled), so subsequent calls should fail.
+    with pytest.raises(grpc.RpcError) as exc_info:
+        stub.List(definitions.ListRequest())
+    assert exc_info.value.code() == grpc.StatusCode.UNAVAILABLE
 
 
 def myfunc(path):

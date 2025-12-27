@@ -169,23 +169,31 @@ class BridgeManager:
                 agent.terminate()
 
 
+TASK_CANCEL_TIMEOUT = 5
+
+
 @dataclass
 class RunTask:
+    task_id: str
     request: definitions.BoundFunction
     future: futures.Future | None = None
     agent: RunnerAgent | None = None
     logger: IsolateLogger = field(default_factory=IsolateLogger.from_env)
 
     def cancel(self):
-        while True:
+        if self.future:
             self.future.cancel()
-            if self.agent:
-                self.agent.terminate()
             try:
-                self.future.exception(timeout=0.1)
-                return
+                futures.wait([self.future], timeout=TASK_CANCEL_TIMEOUT)
             except futures.TimeoutError:
-                pass
+                self.logger.log(
+                    LogLevel.WARNING,
+                    f"Timed out waiting for cancelled task {self.task_id} to finish",
+                    LogSource.BRIDGE,
+                )
+
+        if self.agent:
+            self.agent.terminate()
 
     @property
     def stream_logs(self) -> bool:
@@ -332,28 +340,27 @@ class IsolateServicer(definitions.IsolateServicer):
         request: definitions.SubmitRequest,
         context: ServicerContext,
     ) -> definitions.SubmitResponse:
-        task = RunTask(request=request.function)
+        task = RunTask(task_id=str(uuid.uuid4()), request=request.function)
         self.set_metadata(task, request.metadata)
 
         task.future = self._thread_pool.submit(self._run_task_in_background, task)
-        task_id = str(uuid.uuid4())
 
-        print(f"Submitted a task {task_id}")
+        print(f"Submitted a task {task.task_id}")
 
-        self.background_tasks[task_id] = task
+        self.background_tasks[task.task_id] = task
 
         def _callback(future: futures.Future) -> None:
-            msg = f"Task {task_id} finished with"
+            msg = f"Task {task.task_id} finished with"
             if exc := future.exception():
                 msg += f" error: {exc!r}"
             else:
                 msg += f" result: {future.result()!r}"
             print(msg)
-            self.background_tasks.pop(task_id, None)
+            self.background_tasks.pop(task.task_id, None)
 
         task.future.add_done_callback(_callback)
 
-        return definitions.SubmitResponse(task_id=task_id)
+        return definitions.SubmitResponse(task_id=task.task_id)
 
     def SetMetadata(
         self,
@@ -378,12 +385,13 @@ class IsolateServicer(definitions.IsolateServicer):
         request: definitions.BoundFunction,
         context: ServicerContext,
     ) -> Iterator[definitions.PartialRunResult]:
+        task_id = "RUN"
         try:
-            task = RunTask(request=request)
+            task = RunTask(task_id=task_id, request=request)
 
             # HACK: we can support only one task at a time
             # TODO: move away from this when we use submit for env-aware tasks
-            self.background_tasks["RUN"] = task
+            self.background_tasks[task_id] = task
             yield from self._run_task(task)
         except GRPCException as exc:
             return self.abort_with_msg(
@@ -392,7 +400,7 @@ class IsolateServicer(definitions.IsolateServicer):
                 code=exc.code,
             )
         finally:
-            self.background_tasks.pop("RUN", None)
+            self.background_tasks.pop(task_id, None)
 
     def List(
         self,
@@ -584,6 +592,11 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                 def termination() -> None:
                     if is_run:
                         print("Stopping server since run is finished")
+
+                        task = self.servicer.background_tasks.get("RUN")
+                        if task:
+                            task.cancel()
+
                         # Stop the server after the Run task is finished
                         self.server.stop(grace=0.1)
 
