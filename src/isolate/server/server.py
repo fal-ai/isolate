@@ -493,8 +493,13 @@ class LogHandler:
     task: RunTask
 
     def handle(self, log: Log) -> None:
-        if not SKIP_EMPTY_LOGS or log.message.strip():
-            self.task.logger.log(log.level, log.message, source=log.source)
+        if not SKIP_EMPTY_LOGS or log.message_str().strip():
+            self.task.logger.log(
+                log.level,
+                log.message_str(),
+                source=log.source,
+                line_labels=log.message_meta(),
+            )
             self._add_log_to_queue(log)
 
     def _add_log_to_queue(self, log: Log) -> None:

@@ -49,7 +49,7 @@ def _(message: definitions.Log) -> Log:
 @to_grpc.register
 def _(obj: Log) -> definitions.Log:
     return definitions.Log(
-        message=obj.message,
+        message=obj.message_str(),
         source=definitions.LogSource.Value(obj.source.name.upper()),
         level=definitions.LogLevel.Value(obj.level.name.upper()),
         timestamp=timestamp.from_datetime(obj.timestamp),

@@ -10,8 +10,11 @@ but then runs it in the context of the frozen agent built environment.
 
 from __future__ import annotations
 
+import contextvars
+import json
 import os
 import sys
+import threading
 import traceback
 from argparse import ArgumentParser
 from concurrent import futures
@@ -20,6 +23,7 @@ from typing import (
     Any,
     Iterable,
     Iterator,
+    TextIO,
 )
 
 import grpc
@@ -37,17 +41,119 @@ from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc
 
 
+def get_log_context() -> dict[str, Any]:
+    """Extract all contextvars that start with LOG_ prefix."""
+    result = {}
+    for var in contextvars.copy_context():
+        if var.name.startswith("LOG_"):
+            key = var.name[4:].lower()
+            try:
+                value = var.get()
+                if value is not Ellipsis:
+                    result[key] = var.get()
+            except LookupError:
+                pass
+    return result
+
+
+class JsonStdoutProxy:
+    """
+    A proxy around a real text stream (usually sys.__stdout__).
+    - Intercepts write/writelines and emits JSON lines with contextvars
+    - Delegates everything else to the wrapped stream to preserve compatibility.
+    - Avoids recursion by always writing to the underlying stream.
+    """
+
+    def __init__(self, underlying):
+        self._u = underlying
+        self._local = threading.local()
+
+    def write(self, s: str) -> int:
+        # Many libs call write(""); keep semantics cheap.
+        if not s:
+            return 0
+
+        # Prevent re-entrancy if something in encoding/IO calls back into sys.stdout.
+        if getattr(self._local, "in_write", False):
+            return self._u.write(s)
+
+        self._local.in_write = True
+        try:
+            # Preserve "print" behavior: print() typically writes text
+            # possibly with '\n'
+            # Emit one JSON object per line. Keep partial lines buffered per-thread.
+            buf = getattr(self._local, "buf", "")
+            buf += s
+            lines = buf.splitlines(keepends=True)
+
+            out_count = 0
+            new_buf = ""
+
+            for chunk in lines:
+                if chunk.endswith("\n") or chunk.endswith("\r\n"):
+                    msg = chunk.rstrip("\r\n")
+                    payload = self._format_record(msg)
+                    out_count += self._u.write(payload + "\n")
+                else:
+                    # Incomplete line: keep buffering
+                    new_buf += chunk
+
+            self._local.buf = new_buf
+            return len(s)
+        finally:
+            self._local.in_write = False
+
+    def flush(self) -> None:
+        # Flush any buffered partial line as a final record (optional choice).
+        if getattr(self._local, "in_write", False):
+            return self._u.flush()
+
+        buf = getattr(self._local, "buf", "")
+        if buf:
+            self._local.buf = ""
+            payload = self._format_record(buf)
+            self._u.write(payload + "\n")
+        self._u.flush()
+
+    def writelines(self, lines: list[str]) -> None:
+        for line in lines:
+            self.write(line)
+
+    def _format_record(self, message: str) -> str:
+        record = {
+            "line": message,
+        }
+        # Add the log context to the json so we propagate contextvars
+        record.update(get_log_context())
+        return json.dumps(record, ensure_ascii=False)
+
+    def __getattr__(self, name: str) -> Any:
+        # Delegate missing attrs/methods to underlying stream
+        # (isatty, fileno, encoding, etc.)
+        return getattr(self._u, name)
+
+    def __iter__(self):
+        return iter(self._u)
+
+    def __enter__(self):
+        self._u.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return self._u.__exit__(exc_type, exc, tb)
+
+
 @dataclass
 class AbortException(Exception):
     message: str
 
 
 class AgentServicer(definitions.AgentServicer):
-    def __init__(self, log_fd: int | None = None):
+    def __init__(self, log_file: TextIO | None = None):
         super().__init__()
 
         self._run_cache: dict[str, Any] = {}
-        self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
+        self._log = log_file if log_file is not None else sys.stdout
 
     def Run(
         self,
@@ -221,10 +327,22 @@ def create_server(address: str) -> grpc.Server:
     return server
 
 
-def run_agent(address: str, log_fd: int | None = None) -> int:
+def run_agent(address: str, log_fd: int | None = None, json_logs: bool = False) -> int:
     """Run the agent servicer on the given address."""
+    # Determine the base log file
+    if log_fd is None:
+        log_file: TextIO = sys.stdout
+    else:
+        log_file = os.fdopen(log_fd, "w")
+
+    # Apply JSON wrapper if requested
+    if json_logs:
+        sys.stdout = JsonStdoutProxy(sys.__stdout__)  # type: ignore[assignment]
+        sys.stderr = JsonStdoutProxy(sys.__stderr__)  # type: ignore[assignment]
+        log_file = JsonStdoutProxy(log_file)  # type: ignore[assignment]
+
     server = create_server(address)
-    servicer = AgentServicer(log_fd=log_fd)
+    servicer = AgentServicer(log_file=log_file)
 
     # This function just calls some methods on the server
     # and register a generic handler for the bridge. It does
@@ -240,9 +358,12 @@ def main() -> int:
     parser = ArgumentParser()
     parser.add_argument("address", type=str)
     parser.add_argument("--log-fd", type=int)
+    parser.add_argument("--json-logs", action="store_true", default=False)
 
     options = parser.parse_args()
-    return run_agent(options.address, log_fd=options.log_fd)
+    return run_agent(
+        options.address, log_fd=options.log_fd, json_logs=options.json_logs
+    )
 
 
 if __name__ == "__main__":

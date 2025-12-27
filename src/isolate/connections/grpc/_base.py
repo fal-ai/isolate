@@ -137,6 +137,7 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
         executable: Path,
         connection: str,
         log_fd: int,
+        json_logs: bool = False,
     ) -> List[Union[str, Path]]:
         return [
             executable,
@@ -145,6 +146,7 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
             connection,
             "--log-fd",
             str(log_fd),
+            *(["--json-logs"] if json_logs else []),
         ]
 
     def handle_agent_log(
