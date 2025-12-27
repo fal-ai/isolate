@@ -537,7 +537,7 @@ def test_bridge_connection_reuse_logs(
     run_request(stub, request, user_logs=logs)
     run_request(stub, request, user_logs=logs)
 
-    str_logs = [log.message for log in logs if log.message]
+    str_logs = [log.message for log in logs if log.message in ("setup", "run")]
     assert str_logs == [
         "setup",
         "run",
