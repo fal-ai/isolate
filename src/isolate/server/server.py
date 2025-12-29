@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import os
+import signal
 import threading
 import time
 import traceback
@@ -74,6 +75,8 @@ class RunnerAgent:
     message_queue: Queue[definitions.PartialRunResult]
     _bound_context: ExitStack
     _channel_state_history: list[grpc.ChannelConnectivity] = field(default_factory=list)
+    _connection: LocalPythonGRPC | None = None
+    _terminated: bool = False
 
     def __post_init__(self):
         def switch_state(connectivity_update: grpc.ChannelConnectivity) -> None:
@@ -102,6 +105,17 @@ class RunnerAgent:
         return self.is_accessible
 
     def terminate(self) -> None:
+        """
+        Abort the agent first, then close the bound context.
+
+        Closing the ExitStack tears down the gRPC channel; doing that before
+        terminating the agent triggers an asyncio.CancelledError mid-request and
+        the agent never receives SIGTERM. By aborting first we deliver SIGTERM
+        while the connection is still alive, then close it.
+        """
+        self._terminated = True
+        if self._connection:
+            self._connection.abort_agent()
         self._bound_context.close()
 
 
@@ -152,7 +166,7 @@ class BridgeManager:
         stub = bound_context.enter_context(
             connection._establish_bridge(max_wait_timeout=MAX_GRPC_WAIT_TIMEOUT)
         )
-        return RunnerAgent(stub, queue, bound_context)
+        return RunnerAgent(stub, queue, bound_context, [], connection)
 
     def _identify(self, connection: LocalPythonGRPC) -> tuple[Any, ...]:
         return (
@@ -178,11 +192,17 @@ class RunTask:
 
     def cancel(self):
         while True:
-            self.future.cancel()
+            # Cancelling a running future is not possible, and it sometimes blocks,
+            # which means we never terminate the agent. So check if it's not running
+            if self.future and not self.future.running():
+                self.future.cancel()
+
             if self.agent:
                 self.agent.terminate()
+
             try:
-                self.future.exception(timeout=0.1)
+                if self.future:
+                    self.future.exception(timeout=0.1)
                 return
             except futures.TimeoutError:
                 pass
@@ -197,6 +217,7 @@ class IsolateServicer(definitions.IsolateServicer):
     bridge_manager: BridgeManager
     default_settings: IsolateSettings = field(default_factory=IsolateSettings)
     background_tasks: dict[str, RunTask] = field(default_factory=dict)
+    _shutting_down: bool = field(default=False)
 
     _thread_pool: futures.ThreadPoolExecutor = field(
         default_factory=lambda: futures.ThreadPoolExecutor(max_workers=MAX_THREADS)
@@ -303,7 +324,15 @@ class IsolateServicer(definitions.IsolateServicer):
                 if exception is not None:
                     # If this is an RPC error, propagate it as is without any
                     # further processing.
+
                     if isinstance(exception, grpc.RpcError):
+                        # on abort, we terminate the process before we close the channel
+                        # because we need to populate SIGTERM to the agent process
+                        if (
+                            agent._terminated
+                            and exception.code() == StatusCode.UNAVAILABLE
+                        ):
+                            return
                         raise GRPCException(
                             str(exception),
                             exception.code(),
@@ -419,6 +448,17 @@ class IsolateServicer(definitions.IsolateServicer):
             task.cancel()
 
         return definitions.CancelResponse()
+
+    def shutdown(self) -> None:
+        if self._shutting_down:
+            print("Shutdown already in progress...")
+            return
+
+        self._shutting_down = True
+        task_count = len(self.background_tasks)
+        print(f"Shutting down, canceling {task_count} tasks...")
+        self.cancel_tasks()
+        print("All tasks canceled.")
 
     def watch_queue_until_completed(
         self, queue: Queue, is_completed: Callable[[], bool]
@@ -584,8 +624,10 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                 def termination() -> None:
                     if is_run:
                         print("Stopping server since run is finished")
+                        self.servicer.shutdown()
                         # Stop the server after the Run task is finished
                         self.server.stop(grace=0.1)
+                        print("Server stopped")
 
                     elif is_submit:
                         # Wait until the task_id is assigned
@@ -610,7 +652,9 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                                 # Small sleep to make sure the cancellation is processed
                                 time.sleep(0.1)
                                 print("Stopping server since the task is finished")
+                                self.servicer.shutdown()
                                 self.server.stop(grace=0.1)
+                                print("Server stopped")
 
                             # Add a callback which will stop the server
                             # after the task is finished
@@ -671,11 +715,20 @@ def main(argv: list[str] | None = None) -> None:
         definitions.register_isolate(servicer, server)
         health.register_health(HealthServicer(), server)
 
-        server.add_insecure_port("[::]:50001")
-        print("Started listening at localhost:50001")
+        def handle_termination(*args):
+            print("Termination signal received, shutting down...")
+            servicer.shutdown()
+            server.stop(grace=0.1)
+
+        signal.signal(signal.SIGINT, handle_termination)
+        signal.signal(signal.SIGTERM, handle_termination)
+
+        server.add_insecure_port(f"[::]:{options.port}")
+        print(f"Started listening at {options.host}:{options.port}")
 
         server.start()
         server.wait_for_termination()
+        print("Server shut down")
 
 
 if __name__ == "__main__":
