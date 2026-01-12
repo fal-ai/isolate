@@ -14,6 +14,7 @@ import asyncio
 import os
 import signal
 import sys
+import time
 import traceback
 from argparse import ArgumentParser
 from concurrent import futures
@@ -39,6 +40,8 @@ from isolate.connections.grpc import definitions
 from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc
 
+IDLE_TIMEOUT_SECONDS = int(os.getenv("ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS", "600"))
+
 
 @dataclass
 class AbortException(Exception):
@@ -52,14 +55,53 @@ class AgentServicer(definitions.AgentServicer):
         self._run_cache: dict[str, Any] = {}
         self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
         self._thread_pool = futures.ThreadPoolExecutor(max_workers=1)
+        self._timeout_seconds = IDLE_TIMEOUT_SECONDS
+        self._last_run_time = time.monotonic()
+        self._is_running = False
+        self._control_loop_task = asyncio.create_task(self._control_loop())
 
-        def handle_termination(*args):
-            self.log("Termination signal received, shutting down...")
+        def handle_sigint(*args):
+            self.log("SIGINT signal received, shutting down...")
             signal.raise_signal(signal.SIGTERM)
 
-        signal.signal(signal.SIGINT, handle_termination)
+        signal.signal(signal.SIGINT, handle_sigint)
+
+    async def _control_loop(self) -> None:
+        cancelled = False
+        while not cancelled:
+            if (
+                self._timeout_seconds > 0
+                and self.idle_time_seconds > self._timeout_seconds
+            ):
+                self.log(f"Idle for {self.idle_time_seconds} seconds, shutting down...")
+                cancelled = True
+                signal.raise_signal(signal.SIGTERM)
+
+            try:
+                await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                cancelled = True
+
+    @property
+    def idle_time_seconds(self) -> int:
+        if self._is_running:
+            return 0
+        return int(time.monotonic() - self._last_run_time)
 
     async def Run(
+        self,
+        request: definitions.FunctionCall,
+        context: aio.ServicerContext,
+    ) -> AsyncIterator[PartialRunResult]:
+        self._is_running = True
+        try:
+            async for result in self._Run(request, context):
+                yield result
+        finally:
+            self._is_running = False
+            self._last_run_time = time.monotonic()
+
+    async def _Run(
         self,
         request: definitions.FunctionCall,
         context: aio.ServicerContext,
