@@ -182,6 +182,14 @@ class BridgeManager:
             for agent in agents:
                 agent.terminate()
 
+    def abort_unreachable_agents(self) -> None:
+        for agents in self._agents.values():
+            for agent in agents:
+                connection = agent._connection
+                if connection is not None and not connection.is_alive():
+                    connection.abort_agent()
+                    # maybe restart the agent?
+
 
 @dataclass
 class RunTask:
@@ -720,8 +728,13 @@ def main(argv: list[str] | None = None) -> None:
             servicer.shutdown()
             server.stop(grace=0.1)
 
+        def handle_child_termination(*args):
+            print("Child termination signal received, aborting unreachable agents...")
+            bridge_manager.abort_unreachable_agents()
+
         signal.signal(signal.SIGINT, handle_termination)
         signal.signal(signal.SIGTERM, handle_termination)
+        signal.signal(signal.SIGCHLD, handle_child_termination)
 
         server.add_insecure_port(f"[::]:{options.port}")
         print(f"Started listening at {options.host}:{options.port}")

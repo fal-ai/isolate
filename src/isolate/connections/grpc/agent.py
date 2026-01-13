@@ -58,7 +58,6 @@ class AgentServicer(definitions.AgentServicer):
         self._timeout_seconds = IDLE_TIMEOUT_SECONDS
         self._last_run_time = time.monotonic()
         self._is_running = False
-        self._control_loop_task = asyncio.create_task(self._control_loop())
 
         def handle_sigint(*args):
             self.log("SIGINT signal received, shutting down...")
@@ -66,7 +65,7 @@ class AgentServicer(definitions.AgentServicer):
 
         signal.signal(signal.SIGINT, handle_sigint)
 
-    async def _control_loop(self) -> None:
+    async def wait_for_idle_timeout(self) -> None:
         cancelled = False
         while not cancelled:
             if (
@@ -75,6 +74,8 @@ class AgentServicer(definitions.AgentServicer):
             ):
                 self.log(f"Idle for {self.idle_time_seconds} seconds, shutting down...")
                 cancelled = True
+                # This kills the agent itself, however it will remain as a zombie state
+                # unless the parent process (server) properly handles the SIGCHLD.
                 signal.raise_signal(signal.SIGTERM)
 
             try:
@@ -83,10 +84,10 @@ class AgentServicer(definitions.AgentServicer):
                 cancelled = True
 
     @property
-    def idle_time_seconds(self) -> int:
+    def idle_time_seconds(self) -> float:
         if self._is_running:
             return 0
-        return int(time.monotonic() - self._last_run_time)
+        return time.monotonic() - self._last_run_time
 
     async def Run(
         self,
@@ -309,7 +310,17 @@ async def run_agent(address: str, log_fd: int | None = None) -> int:
     definitions.register_agent(servicer, server)
 
     await server.start()
-    await server.wait_for_termination()
+
+    _, pending = await asyncio.wait(
+        [
+            asyncio.create_task(server.wait_for_termination()),
+            asyncio.create_task(servicer.wait_for_idle_timeout()),
+        ],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for task in pending:
+        task.cancel()
+
     return 0
 
 
