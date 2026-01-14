@@ -14,7 +14,6 @@ import asyncio
 import os
 import signal
 import sys
-import time
 import traceback
 from argparse import ArgumentParser
 from concurrent import futures
@@ -40,7 +39,7 @@ from isolate.connections.grpc import definitions
 from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc
 
-IDLE_TIMEOUT_SECONDS = int(os.getenv("ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS", "600"))
+IDLE_TIMEOUT_SECONDS = int(os.getenv("ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS", "0"))
 
 
 @dataclass
@@ -55,9 +54,10 @@ class AgentServicer(definitions.AgentServicer):
         self._run_cache: dict[str, Any] = {}
         self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
         self._thread_pool = futures.ThreadPoolExecutor(max_workers=1)
-        self._timeout_seconds = IDLE_TIMEOUT_SECONDS
-        self._last_run_time = time.monotonic()
-        self._is_running = False
+        self._idle_timeout_seconds = IDLE_TIMEOUT_SECONDS
+        self._is_running = asyncio.Event()
+        self._is_idle = asyncio.Event()
+        self._is_idle.set()
 
         def handle_sigint(*args):
             self.log("SIGINT signal received, shutting down...")
@@ -66,41 +66,43 @@ class AgentServicer(definitions.AgentServicer):
         signal.signal(signal.SIGINT, handle_sigint)
 
     async def wait_for_idle_timeout(self) -> None:
-        cancelled = False
-        while not cancelled:
-            if (
-                self._timeout_seconds > 0
-                and self.idle_time_seconds > self._timeout_seconds
-            ):
-                self.log(f"Idle for {self.idle_time_seconds} seconds, shutting down...")
-                cancelled = True
+        while True:
+            # wait for the agent to be idle
+            await self._is_idle.wait()
+
+            if self._idle_timeout_seconds == 0:
+                # idle timeout disabled
+                continue
+
+            try:
+                # wait for the agent to be running
+                await asyncio.wait_for(
+                    self._is_running.wait(), timeout=self._idle_timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                self.log(
+                    f"Idle timeout {self._idle_timeout_seconds} seconds exceeded, shutting down..."  # noqa: E501
+                )
                 # This kills the agent itself, however it will remain as a zombie state
                 # unless the parent process (server) properly handles the SIGCHLD.
                 signal.raise_signal(signal.SIGTERM)
-
-            try:
-                await asyncio.sleep(1)
+                break
             except asyncio.CancelledError:
-                cancelled = True
-
-    @property
-    def idle_time_seconds(self) -> float:
-        if self._is_running:
-            return 0
-        return time.monotonic() - self._last_run_time
+                break
 
     async def Run(
         self,
         request: definitions.FunctionCall,
         context: aio.ServicerContext,
     ) -> AsyncIterator[PartialRunResult]:
-        self._is_running = True
+        self._is_idle.clear()
+        self._is_running.set()
         try:
             async for result in self._Run(request, context):
                 yield result
         finally:
-            self._is_running = False
-            self._last_run_time = time.monotonic()
+            self._is_running.clear()
+            self._is_idle.set()
 
     async def _Run(
         self,
