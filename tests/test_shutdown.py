@@ -91,6 +91,41 @@ def isolate_server_subprocess(
         process.wait(timeout=10)
 
 
+@pytest.fixture
+def isolate_agent_subprocess(
+    monkeypatch: pytest.MonkeyPatch, idle_timeout_seconds: int
+) -> Iterator[Tuple[subprocess.Popen, int]]:
+    """Set up a gRPC server with the IsolateServicer for testing."""
+    # Find a free port
+    import socket
+
+    monkeypatch.setenv("ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS", str(idle_timeout_seconds))
+
+    # Bind only to the loopback interface to avoid exposing the socket on all interfaces
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "isolate.connections.grpc.agent",
+            f"localhost:{port}",
+            "--log-fd",
+            str(sys.stdout.fileno()),
+        ]
+    )
+
+    time.sleep(1)  # Wait for server to start
+    yield process, port
+
+    # Cleanup
+    if process.poll() is None:
+        process.terminate()
+        process.wait(timeout=10)
+
+
 def consume_responses(responses: Iterator, wait: bool = False) -> None:
     def _consume():
         try:
@@ -215,10 +250,30 @@ def test_idle_timeout(isolate_server_subprocess):
     responses = stub.Run(create_run_request(fn))
     consume_responses(responses, wait=True)
 
+    # Send the first request to start the agent
     p = psutil.Process(process.pid)
     assert len(p.children()) == 1, "Server should have one agent process"
 
+    # Wait for the idle timeout to trigger
     time.sleep(3)
     assert (
         len(p.children()) == 0
+    ), "Agent process should have terminated after idle timeout"
+
+    # Server should be able to handle a new request after the idle timeout
+    responses = stub.Run(create_run_request(fn))
+    consume_responses(responses, wait=True)
+    assert len(p.children()) == 1, "Server should have one agent process"
+
+
+def test_idle_timeout_no_request(isolate_agent_subprocess):
+    process, port = isolate_agent_subprocess
+
+    p = psutil.Process(process.pid)
+    assert p.status() == psutil.STATUS_RUNNING, "Agent should be running"
+
+    # Wait for the idle timeout to trigger
+    time.sleep(3)
+    assert (
+        p.status() == psutil.STATUS_ZOMBIE
     ), "Agent process should have terminated after idle timeout"

@@ -70,7 +70,7 @@ class AgentServicer(definitions.AgentServicer):
             # wait for the agent to be idle
             await self._is_idle.wait()
 
-            if self._idle_timeout_seconds == 0:
+            if self._idle_timeout_seconds <= 0:
                 # idle timeout disabled
                 continue
 
@@ -88,6 +88,7 @@ class AgentServicer(definitions.AgentServicer):
                 signal.raise_signal(signal.SIGTERM)
                 break
             except asyncio.CancelledError:
+                # Cancelled when the server is shutting down
                 break
 
     async def Run(
