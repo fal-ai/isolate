@@ -67,11 +67,14 @@ class AgentServicer(definitions.AgentServicer):
 
     async def wait_for_idle_timeout(self) -> None:
         while True:
+            # print(f"Hello, world! {self._idle_timeout_seconds}")
             # wait for the agent to be idle
             await self._is_idle.wait()
 
+            # idle timeout disabled
             if self._idle_timeout_seconds <= 0:
-                # idle timeout disabled
+                # prevent blocking the event loop
+                await asyncio.sleep(0.1)
                 continue
 
             try:
@@ -322,6 +325,7 @@ async def run_agent(address: str, log_fd: int | None = None) -> int:
         return_when=asyncio.FIRST_COMPLETED,
     )
     for task in pending:
+        print(f"Cancelling task: {task}")
         task.cancel()
 
     return 0
