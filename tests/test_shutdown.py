@@ -107,6 +107,10 @@ def isolate_agent_subprocess(
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
 
+    # Use /dev/null for log output since pytest may capture stdout
+    # (making fileno() fail with "Bad file descriptor")
+    log_file = open(os.devnull, "w")
+
     process = subprocess.Popen(
         [
             sys.executable,
@@ -114,20 +118,23 @@ def isolate_agent_subprocess(
             "isolate.connections.grpc.agent",
             f"localhost:{port}",
             "--log-fd",
-            str(sys.stdout.fileno()),
+            str(log_file.fileno()),
         ],
         env={
             "ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS": str(idle_timeout_seconds),
         },
+        pass_fds=(log_file.fileno(),),
     )
 
     time.sleep(1)  # Wait for server to start
-    yield process, port
-
-    # Cleanup
-    if process.poll() is None:
-        process.terminate()
-        process.wait(timeout=10)
+    try:
+        yield process, port
+    finally:
+        # Cleanup
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=10)
+        log_file.close()
 
 
 def consume_responses(responses: Iterator, wait: bool = False) -> None:
