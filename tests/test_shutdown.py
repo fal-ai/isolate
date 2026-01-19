@@ -13,6 +13,8 @@ from unittest.mock import Mock
 import grpc
 import psutil
 import pytest
+from isolate.connections.grpc.definitions import FunctionCall
+from isolate.connections.grpc.definitions.agent_pb2_grpc import AgentStub
 from isolate.server.definitions.server_pb2 import BoundFunction, EnvironmentDefinition
 from isolate.server.definitions.server_pb2_grpc import IsolateStub
 from isolate.server.interface import to_serialized_object
@@ -52,19 +54,16 @@ def single_use():
 
 @pytest.fixture
 def idle_timeout_seconds():
-    return 2
+    return 0
 
 
 @pytest.fixture
 def isolate_server_subprocess(
-    monkeypatch: pytest.MonkeyPatch, single_use: bool, idle_timeout_seconds: int
+    single_use: bool, idle_timeout_seconds: int
 ) -> Iterator[Tuple[subprocess.Popen, int]]:
     """Set up a gRPC server with the IsolateServicer for testing."""
     # Find a free port
     import socket
-
-    monkeypatch.setenv("ISOLATE_SHUTDOWN_GRACE_PERIOD", "2")
-    monkeypatch.setenv("ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS", str(idle_timeout_seconds))
 
     # Bind only to the loopback interface to avoid exposing the socket on all interfaces
     with socket.socket() as s:
@@ -79,7 +78,11 @@ def isolate_server_subprocess(
             *(["--single-use"] if single_use else []),
             "--port",
             str(port),
-        ]
+        ],
+        env={
+            "ISOLATE_SHUTDOWN_GRACE_PERIOD": "2",
+            "ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS": str(idle_timeout_seconds),
+        },
     )
 
     time.sleep(5)  # Wait for server to start
@@ -93,13 +96,11 @@ def isolate_server_subprocess(
 
 @pytest.fixture
 def isolate_agent_subprocess(
-    monkeypatch: pytest.MonkeyPatch, idle_timeout_seconds: int
+    idle_timeout_seconds: int,
 ) -> Iterator[Tuple[subprocess.Popen, int]]:
     """Set up a gRPC server with the IsolateServicer for testing."""
     # Find a free port
     import socket
-
-    monkeypatch.setenv("ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS", str(idle_timeout_seconds))
 
     # Bind only to the loopback interface to avoid exposing the socket on all interfaces
     with socket.socket() as s:
@@ -114,7 +115,10 @@ def isolate_agent_subprocess(
             f"localhost:{port}",
             "--log-fd",
             str(sys.stdout.fileno()),
-        ]
+        ],
+        env={
+            "ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS": str(idle_timeout_seconds),
+        },
     )
 
     time.sleep(1)  # Wait for server to start
@@ -233,10 +237,78 @@ def test_running_function_receives_sigterm(isolate_server_subprocess, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "single_use",
-    [False],  # to prevent the server from shutting down automatically
+    "idle_timeout_seconds",
+    [0, 2],
 )
-def test_idle_timeout(isolate_server_subprocess):
+def test_idle_timeout_no_request(isolate_agent_subprocess, idle_timeout_seconds):
+    process, port = isolate_agent_subprocess
+
+    p = psutil.Process(process.pid)
+    for _ in range(10):
+        if p.is_running():
+            break
+        time.sleep(1)
+    else:
+        assert False, "Agent should be running"
+
+    # Wait for the idle timeout to trigger
+    try:
+        p.wait(timeout=5)
+        terminated = True
+    except psutil.TimeoutExpired:
+        terminated = False
+
+    if idle_timeout_seconds == 0:
+        assert not terminated, "Agent should not have terminated"
+    else:
+        assert terminated, "Agent should have terminated after idle timeout"
+
+
+@pytest.mark.parametrize(
+    "idle_timeout_seconds",
+    [0, 2],
+)
+def test_idle_timeout(isolate_agent_subprocess, idle_timeout_seconds):
+    process, port = isolate_agent_subprocess
+
+    p = psutil.Process(process.pid)
+    for _ in range(10):
+        if p.is_running():
+            break
+        time.sleep(1)
+    else:
+        assert False, "Agent should be running"
+
+    channel = grpc.insecure_channel(f"localhost:{port}")
+    stub = AgentStub(channel)
+
+    def fn():
+        import time
+
+        time.sleep(3)  # longer than the idle timeout
+        print("Function finished")
+
+    responses = stub.Run(FunctionCall(function=to_serialized_object(fn, method="dill")))
+    consume_responses(responses, wait=True)
+
+    # Wait for the idle timeout to trigger
+    try:
+        p.wait(timeout=5)
+        terminated = True
+    except psutil.TimeoutExpired:
+        terminated = False
+
+    if idle_timeout_seconds == 0:
+        assert not terminated, "Agent should not have terminated"
+    else:
+        assert terminated, "Agent should have terminated after idle timeout"
+
+
+@pytest.mark.parametrize(
+    ["single_use", "idle_timeout_seconds"],
+    [(False, 2)],  # to prevent the server from shutting down automatically
+)
+def test_idle_timeout_server_handle(isolate_server_subprocess):
     process, port = isolate_server_subprocess
     channel = grpc.insecure_channel(f"localhost:{port}")
     stub = IsolateStub(channel)
@@ -264,16 +336,3 @@ def test_idle_timeout(isolate_server_subprocess):
     responses = stub.Run(create_run_request(fn))
     consume_responses(responses, wait=True)
     assert len(p.children()) == 1, "Server should have one agent process"
-
-
-def test_idle_timeout_no_request(isolate_agent_subprocess):
-    process, port = isolate_agent_subprocess
-
-    p = psutil.Process(process.pid)
-    assert p.status() == psutil.STATUS_RUNNING, "Agent should be running"
-
-    # Wait for the idle timeout to trigger
-    time.sleep(3)
-    assert (
-        p.status() == psutil.STATUS_ZOMBIE
-    ), "Agent process should have terminated after idle timeout"
