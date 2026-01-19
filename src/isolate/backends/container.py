@@ -18,6 +18,7 @@ class ContainerizedPythonEnvironment(BaseEnvironment[Path]):
     image: dict[str, Any] = field(default_factory=dict)
     python_version: str | None = None
     requirements: list[str] = field(default_factory=list)
+    install_requirements: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     resolver: str | None = None
 
@@ -46,6 +47,7 @@ class ContainerizedPythonEnvironment(BaseEnvironment[Path]):
         dockerfile_str = self.image.get("dockerfile_str", "")
         return sha256_digest_of(
             dockerfile_str,
+            *self.install_requirements,
             *self.requirements,
             *sorted(self.tags),
             *extras,
