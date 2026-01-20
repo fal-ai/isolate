@@ -172,4 +172,16 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
     def handle_agent_log(
         self, line: str, *, level: LogLevel, source: LogSource
     ) -> None:
+        if source is LogSource.USER and _is_grpc_internal_log(line):
+            # gRPC core can emit noise on stderr during forced shutdowns.
+            self.log(line, level=LogLevel.TRACE, source=LogSource.BRIDGE)
+            return
         self.log(line, level=level, source=source)
+
+
+def _is_grpc_internal_log(line: str) -> bool:
+    if "completion_queue.cc" in line:
+        return True
+    if "eventfd_write" in line and "grpc" in line.lower():
+        return True
+    return False
