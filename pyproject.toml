@@ -73,3 +73,6 @@ keep-runtime-typing = true
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "PLC", "PLE", "PLW", "I", "UP"]
+
+[tool.pytest.ini_options]
+addopts = "--durations=10"
