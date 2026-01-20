@@ -57,6 +57,7 @@ else:
 # Number of seconds to observe the queue before checking the termination
 # event.
 _Q_WAIT_DELAY = 0.1
+SERVER_SHUTDOWN_GRACE_SECONDS = 0.2
 
 
 class GRPCException(Exception):
@@ -626,7 +627,7 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                         print("Stopping server since run is finished")
                         self.servicer.shutdown()
                         # Stop the server after the Run task is finished
-                        self.server.stop(grace=0.1)
+                        self.server.stop(grace=SERVER_SHUTDOWN_GRACE_SECONDS)
                         print("Server stopped")
 
                     elif is_submit:
@@ -653,7 +654,7 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
                                 time.sleep(0.1)
                                 print("Stopping server since the task is finished")
                                 self.servicer.shutdown()
-                                self.server.stop(grace=0.1)
+                                self.server.stop(grace=SERVER_SHUTDOWN_GRACE_SECONDS)
                                 print("Server stopped")
 
                             # Add a callback which will stop the server
@@ -718,7 +719,7 @@ def main(argv: list[str] | None = None) -> None:
         def handle_termination(*args):
             print("Termination signal received, shutting down...")
             servicer.shutdown()
-            server.stop(grace=0.1)
+            server.stop(grace=SERVER_SHUTDOWN_GRACE_SECONDS)
 
         signal.signal(signal.SIGINT, handle_termination)
         signal.signal(signal.SIGTERM, handle_termination)
