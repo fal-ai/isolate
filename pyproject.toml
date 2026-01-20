@@ -45,6 +45,7 @@ build = [
 test = [
     "isolate[build]",
     "pytest",
+    "pytest-xdist",
     "cloudpickle>=2.2.0",
     "dill>=0.3.5.1",
     "flaky",
@@ -75,4 +76,4 @@ keep-runtime-typing = true
 select = ["E", "F", "W", "PLC", "PLE", "PLW", "I", "UP"]
 
 [tool.pytest.ini_options]
-addopts = "--durations=10"
+addopts = "--durations=10 -n auto"
