@@ -147,8 +147,10 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             _get_pyenv_executable()
         except Exception:
             raise EnvironmentCreationError(
-                f"Your local Python version {self.python_version} is not available in the app environment."
-                "Please either downgrade your local version of Python or use a Docker image with Python {self.python_version}."
+                f"Your local Python version {self.python_version} is not "
+                "available in the app environment. "
+                "Please either downgrade your local version of Python or use a Docker "
+                f"image with Python {self.python_version}."
             ) from None
         else:
             return self._install_python_through_pyenv()

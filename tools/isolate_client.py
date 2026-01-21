@@ -4,6 +4,7 @@ import argparse
 import sys
 
 import grpc
+
 from isolate.connections.common import SerializationError
 from isolate.connections.grpc.interface import to_serialized_object
 from isolate.server import definitions

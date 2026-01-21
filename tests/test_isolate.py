@@ -1,6 +1,7 @@
 from unittest.mock import create_autospec, patch
 
 import pytest
+
 from isolate import prepare_environment
 
 

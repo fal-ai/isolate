@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, List
 
 import pytest
+
 from isolate.backends import BaseEnvironment, EnvironmentConnection
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.settings import IsolateSettings
@@ -14,9 +15,9 @@ from isolate.connections import LocalPythonGRPC, PythonIPC
 from isolate.connections.common import is_agent
 
 REPO_DIR = Path(__file__).parent.parent
-assert (
-    REPO_DIR.exists() and REPO_DIR.name == "isolate"
-), "This test should have access to isolate as an installable package."
+assert REPO_DIR.exists() and REPO_DIR.name == "isolate", (
+    "This test should have access to isolate as an installable package."
+)
 
 
 # Enable dill to only serialize globals that are accessed by the function

@@ -1,6 +1,7 @@
 import json
 
 import pytest
+
 from isolate.logger import IsolateLogger
 
 

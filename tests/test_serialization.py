@@ -1,6 +1,7 @@
 from functools import partial
 
 import pytest
+
 from isolate.connections.common import (
     SerializationError,
     load_serialized_object,

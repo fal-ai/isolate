@@ -74,6 +74,7 @@ keep-runtime-typing = true
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "PLC", "PLE", "PLW", "I", "UP"]
+ignore = ["PLC0415"]
 
 [tool.pytest.ini_options]
 addopts = "--durations=10 -n auto"

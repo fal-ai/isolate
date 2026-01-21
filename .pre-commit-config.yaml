@@ -1,8 +1,8 @@
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: 'v0.3.4'
+  rev: 'v0.14.13'
   hooks:
-  - id: ruff
+  - id: ruff-check
     args:
     - --fix
     - --exit-non-zero-on-fix
@@ -10,10 +10,6 @@ repos:
     exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"
   - id: ruff-format
     exclude: ".*(_pb2.py|_pb2.pyi|_pb2_grpc.py)$"
-- repo: https://github.com/asottile/setup-cfg-fmt
-  rev: v1.20.1
-  hooks:
-  - id: setup-cfg-fmt
 - repo: https://github.com/pre-commit/mirrors-mypy
   rev: v1.2.0
   hooks:

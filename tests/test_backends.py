@@ -6,8 +6,9 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type
 
-import isolate
 import pytest
+
+import isolate
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import get_executable, sha256_digest_of
 from isolate.backends.conda import CondaEnvironment
@@ -362,7 +363,11 @@ class TestVirtualenv(GenericEnvironmentTests):
         environment = self.get_environment(tmp_path, {"python_version": "9.9.9"})
         with pytest.raises(
             EnvironmentCreationError,
-            match="Python 9.9.9 is not available",
+            match=(
+                "Your local Python version 9.9.9 is not available in the app "
+                "environment. Please either downgrade your local version of "
+                "Python or use a Docker image with Python 9.9.9"
+            ),
         ):
             environment.create()
 
@@ -378,15 +383,15 @@ class TestVirtualenv(GenericEnvironmentTests):
         tagged_environment = self.get_environment(tmp_path, tagged)
 
         no_tagged_environment = self.get_environment(tmp_path, constraints)
-        assert (
-            tagged_environment.key != no_tagged_environment.key
-        ), "Tagged environment should have different key"
+        assert tagged_environment.key != no_tagged_environment.key, (
+            "Tagged environment should have different key"
+        )
 
         tagged["tags"] = ["tag2", "tag1"]
         tagged_environment_2 = self.get_environment(tmp_path, tagged)
-        assert (
-            tagged_environment.key == tagged_environment_2.key
-        ), "Tag order should not matter"
+        assert tagged_environment.key == tagged_environment_2.key, (
+            "Tag order should not matter"
+        )
 
     @pytest.mark.skipif(not UV_PATH, reason="uv is not available")
     def test_try_using_uv(self, tmp_path):
@@ -560,15 +565,15 @@ class TestConda(GenericEnvironmentTests):
         tagged_environment = self.get_environment(tmp_path, tagged)
 
         no_tagged_environment = self.get_environment(tmp_path, constraints)
-        assert (
-            tagged_environment.key != no_tagged_environment.key
-        ), "Tagged environment should have different key"
+        assert tagged_environment.key != no_tagged_environment.key, (
+            "Tagged environment should have different key"
+        )
 
         tagged["tags"] = ["tag2", "tag1"]
         tagged_environment_2 = self.get_environment(tmp_path, tagged)
-        assert (
-            tagged_environment.key == tagged_environment_2.key
-        ), "Tag order should not matter"
+        assert tagged_environment.key == tagged_environment_2.key, (
+            "Tag order should not matter"
+        )
 
 
 def test_local_python_environment():
