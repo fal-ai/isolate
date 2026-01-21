@@ -27,20 +27,23 @@ class GenericEnvironmentTests:
     backend_cls: Type[BaseEnvironment]
     configs: Dict[str, Dict[str, Any]]
 
-    def get_project_environment(self, tmp_path: Any, name: str) -> BaseEnvironment:
+    def get_project_environment(
+        self, tmp_path: Any, name: str, isolate_settings: IsolateSettings
+    ) -> BaseEnvironment:
         if name not in self.configs:
             raise ValueError(
                 f"{type(self).__name__} does not define a configuration for: {name}"
             )
 
         config = self.configs[name]
-        return self.get_environment(tmp_path, config)
+        return self.get_environment(tmp_path, config, isolate_settings)
 
-    def get_environment(self, tmp_path: Any, config: Dict[str, Any]) -> BaseEnvironment:
+    def get_environment(
+        self, tmp_path: Any, config: Dict[str, Any], isolate_settings: IsolateSettings
+    ) -> BaseEnvironment:
         environment = self.backend_cls.from_config(config)
 
-        test_settings = IsolateSettings(Path(tmp_path))
-        environment.apply_settings(test_settings)
+        environment.apply_settings(isolate_settings)
         return environment
 
     def get_example_version(
@@ -70,13 +73,15 @@ class GenericEnvironmentTests:
             ctx.setattr(entry_point, lambda *args, **kwargs: _raise_error())
             yield
 
-    def test_create_generic_env(self, tmp_path):
-        environment = self.get_project_environment(tmp_path, "new-example-project")
+    def test_create_generic_env(self, tmp_path, isolate_settings):
+        environment = self.get_project_environment(
+            tmp_path, "new-example-project", isolate_settings
+        )
         connection_key = environment.create()
         assert self.get_example_version(environment, connection_key) == "0.6.0"
 
-    def test_create_generic_env_empty(self, tmp_path):
-        environment = self.get_project_environment(tmp_path, "empty")
+    def test_create_generic_env_empty(self, tmp_path, isolate_settings):
+        environment = self.get_project_environment(tmp_path, "empty", isolate_settings)
         connection_key = environment.create()
         with pytest.raises(ModuleNotFoundError):
             self.get_example_version(environment, connection_key)
@@ -87,16 +92,20 @@ class GenericEnvironmentTests:
             "will be gone' section"
         )
     )
-    def test_create_generic_env_cached(self, tmp_path, monkeypatch):
-        environment_1 = self.get_project_environment(tmp_path, "old-example-project")
-        environment_2 = self.get_project_environment(tmp_path, "new-example-project")
+    def test_create_generic_env_cached(self, tmp_path, monkeypatch, isolate_settings):
+        environment_1 = self.get_project_environment(
+            tmp_path, "old-example-project", isolate_settings
+        )
+        environment_2 = self.get_project_environment(
+            tmp_path, "new-example-project", isolate_settings
+        )
 
         # Duplicate environments (though different instances)
         dup_environment_1 = self.get_project_environment(
-            tmp_path, "old-example-project"
+            tmp_path, "old-example-project", isolate_settings
         )
         dup_environment_2 = self.get_project_environment(
-            tmp_path, "new-example-project"
+            tmp_path, "new-example-project", isolate_settings
         )
 
         # Create the original environments
@@ -129,8 +138,14 @@ class GenericEnvironmentTests:
         ]:
             assert self.get_example_version(environment, connection_key) == version
 
-    def test_failure_during_environment_creation_cache(self, tmp_path, monkeypatch):
-        environment = self.get_project_environment(tmp_path, "new-example-project")
+    def test_failure_during_environment_creation_cache(
+        self, tmp_path, monkeypatch, isolate_settings
+    ):
+        # Use a fresh cache dir to avoid hits from shared test cache.
+        fresh_settings = IsolateSettings(cache_dir=tmp_path / "cache")
+        environment = self.get_project_environment(
+            tmp_path, "new-example-project", fresh_settings
+        )
         with pytest.raises(EnvironmentCreationError):
             with self.fail_active_creation(monkeypatch):
                 environment.create()
@@ -141,8 +156,10 @@ class GenericEnvironmentTests:
         assert environment.exists()
         assert self.get_example_version(environment, connection_key) == "0.6.0"
 
-    def test_forced_environment_creation(self, tmp_path, monkeypatch):
-        environment = self.get_project_environment(tmp_path, "new-example-project")
+    def test_forced_environment_creation(self, tmp_path, monkeypatch, isolate_settings):
+        environment = self.get_project_environment(
+            tmp_path, "new-example-project", isolate_settings
+        )
         environment.create()
 
         # Environment exists at this point, and if we try to create it again
@@ -158,18 +175,22 @@ class GenericEnvironmentTests:
             with self.fail_active_creation(monkeypatch):
                 environment.create(force=True)
 
-    def test_invalid_project_building(self, tmp_path, monkeypatch):
-        environment = self.get_project_environment(tmp_path, "invalid-project")
+    def test_invalid_project_building(self, tmp_path, monkeypatch, isolate_settings):
+        environment = self.get_project_environment(
+            tmp_path, "invalid-project", isolate_settings
+        )
         with pytest.raises(EnvironmentCreationError):
             environment.create()
 
         assert not environment.exists()
 
     @pytest.mark.parametrize("executable", ["python"])
-    def test_path_resolution(self, tmp_path, executable):
+    def test_path_resolution(self, tmp_path, executable, isolate_settings):
         import shutil
 
-        environment = self.get_project_environment(tmp_path, "example-binary")
+        environment = self.get_project_environment(
+            tmp_path, "example-binary", isolate_settings
+        )
         environment_path = environment.create()
         with environment.open_connection(environment_path) as connection:
             executable_path = Path(connection.run(partial(shutil.which, executable)))
@@ -189,24 +210,28 @@ class GenericEnvironmentTests:
             )
         )
 
-    def test_executable_running(self, tmp_path):
-        environment = self.get_project_environment(tmp_path, "example-binary")
+    def test_executable_running(self, tmp_path, isolate_settings):
+        environment = self.get_project_environment(
+            tmp_path, "example-binary", isolate_settings
+        )
         with environment.connect() as connection:
             py_version = self._run_cmd(connection, "python", "--version")
             assert py_version.startswith("Python 3")
 
-    def test_self_installed_executable_running(self, tmp_path):
-        environment = self.get_project_environment(tmp_path, "black")
+    def test_self_installed_executable_running(self, tmp_path, isolate_settings):
+        environment = self.get_project_environment(tmp_path, "black", isolate_settings)
         with environment.connect() as connection:
             black_version = self._run_cmd(connection, "black", "--version")
             assert "black, 22.12.0" in black_version
 
-    def test_custom_python_version(self, tmp_path):
+    def test_custom_python_version(self, tmp_path, isolate_settings):
         for python_type, python_version in [
             ("old-python", "3.8"),
             ("new-python", "3.11"),
         ]:
-            environment = self.get_project_environment(tmp_path, python_type)
+            environment = self.get_project_environment(
+                tmp_path, python_type, isolate_settings
+            )
             actual = self.get_python_version(environment, environment.create())
             assert actual.startswith(python_version)
 
@@ -255,13 +280,14 @@ class TestVirtualenv(GenericEnvironmentTests):
         constraints_file.write_text("\n".join(constraints))
         return constraints_file
 
-    def test_constraints(self, tmp_path):
+    def test_constraints(self, tmp_path, isolate_settings):
         contraints_file = self.make_constraints_file(
             tmp_path, ["pyjokes>=0.4.0,<0.6.0"]
         )
         environment = self.get_environment(
             tmp_path,
             {"requirements": ["pyjokes>=0.4.1"], "constraints_file": contraints_file},
+            isolate_settings,
         )
         connection_key = environment.create()
 
@@ -269,11 +295,12 @@ class TestVirtualenv(GenericEnvironmentTests):
         # and pip is going to pick the latest one.
         assert self.get_example_version(environment, connection_key) == "0.5.0"
 
-    def test_unresolvable_constraints(self, tmp_path):
+    def test_unresolvable_constraints(self, tmp_path, isolate_settings):
         contraints_file = self.make_constraints_file(tmp_path, ["pyjokes>=0.6.0"])
         environment = self.get_environment(
             tmp_path,
             {"requirements": ["pyjokes<0.6.0"], "constraints_file": contraints_file},
+            isolate_settings,
         )
 
         # When we can't find a version that satisfies all the constraints, we
@@ -285,16 +312,18 @@ class TestVirtualenv(GenericEnvironmentTests):
         environment = self.get_environment(
             tmp_path,
             {"requirements": ["pyjokes<0.6.0"]},
+            isolate_settings,
         )
         connection_key = environment.create()
         assert self.get_example_version(environment, connection_key) == "0.5.0"
 
-    def test_extra_index_urls(self, tmp_path):
+    def test_extra_index_urls(self, tmp_path, isolate_settings):
         # Only available in test.pypi.org
         alpha_version = "2022.9.26a0"
         environment = self.get_environment(
             tmp_path,
             {"requirements": [f"black=={alpha_version}"]},
+            isolate_settings,
         )
 
         # This should fail since the default index server doesn't have
@@ -309,29 +338,33 @@ class TestVirtualenv(GenericEnvironmentTests):
                 "requirements": [f"black=={alpha_version}"],
                 "extra_index_urls": ["https://test.pypi.org/simple/"],
             },
+            isolate_settings,
         )
         with environment.connect() as connection:
             assert alpha_version in self._run_cmd(connection, "black", "--version")
 
-    def test_caching_with_constraints(self, tmp_path):
+    def test_caching_with_constraints(self, tmp_path, isolate_settings):
         contraints_file_1 = self.make_constraints_file(tmp_path, ["pyjokes>=0.6.0"])
         contraints_file_2 = self.make_constraints_file(tmp_path, ["pyjokes<=0.6.0"])
 
         environment_1 = self.get_environment(
             tmp_path,
             {"requirements": ["pyjokes<0.6.0"]},
+            isolate_settings,
         )
         environment_2 = self.get_environment(
             tmp_path,
             {"requirements": ["pyjokes<0.6.0"], "constraints_file": contraints_file_1},
+            isolate_settings,
         )
         environment_3 = self.get_environment(
             tmp_path,
             {"requirements": ["pyjokes<0.6.0"], "constraints_file": contraints_file_2},
+            isolate_settings,
         )
         assert environment_1.key != environment_2.key != environment_3.key
 
-    def test_custom_python_version(self, tmp_path, monkeypatch):
+    def test_custom_python_version(self, tmp_path, monkeypatch, isolate_settings):
         # Disable pyenv to prevent auto-installation
         monkeypatch.setattr(
             "isolate.backends.pyenv._get_pyenv_executable", lambda: 1 / 0
@@ -341,7 +374,9 @@ class TestVirtualenv(GenericEnvironmentTests):
             ("old-python", "3.8"),
             ("new-python", "3.11"),
         ]:
-            environment = self.get_project_environment(tmp_path, python_type)
+            environment = self.get_project_environment(
+                tmp_path, python_type, isolate_settings
+            )
             try:
                 connection = environment.create()
             except EnvironmentCreationError:
@@ -353,14 +388,18 @@ class TestVirtualenv(GenericEnvironmentTests):
             python_version = self.get_python_version(environment, connection)
             assert python_version.startswith(expected_python_version)
 
-    def test_invalid_python_version_raises(self, tmp_path, monkeypatch):
+    def test_invalid_python_version_raises(
+        self, tmp_path, monkeypatch, isolate_settings
+    ):
         # Disable pyenv to prevent auto-installation
         monkeypatch.setattr(
             "isolate.backends.pyenv._get_pyenv_executable", lambda: 1 / 0
         )
 
         # Hopefully there will never be a Python 9.9.9
-        environment = self.get_environment(tmp_path, {"python_version": "9.9.9"})
+        environment = self.get_environment(
+            tmp_path, {"python_version": "9.9.9"}, isolate_settings
+        )
         with pytest.raises(
             EnvironmentCreationError,
             match=(
@@ -371,7 +410,7 @@ class TestVirtualenv(GenericEnvironmentTests):
         ):
             environment.create()
 
-    def test_tags_in_key(self, tmp_path, monkeypatch):
+    def test_tags_in_key(self, tmp_path, monkeypatch, isolate_settings):
         # Disable pyenv to prevent auto-installation
         monkeypatch.setattr(
             "isolate.backends.pyenv._get_pyenv_executable", lambda: 1 / 0
@@ -380,27 +419,30 @@ class TestVirtualenv(GenericEnvironmentTests):
         constraints = self.configs["old-example-project"]
         tagged = constraints.copy()
         tagged["tags"] = ["tag1", "tag2"]
-        tagged_environment = self.get_environment(tmp_path, tagged)
+        tagged_environment = self.get_environment(tmp_path, tagged, isolate_settings)
 
-        no_tagged_environment = self.get_environment(tmp_path, constraints)
+        no_tagged_environment = self.get_environment(
+            tmp_path, constraints, isolate_settings
+        )
         assert tagged_environment.key != no_tagged_environment.key, (
             "Tagged environment should have different key"
         )
 
         tagged["tags"] = ["tag2", "tag1"]
-        tagged_environment_2 = self.get_environment(tmp_path, tagged)
+        tagged_environment_2 = self.get_environment(tmp_path, tagged, isolate_settings)
         assert tagged_environment.key == tagged_environment_2.key, (
             "Tag order should not matter"
         )
 
     @pytest.mark.skipif(not UV_PATH, reason="uv is not available")
-    def test_try_using_uv(self, tmp_path):
+    def test_try_using_uv(self, tmp_path, isolate_settings):
         environment = self.get_environment(
             tmp_path,
             {
                 "requirements": ["pyjokes==0.5"],
                 "resolver": "uv",
             },
+            isolate_settings,
         )
         connection_key = environment.create()
         pyjokes_version = self.get_example_version(environment, connection_key)
@@ -466,8 +508,8 @@ class TestConda(GenericEnvironmentTests):
             "not make it exit with an error code."
         )
 
-    def test_conda_binary_execution(self, tmp_path):
-        environment = self.get_project_environment(tmp_path, "r")
+    def test_conda_binary_execution(self, tmp_path, isolate_settings):
+        environment = self.get_project_environment(tmp_path, "r", isolate_settings)
         environment_path = environment.create()
         r_binary = environment_path / "bin" / "R"
         assert r_binary.exists()
@@ -493,7 +535,7 @@ class TestConda(GenericEnvironmentTests):
     )
     @pytest.mark.parametrize("python_version", [None, "3.9"])
     def test_fail_when_user_overwrites_python(
-        self, tmp_path, user_packages, python_version
+        self, tmp_path, user_packages, python_version, isolate_settings
     ):
         with pytest.raises(
             ValueError,
@@ -505,6 +547,7 @@ class TestConda(GenericEnvironmentTests):
                     "packages": user_packages,
                     "python_version": python_version,
                 },
+                isolate_settings,
             )
 
     @pytest.mark.parametrize(
@@ -539,9 +582,9 @@ class TestConda(GenericEnvironmentTests):
             },
         ],
     )
-    def test_add_pip_dependencies(self, tmp_path, configuration):
+    def test_add_pip_dependencies(self, tmp_path, configuration, isolate_settings):
         environment = self.get_environment(
-            tmp_path, {**configuration, "pip": ["agent"]}
+            tmp_path, {**configuration, "pip": ["agent"]}, isolate_settings
         )
         all_deps = environment.environment_definition["dependencies"]
         assert "pip" in all_deps  # Ensurue pip is added as a dependency
@@ -558,19 +601,21 @@ class TestConda(GenericEnvironmentTests):
         pip_dep = dep_groups[0]["pip"]
         assert "agent" in pip_dep  # And pip dependency is added
 
-    def test_tags_in_key(self, tmp_path):
+    def test_tags_in_key(self, tmp_path, isolate_settings):
         constraints = self.configs["old-example-project"]
         tagged = constraints.copy()
         tagged["tags"] = ["tag1", "tag2"]
-        tagged_environment = self.get_environment(tmp_path, tagged)
+        tagged_environment = self.get_environment(tmp_path, tagged, isolate_settings)
 
-        no_tagged_environment = self.get_environment(tmp_path, constraints)
+        no_tagged_environment = self.get_environment(
+            tmp_path, constraints, isolate_settings
+        )
         assert tagged_environment.key != no_tagged_environment.key, (
             "Tagged environment should have different key"
         )
 
         tagged["tags"] = ["tag2", "tag1"]
-        tagged_environment_2 = self.get_environment(tmp_path, tagged)
+        tagged_environment_2 = self.get_environment(tmp_path, tagged, isolate_settings)
         assert tagged_environment.key == tagged_environment_2.key, (
             "Tag order should not matter"
         )
@@ -853,10 +898,10 @@ else:
 
 @pytest.mark.skipif(not IS_PYENV_AVAILABLE, reason="Pyenv is not available")
 @pytest.mark.parametrize("python_version", ["3.8", "3.10", "3.9.15"])
-def test_pyenv_environment(python_version, tmp_path):
+def test_pyenv_environment(python_version, tmp_path, isolate_settings):
     different_python = PyenvEnvironment(python_version)
-    test_settings = IsolateSettings(Path(tmp_path))
-    different_python.apply_settings(test_settings)
+    # Use a fresh cache to ensure the test starts from a clean state.
+    different_python.apply_settings(IsolateSettings(cache_dir=tmp_path / "cache"))
 
     assert not different_python.exists()
 
@@ -879,14 +924,15 @@ def test_pyenv_environment(python_version, tmp_path):
 
 
 @pytest.mark.skipif(not IS_PYENV_AVAILABLE, reason="Pyenv is not available")
-def test_virtual_env_custom_python_version_with_pyenv(tmp_path, monkeypatch):
+def test_virtual_env_custom_python_version_with_pyenv(
+    tmp_path, monkeypatch, isolate_settings
+):
     pyjokes_env = VirtualPythonEnvironment(
         requirements=["pyjokes==0.6.0"],
         python_version="3.9",
     )
 
-    test_settings = IsolateSettings(Path(tmp_path))
-    pyjokes_env.apply_settings(test_settings)
+    pyjokes_env.apply_settings(isolate_settings)
 
     # Force it to choose pyenv as the python version manager.
     pyjokes_env._decide_python = pyjokes_env._install_python_through_pyenv

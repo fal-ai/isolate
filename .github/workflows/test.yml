@@ -34,18 +34,11 @@ jobs:
       with:
         python-version: ${{ matrix.python }}
 
-    - name: Configure cache dir
-      run: |
-        echo "XDG_CACHE_HOME=${{ github.workspace }}/.cache" >> "$GITHUB_ENV"
-        echo "ISOLATE_PYENV_CACHE=${{ github.workspace }}/tests/isolate-cache/pyenv" >> "$GITHUB_ENV"
-
     - name: Cache isolate artifacts
       uses: actions/cache@v4
       with:
-        path: ${{ github.workspace }}/tests/isolate-cache/pyenv
-        key: ${{ runner.os }}-isolate-pyenv-${{ hashFiles('.github/workflows/test.yml') }}
-        restore-keys: |
-          ${{ runner.os }}-isolate-pyenv-
+        path: ${{ github.workspace }}/tests/isolate-cache
+        key: ${{ runner.os }}-isolate-cache-py${{ matrix.python }}-${{ hashFiles('.github/workflows/test.yml') }}
 
     - name: Install mamba
       uses: mamba-org/setup-micromamba@v1

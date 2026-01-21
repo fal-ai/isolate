@@ -40,11 +40,11 @@ class GenericPythonConnectionTests:
         raise NotImplementedError
 
     def make_venv(
-        self, tmp_path: Any, requirements: List[str]
+        self, tmp_path: Any, requirements: List[str], isolate_settings: IsolateSettings
     ) -> VirtualPythonEnvironment:
         """Create a new virtual env with the specified requirements."""
         env = VirtualPythonEnvironment(requirements)
-        env.apply_settings(IsolateSettings(Path(tmp_path)))
+        env.apply_settings(isolate_settings)
         return env
 
     def check_version(self, connection: EnvironmentConnection, module: str) -> str:
@@ -82,9 +82,11 @@ class GenericPythonConnectionTests:
             result = conn.run(lambda: 1 + 2)
             assert result == 3
 
-    def test_extra_inheritance_paths(self, tmp_path: Any) -> None:
-        first_env = self.make_venv(tmp_path, ["pyjokes==0.5.0"])
-        second_env = self.make_venv(tmp_path, ["emoji==0.5.4"])
+    def test_extra_inheritance_paths(
+        self, tmp_path: Any, isolate_settings: IsolateSettings
+    ) -> None:
+        first_env = self.make_venv(tmp_path, ["pyjokes==0.5.0"], isolate_settings)
+        second_env = self.make_venv(tmp_path, ["emoji==0.5.4"], isolate_settings)
 
         with self.open_connection(
             first_env,
@@ -94,7 +96,9 @@ class GenericPythonConnectionTests:
             assert self.check_version(conn, "pyjokes") == "0.5.0"
             assert self.check_version(conn, "emoji") == "0.5.4"
 
-        third_env = self.make_venv(tmp_path, ["pyjokes==0.6.0", "emoji==2.0.0"])
+        third_env = self.make_venv(
+            tmp_path, ["pyjokes==0.6.0", "emoji==2.0.0"], isolate_settings
+        )
         with self.open_connection(
             second_env,
             second_env.create(),
@@ -123,7 +127,9 @@ class GenericPythonConnectionTests:
         ) as conn:
             assert self.check_version(conn, "pyjokes") == "0.6.0"
 
-        fourth_env = self.make_venv(tmp_path, ["pyjokes==0.4.1", "emoji==2.1.0"])
+        fourth_env = self.make_venv(
+            tmp_path, ["pyjokes==0.4.1", "emoji==2.1.0"], isolate_settings
+        )
 
         with self.open_connection(
             first_env,
@@ -203,10 +209,10 @@ class TestPythonGRPC(GenericPythonConnectionTests):
         return LocalPythonGRPC(environment, environment_path, **kwargs)
 
     def make_venv(
-        self, tmp_path: Any, requirements: List[str]
+        self, tmp_path: Any, requirements: List[str], isolate_settings: IsolateSettings
     ) -> VirtualPythonEnvironment:
         # Since gRPC agent requires isolate to be installed, we
         # have to add it to the requirements.
         env = VirtualPythonEnvironment(requirements + [f"{REPO_DIR}[grpc]"])
-        env.apply_settings(IsolateSettings(Path(tmp_path)))
+        env.apply_settings(isolate_settings)
         return env

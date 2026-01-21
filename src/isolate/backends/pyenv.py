@@ -17,7 +17,6 @@ from isolate.logs import LogLevel
 
 _PYENV_EXECUTABLE_NAME = "pyenv"
 _PYENV_EXECUTABLE_PATH = os.environ.get("ISOLATE_PYENV_EXECUTABLE")
-_PYENV_CACHE_ROOT = os.environ.get("ISOLATE_PYENV_CACHE")
 
 
 @dataclass
@@ -42,7 +41,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
 
     def create(self, *, force: bool = False) -> Path:
         pyenv = _get_pyenv_executable()
-        env_path = self._cache_dir()
+        env_path = self.settings.cache_dir_for(self)
         with self.settings.cache_lock_for(env_path):
             # PyEnv installs* the Python versions under $root/versions/$version, where
             # we use versions/$version as the key and $root as the base directory
@@ -113,7 +112,7 @@ class PyenvEnvironment(BaseEnvironment[Path]):
 
     def exists(self) -> bool:
         pyenv = _get_pyenv_executable()
-        cache_dir = self._cache_dir()
+        cache_dir = self.settings.cache_dir_for(self)
         with self.settings.cache_lock_for(cache_dir):
             pyenv_root = cache_dir.parent.parent
             prefix = self._try_get_prefix(pyenv, pyenv_root)
@@ -121,11 +120,6 @@ class PyenvEnvironment(BaseEnvironment[Path]):
 
     def open_connection(self, connection_key: Path) -> PythonIPC:
         return PythonIPC(self, connection_key)
-
-    def _cache_dir(self) -> Path:
-        if _PYENV_CACHE_ROOT:
-            return Path(_PYENV_CACHE_ROOT) / self.key
-        return self.settings.cache_dir_for(self)
 
 
 @functools.lru_cache(1)

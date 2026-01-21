@@ -77,4 +77,5 @@ select = ["E", "F", "W", "PLC", "PLE", "PLW", "I", "UP"]
 ignore = ["PLC0415"]
 
 [tool.pytest.ini_options]
-addopts = "--durations=10 -n auto"
+addopts = "--durations=10"
+norecursedirs = ["tests/isolate-cache"]

@@ -49,7 +49,9 @@ def interceptors():
 
 @contextmanager
 def make_server(
-    tmp_path: Path, interceptors: Optional[List[ServerBoundInterceptor]] = None
+    tmp_path: Path,
+    isolate_settings: IsolateSettings,
+    interceptors: Optional[List[ServerBoundInterceptor]] = None,
 ) -> Iterator[Stubs]:
     interceptors = interceptors or []
     server = grpc.server(
@@ -61,7 +63,7 @@ def make_server(
     for interceptor in interceptors:
         interceptor.register_server(server)
 
-    test_settings = IsolateSettings(cache_dir=tmp_path / "cache")
+    test_settings = isolate_settings
     with BridgeManager() as bridge:
         servicer = IsolateServicer(bridge, test_settings)
 
@@ -95,14 +97,14 @@ def make_server(
 
 
 @pytest.fixture
-def stub(tmp_path, interceptors):
-    with make_server(tmp_path, interceptors) as stubs:
+def stub(tmp_path, interceptors, isolate_settings):
+    with make_server(tmp_path, isolate_settings, interceptors) as stubs:
         yield stubs.isolate_stub
 
 
 @pytest.fixture
-def health_stub(tmp_path, interceptors):
-    with make_server(tmp_path, interceptors) as stubs:
+def health_stub(tmp_path, interceptors, isolate_settings):
+    with make_server(tmp_path, isolate_settings, interceptors) as stubs:
         yield stubs.health_stub
 
 
@@ -577,21 +579,21 @@ def take_buffer(buffer):
     return buffer
 
 
-def test_grpc_option_configuration(tmp_path, monkeypatch):
+def test_grpc_option_configuration(tmp_path, monkeypatch, isolate_settings):
     inherit_from_local(monkeypatch)
     with monkeypatch.context() as ctx:
         ctx.setenv("ISOLATE_GRPC_CALL_MAX_SEND_MESSAGE_LENGTH", "100")
         ctx.setenv("ISOLATE_GRPC_CALL_MAX_RECEIVE_MESSAGE_LENGTH", "100")
 
         with pytest.raises(grpc.RpcError, match="Sent message larger than max"):
-            with make_server(tmp_path) as stubs:
+            with make_server(tmp_path, isolate_settings) as stubs:
                 run_function(stubs.isolate_stub, take_buffer, b"0" * 200)
 
     with monkeypatch.context() as ctx:
         ctx.setenv("ISOLATE_GRPC_CALL_MAX_SEND_MESSAGE_LENGTH", "5000")
         ctx.setenv("ISOLATE_GRPC_CALL_MAX_RECEIVE_MESSAGE_LENGTH", "5000")
 
-        with make_server(tmp_path) as stubs:
+        with make_server(tmp_path, isolate_settings) as stubs:
             result, _ = run_function(stubs.isolate_stub, take_buffer, b"0" * 200)
             assert result == b"0" * 200
 
