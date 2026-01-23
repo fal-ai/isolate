@@ -392,6 +392,44 @@ class TestVirtualenv(GenericEnvironmentTests):
             tagged_environment.key == tagged_environment_2.key
         ), "Tag order should not matter"
 
+    def test_install_requirements_in_key(self, tmp_path):
+        base = self.get_environment(tmp_path, {"requirements": ["pyjokes==0.6.0"]})
+        with_install = self.get_environment(
+            tmp_path,
+            {
+                "requirements": ["pyjokes==0.6.0"],
+                "install_requirements": ["pip==23.0.1"],
+            },
+        )
+        assert base.key != with_install.key
+
+    def test_install_requirements_order(self, tmp_path, monkeypatch):
+        installed = []
+
+        def fake_install_packages(self, path, requirements):
+            installed.append(list(requirements))
+
+        class DummyVirtualenv:
+            @staticmethod
+            def cli_run(args):
+                Path(args[0]).mkdir(parents=True, exist_ok=True)
+
+        monkeypatch.setattr(
+            "isolate.backends.virtualenv.optional_import", lambda _: DummyVirtualenv
+        )
+        monkeypatch.setattr(
+            VirtualPythonEnvironment, "_install_packages", fake_install_packages
+        )
+
+        environment = VirtualPythonEnvironment(
+            requirements=["pyjokes==0.6.0"],
+            install_requirements=["pip==23.0.1"],
+        )
+        environment.apply_settings(IsolateSettings(Path(tmp_path)))
+        environment.create()
+
+        assert installed == [["pip==23.0.1"], ["pyjokes==0.6.0"]]
+
     @pytest.mark.skipif(not UV_PATH, reason="uv is not available")
     def test_try_using_uv(self, tmp_path):
         environment = self.get_environment(
