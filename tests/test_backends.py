@@ -362,7 +362,11 @@ class TestVirtualenv(GenericEnvironmentTests):
         environment = self.get_environment(tmp_path, {"python_version": "9.9.9"})
         with pytest.raises(
             EnvironmentCreationError,
-            match="Python 9.9.9 is not available",
+            match=(
+                "Your local Python version 9.9.9 is not available in the app "
+                "environment. Please either downgrade your local version of "
+                "Python or use a Docker image with Python 9.9.9"
+            ),
         ):
             environment.create()
 
