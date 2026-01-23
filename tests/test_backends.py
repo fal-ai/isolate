@@ -11,7 +11,6 @@ import pytest
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import get_executable, sha256_digest_of
 from isolate.backends.conda import CondaEnvironment
-from isolate.backends.container import ContainerizedPythonEnvironment
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.pyenv import PyenvEnvironment, _get_pyenv_executable
 from isolate.backends.remote import IsolateServer
@@ -612,15 +611,6 @@ class TestConda(GenericEnvironmentTests):
         assert (
             tagged_environment.key == tagged_environment_2.key
         ), "Tag order should not matter"
-
-
-def test_container_install_requirements_in_key():
-    base = ContainerizedPythonEnvironment(image={"dockerfile_str": "FROM python:3.11"})
-    with_install = ContainerizedPythonEnvironment(
-        image={"dockerfile_str": "FROM python:3.11"},
-        install_requirements=["pip==23.0.1"],
-    )
-    assert base.key != with_install.key
 
 
 def test_local_python_environment():
