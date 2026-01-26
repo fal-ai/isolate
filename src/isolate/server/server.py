@@ -658,7 +658,7 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
 
                             def _stop(*args):
                                 # Small sleep to make sure the cancellation is processed
-                                time.sleep(0.1)
+                                time.sleep(0.3)
                                 print("Stopping server since the task is finished")
                                 self.servicer.shutdown()
                                 self.server.stop(grace=0.1)
