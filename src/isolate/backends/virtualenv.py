@@ -30,6 +30,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "virtualenv"
 
     requirements: list[str] = field(default_factory=list)
+    install_requirements: list[str] = field(default_factory=list)
     constraints_file: os.PathLike | None = None
     python_version: str | None = None
     extra_index_urls: list[str] = field(default_factory=list)
@@ -65,6 +66,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         active_python_version = self.python_version or active_python()
         return sha256_digest_of(
             active_python_version,
+            *self.install_requirements,
             *self.requirements,
             *constraints,
             *self.extra_index_urls,
@@ -74,17 +76,17 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             *extras,
         )
 
-    def install_requirements(self, path: Path) -> None:
+    def _install_packages(self, path: Path, requirements: list[str]) -> None:
         """Install the requirements of this environment using 'pip' to the
         given virtualenv path.
 
         If there are any constraint files specified, they will be also passed to
         the package resolver.
         """
-        if not self.requirements:
+        if not requirements:
             return None
 
-        self.log(f"Installing requirements: {', '.join(self.requirements)}")
+        self.log(f"Installing requirements: {', '.join(requirements)}")
         environ = os.environ.copy()
 
         if self.resolver == "uv":
@@ -102,7 +104,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         pip_cmd: list[str | os.PathLike] = [
             *base_pip_cmd,  # type: ignore
             "install",
-            *self.requirements,
+            *requirements,
         ]
         if self.constraints_file:
             pip_cmd.extend(["-c", self.constraints_file])
@@ -125,8 +127,8 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         from isolate.backends.pyenv import PyenvEnvironment
 
         self.log(
-            f"Requested Python version of {self.python_version} is not available "
-            "in the system, attempting to install it through pyenv."
+            f"Requested Python version of {self.python_version} is not available,"
+            "attempting to install it through pyenv."
         )
 
         pyenv = PyenvEnvironment.from_config(
@@ -147,8 +149,10 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             _get_pyenv_executable()
         except Exception:
             raise EnvironmentCreationError(
-                f"Python {self.python_version} is not available in your "
-                "system. Please install it first."
+                f"Your local Python version {self.python_version} is not "
+                "available in the app environment. "
+                "Please either downgrade your local version of Python or use a Docker "
+                f"image with Python {self.python_version}."
             ) from None
         else:
             return self._install_python_through_pyenv()
@@ -181,7 +185,8 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                     f"Failed to create the environment at '{venv_path}': {exc}"
                 )
 
-            self.install_requirements(venv_path)
+            self._install_packages(venv_path, self.install_requirements)
+            self._install_packages(venv_path, self.requirements)
             completion_marker.touch()
 
         self.log(f"New environment cached at '{venv_path}'")
