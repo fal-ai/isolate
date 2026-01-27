@@ -25,7 +25,6 @@ from typing import (
     Any,
     AsyncIterator,
     Iterable,
-    Iterator,
     TextIO,
 )
 
@@ -159,13 +158,12 @@ class AgentServicer(definitions.AgentServicer):
         super().__init__()
 
         self._run_cache: dict[str, Any] = {}
-        self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
+        self._log = log_file if log_file is not None else sys.stdout
         self._thread_pool = futures.ThreadPoolExecutor(max_workers=1)
         self._idle_timeout_seconds = IDLE_TIMEOUT_SECONDS
         self._is_running = asyncio.Event()
         self._is_idle = asyncio.Event()
         self._is_idle.set()
-        self._log = log_file if log_file is not None else sys.stdout
 
         def handle_sigint(*args):
             self.log("SIGINT signal received, shutting down...")
@@ -413,7 +411,9 @@ def create_server(address: str) -> aio.Server:
     return server
 
 
-async def run_agent(address: str, log_fd: int | None = None, json_logs: bool = False) -> int:
+async def run_agent(
+    address: str, log_fd: int | None = None, json_logs: bool = False
+) -> int:
     """Run the agent servicer on the given address."""
     # Determine the base log file
     if log_fd is None:
