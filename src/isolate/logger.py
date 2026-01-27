@@ -15,7 +15,13 @@ class IsolateLogger:
     def __init__(self, log_labels: Dict[str, str]):
         self.log_labels = log_labels
 
-    def log(self, level: LogLevel, message: str, source: LogSource) -> None:
+    def log(
+        self,
+        level: LogLevel,
+        message: str,
+        source: LogSource,
+        line_labels: Dict[str, str],
+    ) -> None:
         record = {
             # Set the timestamp from source so we can be sure no buffering or
             # latency is affecting the timestamp.
@@ -25,6 +31,7 @@ class IsolateLogger:
             "message": message,
             **self.log_labels,
             **self.extra_labels,
+            **line_labels,
         }
         print(json.dumps(record))
 
