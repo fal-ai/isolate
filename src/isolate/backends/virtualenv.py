@@ -10,6 +10,7 @@ from typing import Any, ClassVar
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import (
+    Requirements,
     active_python,
     get_executable,
     get_executable_path,
@@ -29,8 +30,7 @@ _UV_RESOLVER_HOME = os.getenv("ISOLATE_UV_HOME")
 class VirtualPythonEnvironment(BaseEnvironment[Path]):
     BACKEND_NAME: ClassVar[str] = "virtualenv"
 
-    requirements: list[str] = field(default_factory=list)
-    install_requirements: list[str] = field(default_factory=list)
+    requirements: Requirements = field(default_factory=Requirements)
     constraints_file: os.PathLike | None = None
     python_version: str | None = None
     extra_index_urls: list[str] = field(default_factory=list)
@@ -43,7 +43,11 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         config: dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
-        environment = cls(**config)
+        prepared = dict(config)
+        prepared["requirements"] = Requirements.from_raw(
+            config.get("requirements") or []
+        )
+        environment = cls(**prepared)
         environment.apply_settings(settings)
         if environment.resolver not in ("uv", None):
             raise ValueError(
@@ -66,8 +70,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
         active_python_version = self.python_version or active_python()
         return sha256_digest_of(
             active_python_version,
-            *self.install_requirements,
-            *self.requirements,
+            *self.requirements.keys(),
             *constraints,
             *self.extra_index_urls,
             *sorted(self.tags),
@@ -185,8 +188,8 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                     f"Failed to create the environment at '{venv_path}': {exc}"
                 )
 
-            self._install_packages(venv_path, self.install_requirements)
-            self._install_packages(venv_path, self.requirements)
+            for layer in self.requirements.layers:
+                self._install_packages(venv_path, layer)
             completion_marker.touch()
 
         self.log(f"New environment cached at '{venv_path}'")

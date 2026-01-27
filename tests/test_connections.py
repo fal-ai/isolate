@@ -7,6 +7,7 @@ from typing import Any, List
 
 import pytest
 from isolate.backends import BaseEnvironment, EnvironmentConnection
+from isolate.backends.common import Requirements
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.settings import IsolateSettings
 from isolate.backends.virtualenv import VirtualPythonEnvironment
@@ -42,7 +43,7 @@ class GenericPythonConnectionTests:
         self, tmp_path: Any, requirements: List[str]
     ) -> VirtualPythonEnvironment:
         """Create a new virtual env with the specified requirements."""
-        env = VirtualPythonEnvironment(requirements)
+        env = VirtualPythonEnvironment(Requirements.from_raw(requirements))
         env.apply_settings(IsolateSettings(Path(tmp_path)))
         return env
 
@@ -206,6 +207,8 @@ class TestPythonGRPC(GenericPythonConnectionTests):
     ) -> VirtualPythonEnvironment:
         # Since gRPC agent requires isolate to be installed, we
         # have to add it to the requirements.
-        env = VirtualPythonEnvironment(requirements + [f"{REPO_DIR}[grpc]"])
+        env = VirtualPythonEnvironment(
+            Requirements.from_raw(requirements + [f"{REPO_DIR}[grpc]"])
+        )
         env.apply_settings(IsolateSettings(Path(tmp_path)))
         return env

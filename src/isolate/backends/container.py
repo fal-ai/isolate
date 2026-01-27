@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from isolate.backends import BaseEnvironment
-from isolate.backends.common import sha256_digest_of
+from isolate.backends.common import Requirements, sha256_digest_of
 from isolate.backends.settings import DEFAULT_SETTINGS, IsolateSettings
 from isolate.connections import PythonIPC
 
@@ -17,8 +17,7 @@ class ContainerizedPythonEnvironment(BaseEnvironment[Path]):
 
     image: dict[str, Any] = field(default_factory=dict)
     python_version: str | None = None
-    requirements: list[str] = field(default_factory=list)
-    install_requirements: list[str] = field(default_factory=list)
+    requirements: Requirements = field(default_factory=Requirements)
     tags: list[str] = field(default_factory=list)
     resolver: str | None = None
 
@@ -28,7 +27,11 @@ class ContainerizedPythonEnvironment(BaseEnvironment[Path]):
         config: dict[str, Any],
         settings: IsolateSettings = DEFAULT_SETTINGS,
     ) -> BaseEnvironment:
-        environment = cls(**config)
+        prepared = dict(config)
+        prepared["requirements"] = Requirements.from_raw(
+            config.get("requirements") or []
+        )
+        environment = cls(**prepared)
         environment.apply_settings(settings)
         if environment.resolver not in ("uv", None):
             raise ValueError(
@@ -47,8 +50,7 @@ class ContainerizedPythonEnvironment(BaseEnvironment[Path]):
         dockerfile_str = self.image.get("dockerfile_str", "")
         return sha256_digest_of(
             dockerfile_str,
-            *self.install_requirements,
-            *self.requirements,
+            *self.requirements.keys(),
             *sorted(self.tags),
             *extras,
         )
