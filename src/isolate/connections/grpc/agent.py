@@ -39,6 +39,8 @@ from isolate.connections.grpc import definitions
 from isolate.connections.grpc.configuration import get_default_options
 from isolate.connections.grpc.interface import from_grpc
 
+IDLE_TIMEOUT_SECONDS = int(os.getenv("ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS", "0"))
+
 
 @dataclass
 class AbortException(Exception):
@@ -52,14 +54,61 @@ class AgentServicer(definitions.AgentServicer):
         self._run_cache: dict[str, Any] = {}
         self._log = sys.stdout if log_fd is None else os.fdopen(log_fd, "w")
         self._thread_pool = futures.ThreadPoolExecutor(max_workers=1)
+        self._idle_timeout_seconds = IDLE_TIMEOUT_SECONDS
+        self._is_running = asyncio.Event()
+        self._is_idle = asyncio.Event()
+        self._is_idle.set()
 
-        def handle_termination(*args):
-            self.log("Termination signal received, shutting down...")
+        def handle_sigint(*args):
+            self.log("SIGINT signal received, shutting down...")
             signal.raise_signal(signal.SIGTERM)
 
-        signal.signal(signal.SIGINT, handle_termination)
+        signal.signal(signal.SIGINT, handle_sigint)
+
+    async def wait_for_idle_timeout(self) -> None:
+        while True:
+            # print(f"Hello, world! {self._idle_timeout_seconds}")
+            # wait for the agent to be idle
+            await self._is_idle.wait()
+
+            # idle timeout disabled
+            if self._idle_timeout_seconds <= 0:
+                # prevent blocking the event loop
+                await asyncio.sleep(0.1)
+                continue
+
+            try:
+                # wait for the agent to be running
+                await asyncio.wait_for(
+                    self._is_running.wait(), timeout=self._idle_timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                self.log(
+                    f"Idle timeout {self._idle_timeout_seconds} seconds exceeded, shutting down..."  # noqa: E501
+                )
+                # This kills the agent itself, however it will remain as a zombie state
+                # unless the parent process (server) properly handles the SIGCHLD.
+                signal.raise_signal(signal.SIGTERM)
+                break
+            except asyncio.CancelledError:
+                # Cancelled when the server is shutting down
+                break
 
     async def Run(
+        self,
+        request: definitions.FunctionCall,
+        context: aio.ServicerContext,
+    ) -> AsyncIterator[PartialRunResult]:
+        self._is_idle.clear()
+        self._is_running.set()
+        try:
+            async for result in self._Run(request, context):
+                yield result
+        finally:
+            self._is_running.clear()
+            self._is_idle.set()
+
+    async def _Run(
         self,
         request: definitions.FunctionCall,
         context: aio.ServicerContext,
@@ -267,7 +316,18 @@ async def run_agent(address: str, log_fd: int | None = None) -> int:
     definitions.register_agent(servicer, server)
 
     await server.start()
-    await server.wait_for_termination()
+
+    _, pending = await asyncio.wait(
+        [
+            asyncio.create_task(server.wait_for_termination()),
+            asyncio.create_task(servicer.wait_for_idle_timeout()),
+        ],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for task in pending:
+        print(f"Cancelling task: {task}")
+        task.cancel()
+
     return 0
 
 

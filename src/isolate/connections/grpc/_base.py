@@ -153,6 +153,12 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
             except Exception as exc:
                 print(f"Failed to shutdown the agent process gracefully: {exc}")
                 self._process.kill()
+            self._process = None
+
+    def is_alive(self) -> bool:
+        if self._process is None:
+            return False
+        return self._process.poll() is None
 
     def get_python_cmd(
         self,
