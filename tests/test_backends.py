@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Type
 import isolate
 import pytest
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
-from isolate.backends.common import get_executable, sha256_digest_of
+from isolate.backends.common import Requirements, get_executable, sha256_digest_of
 from isolate.backends.conda import CondaEnvironment
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.pyenv import PyenvEnvironment, _get_pyenv_executable
@@ -392,18 +392,34 @@ class TestVirtualenv(GenericEnvironmentTests):
             tagged_environment.key == tagged_environment_2.key
         ), "Tag order should not matter"
 
-    def test_install_requirements_in_key(self, tmp_path):
-        base = self.get_environment(tmp_path, {"requirements": ["pyjokes==0.6.0"]})
-        with_install = self.get_environment(
+    def test_layered_requirements_in_key(self, tmp_path):
+        base = self.get_environment(
+            tmp_path, {"requirements": ["pyjokes==0.6.0", "pip==23.0.1"]}
+        )
+        layered = self.get_environment(
             tmp_path,
             {
-                "requirements": ["pyjokes==0.6.0"],
-                "install_requirements": ["pip==23.0.1"],
+                "requirements": [["pyjokes==0.6.0"], ["pip==23.0.1"]],
             },
         )
-        assert base.key != with_install.key
+        assert base.key != layered.key
 
-    def test_install_requirements_order(self, tmp_path, monkeypatch):
+    def test_layered_requirements_order_affects_key(self, tmp_path):
+        first = self.get_environment(
+            tmp_path,
+            {
+                "requirements": [["pyjokes==0.6.0"], ["pip==23.0.1"]],
+            },
+        )
+        second = self.get_environment(
+            tmp_path,
+            {
+                "requirements": [["pip==23.0.1"], ["pyjokes==0.6.0"]],
+            },
+        )
+        assert first.key != second.key
+
+    def test_requirements_layers_install_order(self, tmp_path, monkeypatch):
         installed = []
 
         def fake_install_packages(self, path, requirements):
@@ -422,8 +438,7 @@ class TestVirtualenv(GenericEnvironmentTests):
         )
 
         environment = VirtualPythonEnvironment(
-            requirements=["pyjokes==0.6.0"],
-            install_requirements=["pip==23.0.1"],
+            requirements=Requirements.from_raw([["pip==23.0.1"], ["pyjokes==0.6.0"]]),
         )
         environment.apply_settings(IsolateSettings(Path(tmp_path)))
         environment.create()
@@ -442,6 +457,24 @@ class TestVirtualenv(GenericEnvironmentTests):
         connection_key = environment.create()
         pyjokes_version = self.get_example_version(environment, connection_key)
         assert pyjokes_version == "0.5.0"
+
+
+class TestRequirements:
+    def test_from_raw_single_layer(self):
+        requirements = Requirements.from_raw(["a", "b"])
+        assert requirements.layers == [["a", "b"]]
+
+    def test_from_raw_multi_layer(self):
+        requirements = Requirements.from_raw([["a"], ["b", "c"]])
+        assert requirements.layers == [["a"], ["b", "c"]]
+
+    def test_keys_single_layer_backward_compat(self):
+        requirements = Requirements.from_raw(["a", "b"])
+        assert requirements.keys() == ["a", "b"]
+
+    def test_keys_multi_layer_prefixes(self):
+        requirements = Requirements.from_raw([["a"], ["b", "c"]])
+        assert requirements.keys() == ["layer0:\na", "layer1:\nb\nc"]
 
 
 # Since mamba is an external dependency, we'll skip tests using it
@@ -918,7 +951,7 @@ def test_pyenv_environment(python_version, tmp_path):
 @pytest.mark.skipif(not IS_PYENV_AVAILABLE, reason="Pyenv is not available")
 def test_virtual_env_custom_python_version_with_pyenv(tmp_path, monkeypatch):
     pyjokes_env = VirtualPythonEnvironment(
-        requirements=["pyjokes==0.6.0"],
+        requirements=Requirements.from_raw(["pyjokes==0.6.0"]),
         python_version="3.9",
     )
 

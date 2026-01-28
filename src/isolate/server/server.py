@@ -25,7 +25,7 @@ from isolate.backends import (
     EnvironmentCreationError,
     IsolateSettings,
 )
-from isolate.backends.common import active_python
+from isolate.backends.common import Requirements, active_python
 from isolate.backends.local import LocalPythonEnvironment
 from isolate.backends.virtualenv import VirtualPythonEnvironment
 from isolate.connections.grpc import AgentError, LocalPythonGRPC
@@ -266,7 +266,7 @@ class IsolateServicer(definitions.IsolateServicer):
                 primary_environment, "python_version", active_python()
             )
             agent_environ = VirtualPythonEnvironment(
-                requirements=AGENT_REQUIREMENTS,
+                requirements=Requirements.from_raw(AGENT_REQUIREMENTS),
                 python_version=python_version,
             )
             agent_environ.apply_settings(run_settings)

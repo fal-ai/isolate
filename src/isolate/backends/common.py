@@ -9,6 +9,7 @@ import sysconfig
 import threading
 import time
 from contextlib import contextmanager, suppress
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from types import ModuleType
@@ -218,6 +219,41 @@ def sha256_digest_of(*unique_fields: str | bytes) -> str:
     join_char = b"\n"
     inner_text = join_char.join(map(_normalize, unique_fields))
     return hashlib.sha256(inner_text).hexdigest()
+
+
+@dataclass
+class Requirements:
+    layers: list[list[str]] = field(default_factory=list)
+
+    @classmethod
+    def from_raw(cls, raw: list[str] | list[list[str]]) -> Requirements:
+        if not raw:
+            return cls()
+
+        if isinstance(raw, list) and all(isinstance(item, str) for item in raw):
+            return cls([raw])  # type: ignore[list-item]
+
+        if isinstance(raw, list) and all(isinstance(item, list) for item in raw):
+            layers: list[list[str]] = []
+            for layer in raw:
+                if not all(isinstance(item, str) for item in layer):
+                    raise TypeError("Requirements layers must contain strings.")
+                layers.append(layer)  # type: ignore[arg-type]
+            return cls(layers)
+
+        raise TypeError(
+            "Requirements must be a list of strings or list of lists of strings."
+        )
+
+    def keys(self) -> list[str]:
+        if not self.layers:
+            return []
+        if len(self.layers) == 1:
+            return list(self.layers[0])
+        return [
+            f"layer{index}:\n" + "\n".join(layer)
+            for index, layer in enumerate(self.layers)
+        ]
 
 
 def active_python() -> str:
