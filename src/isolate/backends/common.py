@@ -238,7 +238,7 @@ class Requirements:
             for layer in raw:
                 if not all(isinstance(item, str) for item in layer):
                     raise TypeError("Requirements layers must contain strings.")
-                layers.append(list(layer))
+                layers.append(layer)
             return cls(layers)
 
         raise TypeError(
