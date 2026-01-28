@@ -231,7 +231,7 @@ class Requirements:
             return cls()
 
         if isinstance(raw, list) and all(isinstance(item, str) for item in raw):
-            return cls([list(cast(List[str], raw))])
+            return cls([raw])
 
         if isinstance(raw, list) and all(isinstance(item, list) for item in raw):
             layers: list[list[str]] = []
