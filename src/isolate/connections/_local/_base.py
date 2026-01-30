@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sysconfig
 from contextlib import contextmanager
@@ -122,20 +123,32 @@ class PythonExecutionBase(Generic[ConnectionType]):
             # fallback to the generic binary.
             python_executable = get_executable_path(self.environment_path, "python")
 
+        env = self.get_env_vars()
+        patterns = self._mk_patterns(env)
+
         with logged_io(
             partial(
-                self.handle_agent_log, source=LogSource.USER, level=LogLevel.STDOUT
+                self._mask_agent_log,
+                patterns=patterns,
+                source=LogSource.USER,
+                level=LogLevel.STDOUT,
             ),
             partial(
-                self.handle_agent_log, source=LogSource.USER, level=LogLevel.STDERR
+                self._mask_agent_log,
+                patterns=patterns,
+                source=LogSource.USER,
+                level=LogLevel.STDERR,
             ),
             partial(
-                self.handle_agent_log, source=LogSource.BRIDGE, level=LogLevel.TRACE
+                self._mask_agent_log,
+                patterns=patterns,
+                source=LogSource.BRIDGE,
+                level=LogLevel.TRACE,
             ),
         ) as (stdout, stderr, log_fd):
             yield subprocess.Popen(
                 self.get_python_cmd(python_executable, connection, log_fd),
-                env=self.get_env_vars(),
+                env=env,
                 stdout=stdout,
                 stderr=stderr,
                 pass_fds=(log_fd,),
@@ -181,6 +194,29 @@ class PythonExecutionBase(Generic[ConnectionType]):
     ) -> list[str | Path]:
         """Return the command to run the agent process with."""
         raise NotImplementedError
+
+    # Make regex for each envvar except path that's longer than 8 chars (for masking)
+    def _mk_patterns(self, env: dict[str, str]) -> list[re.Pattern]:
+        return [
+            re.compile(re.escape(val))
+            for key, val in env.items()
+            if len(val) > 8 and key != "PATH"
+        ]
+
+    def _mask_agent_log(
+        self,
+        line: str,
+        *,
+        patterns: list[re.Pattern],
+        level: LogLevel,
+        source: LogSource,
+    ) -> None:
+        # We don't mask less than 8 chars.
+        if len(line) > 8:
+            for expr in patterns:
+                line = expr.sub("********", line)
+
+        self.handle_agent_log(line, level=level, source=source)
 
     def handle_agent_log(
         self, line: str, *, level: LogLevel, source: LogSource
