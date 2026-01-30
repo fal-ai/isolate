@@ -22,7 +22,9 @@ class MockPythonExecution(PythonExecutionBase):
     def get_python_cmd(self, executable, connection, log_fd):  # type: ignore[override]
         return ["python", "-c", "pass"]
 
-    def handle_agent_log(self, line: str, *, level: LogLevel, source: LogSource) -> None:
+    def handle_agent_log(
+        self, line: str, *, level: LogLevel, source: LogSource
+    ) -> None:
         self.logged_messages.append((line, level, source))
 
 
@@ -237,7 +239,9 @@ class TestIntegration:
         # Should have patterns for API_KEY and DB_PASSWORD only
         assert len(patterns) == 2
 
-        log_line = f"Connecting to DB with {env['DB_PASSWORD']} and API key {env['API_KEY']}"
+        log_line = (
+            f"Connecting to DB with {env['DB_PASSWORD']} and API key {env['API_KEY']}"
+        )
         self.executor._mask_agent_log(
             log_line,
             patterns=patterns,
