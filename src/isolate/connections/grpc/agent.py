@@ -54,6 +54,7 @@ def get_log_context() -> dict[str, Any]:
             key = var.name[4:].lower()
             try:
                 value = var.get()
+                # Ellipsis is a placeholder to indicate it's not set
                 if value is not Ellipsis:
                     result[key] = var.get()
             except LookupError:
