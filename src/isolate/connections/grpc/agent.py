@@ -45,21 +45,16 @@ from isolate.connections.grpc.interface import from_grpc
 
 IDLE_TIMEOUT_SECONDS = int(os.getenv("ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS", "0"))
 
+log_context = contextvars.ContextVar("ISOLATE_CONTEXT_VAR_LOG", default=None)
+
 
 def get_log_context() -> dict[str, Any]:
-    """Extract all contextvars that start with LOG_ prefix."""
-    result = {}
-    for var in contextvars.copy_context():
-        if var.name.startswith("LOG_"):
-            key = var.name[4:].lower()
-            try:
-                value = var.get()
-                # Ellipsis is a placeholder to indicate it's not set
-                if value is not Ellipsis:
-                    result[key] = var.get()
-            except LookupError:
-                pass
-    return result
+    """Extract the contextvar that is set to the log_context."""
+    value = log_context.get()
+    if not isinstance(value, dict):
+        return {}
+
+    return value
 
 
 class JsonStdoutProxy:
