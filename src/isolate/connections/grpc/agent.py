@@ -45,12 +45,14 @@ from isolate.connections.grpc.interface import from_grpc
 
 IDLE_TIMEOUT_SECONDS = int(os.getenv("ISOLATE_AGENT_IDLE_TIMEOUT_SECONDS", "0"))
 
-log_context = contextvars.ContextVar("ISOLATE_CONTEXT_VAR_LOG", default=None)
+isolate_log_context: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
+    "ISOLATE_CONTEXT_VAR_LOG", default={}
+)
 
 
 def get_log_context() -> dict[str, Any]:
     """Extract the contextvar that is set to the log_context."""
-    value = log_context.get()
+    value = isolate_log_context.get()
     if not isinstance(value, dict):
         return {}
 
