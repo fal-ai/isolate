@@ -18,6 +18,7 @@ from typing import (
 
 from isolate import __version__ as isolate_version
 from isolate.backends.common import active_python, get_executable_path, logged_io
+from isolate.backends.settings import JSON_LOGS
 from isolate.connections.common import AGENT_SIGNATURE
 from isolate.logs import LogLevel, LogSource
 
@@ -102,6 +103,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
     environment: BaseEnvironment
     environment_path: Path
     extra_inheritance_paths: list[Path] = field(default_factory=list)
+    json_logs: bool = True
 
     @contextmanager
     def start_process(
@@ -147,7 +149,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
             ),
         ) as (stdout, stderr, log_fd):
             yield subprocess.Popen(
-                self.get_python_cmd(python_executable, connection, log_fd),
+                self.get_python_cmd(python_executable, connection, log_fd, JSON_LOGS),
                 env=env,
                 stdout=stdout,
                 stderr=stderr,
@@ -191,6 +193,7 @@ class PythonExecutionBase(Generic[ConnectionType]):
         executable: Path,
         connection: ConnectionType,
         log_fd: int,
+        json_logs: bool = False,
     ) -> list[str | Path]:
         """Return the command to run the agent process with."""
         raise NotImplementedError

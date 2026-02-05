@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 _SYSTEM_TEMP_DIR = Path(tempfile.gettempdir())
 _STRICT_CACHE = os.getenv("ISOLATE_STRICT_CACHE", "0") == "1"
+JSON_LOGS = os.getenv("ISOLATE_JSON_LOGS", "0") == "1"
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class IsolateSettings:
     serialization_method: str = "pickle"
     log_hook: Callable[[Log], None] = print
     strict_cache: bool = _STRICT_CACHE
+    json_logs: bool = JSON_LOGS
 
     def log(self, log: Log) -> None:
         self.log_hook(self._infer_log_level(log))
@@ -39,7 +41,7 @@ class IsolateSettings:
         if log.source in (LogSource.BUILDER, LogSource.BRIDGE):
             return replace(log, level=LogLevel.TRACE)
 
-        line = log.message.lower()
+        line = log.message_str().lower()
 
         if line.startswith("error") or "[error]" in line:
             return replace(log, level=LogLevel.ERROR)
