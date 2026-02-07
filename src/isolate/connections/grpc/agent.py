@@ -52,7 +52,12 @@ isolate_log_context: contextvars.ContextVar[dict[str, Any]] = contextvars.Contex
 
 def get_log_context() -> dict[str, Any]:
     """Extract the contextvar that is set to the log_context."""
-    value = isolate_log_context.get()
+    try:
+        value = isolate_log_context.get()
+    except Exception:
+        # catch any exception that might be raised
+        return {}
+
     if not isinstance(value, dict):
         return {}
 
