@@ -225,6 +225,11 @@ class IsolateServicer(definitions.IsolateServicer):
     bridge_manager: BridgeManager
     default_settings: IsolateSettings = field(default_factory=IsolateSettings)
     background_tasks: dict[str, RunTask] = field(default_factory=dict)
+
+    task_message_queues: dict[str, Queue[definitions.PartialRunResult]] = field(
+        default_factory=dict
+    )
+
     _shutting_down: bool = field(default=False)
 
     _thread_pool: futures.ThreadPoolExecutor = field(
@@ -360,9 +365,17 @@ class IsolateServicer(definitions.IsolateServicer):
                             StatusCode.UNKNOWN,
                         )
 
-    def _run_task_in_background(self, task: RunTask) -> None:
-        for _ in self._run_task(task):
-            pass
+    def _run_task_in_background(self, task: RunTask, task_id: str) -> None:
+        self.task_message_queues[task_id] = Queue()
+        try:
+            for message in self._run_task(task):
+                self.task_message_queues[task_id].put_nowait(message)
+            print(f"Task {task_id} finished with result: {message}")
+        except Exception as e:
+            print(f"Task {task_id} finished with error: {e}")
+            raise e
+        finally:
+            self.background_tasks.pop(task_id, None)
 
     def Submit(
         self,
@@ -372,25 +385,52 @@ class IsolateServicer(definitions.IsolateServicer):
         task = RunTask(request=request.function)
         self.set_metadata(task, request.metadata)
 
-        task.future = self._thread_pool.submit(self._run_task_in_background, task)
         task_id = str(uuid.uuid4())
+        task.future = self._thread_pool.submit(
+            self._run_task_in_background, task, task_id
+        )
 
         print(f"Submitted a task {task_id}")
 
         self.background_tasks[task_id] = task
 
-        def _callback(future: futures.Future) -> None:
-            msg = f"Task {task_id} finished with"
-            if exc := future.exception():
-                msg += f" error: {exc!r}"
-            else:
-                msg += f" result: {future.result()!r}"
-            print(msg)
-            self.background_tasks.pop(task_id, None)
-
-        task.future.add_done_callback(_callback)
-
         return definitions.SubmitResponse(task_id=task_id)
+
+    def Subscribe(
+        self,
+        request: definitions.SubscribeRequest,
+        context: ServicerContext,
+    ) -> Iterator[definitions.PartialRunResult]:
+        task_id = request.task_id
+        if (
+            task_id not in self.background_tasks
+            or task_id not in self.task_message_queues
+        ):
+            raise GRPCException(
+                f"Task {task_id} not found.",
+                StatusCode.NOT_FOUND,
+            )
+
+        future = self.background_tasks[task_id].future
+
+        start_time = time.monotonic()
+        while future is None and time.monotonic() - start_time < 10:
+            time.sleep(0.1)
+            future = self.background_tasks[task_id].future
+
+        if future is None:
+            raise GRPCException(
+                f"Timeout waiting for task {task_id} to start.",
+                StatusCode.DEADLINE_EXCEEDED,
+            )
+
+        queue = self.task_message_queues[task_id]
+
+        yield from self.watch_queue_until_completed(queue, future.done)
+
+        exception = future.exception(timeout=0.1)
+        if exception is not None:
+            raise exception
 
     def SetMetadata(
         self,
