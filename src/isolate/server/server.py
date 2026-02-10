@@ -230,6 +230,9 @@ class IsolateServicer(definitions.IsolateServicer):
         default_factory=dict
     )
 
+    _active_subscriptions: dict[str, threading.Event] = field(default_factory=dict)
+    _subscription_lock: threading.Lock = field(default_factory=threading.Lock)
+
     _shutting_down: bool = field(default=False)
 
     _thread_pool: futures.ThreadPoolExecutor = field(
@@ -424,13 +427,36 @@ class IsolateServicer(definitions.IsolateServicer):
                 StatusCode.DEADLINE_EXCEEDED,
             )
 
+        # Cancel any existing subscriber for this task and register ourselves.
+        cancelled = threading.Event()
+        with self._subscription_lock:
+            old_event = self._active_subscriptions.get(task_id)
+            if old_event is not None:
+                old_event.set()  # Signal the previous subscriber to stop
+            self._active_subscriptions[task_id] = cancelled
+
         queue = self.task_message_queues[task_id]
 
-        yield from self.watch_queue_until_completed(queue, future.done)
+        try:
+            yield from self.watch_queue_until_completed(
+                queue, future.done, cancelled=cancelled
+            )
 
-        exception = future.exception(timeout=0.1)
-        if exception is not None:
-            raise exception
+            if cancelled.is_set():
+                raise GRPCException(
+                    "Subscription to task "
+                    f"{task_id} was superseded by a new subscriber.",
+                    StatusCode.ABORTED,
+                )
+
+            exception = future.exception(timeout=0.1)
+            if exception is not None:
+                raise exception
+        finally:
+            with self._subscription_lock:
+                # Only clean up if we are still the active subscriber
+                if self._active_subscriptions.get(task_id) is cancelled:
+                    del self._active_subscriptions[task_id]
 
     def SetMetadata(
         self,
@@ -509,15 +535,24 @@ class IsolateServicer(definitions.IsolateServicer):
         print("All tasks canceled.")
 
     def watch_queue_until_completed(
-        self, queue: Queue, is_completed: Callable[[], bool]
+        self,
+        queue: Queue,
+        is_completed: Callable[[], bool],
+        cancelled: threading.Event | None = None,
     ) -> Iterator[definitions.PartialRunResult]:
         """Watch the given queue until the is_completed function returns True.
         Note that even if the function is completed, this function might not
         finish until the queue is empty.
+
+        If a ``cancelled`` event is provided and becomes set, the watcher
+        will stop yielding immediately so the caller can handle the
+        cancellation (e.g. a subscription superseded by a new subscriber).
         """
 
         timer = time.monotonic()
         while not is_completed():
+            if cancelled is not None and cancelled.is_set():
+                return
             try:
                 yield queue.get(timeout=_Q_WAIT_DELAY)
             except QueueEmpty:
@@ -532,7 +567,7 @@ class IsolateServicer(definitions.IsolateServicer):
                     )
 
         # Clear the final messages
-        while not queue.empty():
+        while not queue.empty() and not (cancelled is not None and cancelled.is_set()):
             try:
                 yield queue.get_nowait()
             except QueueEmpty:
