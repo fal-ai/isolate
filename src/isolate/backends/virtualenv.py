@@ -26,6 +26,7 @@ from isolate.logs import LogLevel
 
 _UV_RESOLVER_EXECUTABLE = os.environ.get("ISOLATE_UV_EXE", "uv")
 _UV_RESOLVER_HOME = os.getenv("ISOLATE_UV_HOME")
+_MAX_ERROR_MESSAGE_LENGTH = 4096
 
 
 @dataclass
@@ -189,9 +190,14 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                     virtualenv.cli_run(args)
             except (SystemExit, RuntimeError, OSError) as exc:
                 stderr_output = stderr_capture.getvalue().strip()
+                ellipsed_stderr = (
+                    f"...{stderr_output[-_MAX_ERROR_MESSAGE_LENGTH:]}"
+                    if len(stderr_output) > _MAX_ERROR_MESSAGE_LENGTH
+                    else stderr_output
+                )
                 raise EnvironmentCreationError(
                     f"Failed to create the environment at '{venv_path}': {exc}"
-                    f"\nstderr: {stderr_output}"
+                    f"\nstderr: {ellipsed_stderr}"
                 )
 
             for layer in self.requirements.layers:
