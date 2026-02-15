@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -182,10 +184,14 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
 
             try:
                 # This is not an official API, so it can throw anything at us.
-                virtualenv.cli_run(args)
+                stderr_capture = io.StringIO()
+                with contextlib.redirect_stderr(stderr_capture):
+                    virtualenv.cli_run(args)
             except (SystemExit, RuntimeError, OSError) as exc:
+                stderr_output = stderr_capture.getvalue().strip()
                 raise EnvironmentCreationError(
                     f"Failed to create the environment at '{venv_path}': {exc}"
+                    f"\nstderr: {stderr_output}"
                 )
 
             for layer in self.requirements.layers:

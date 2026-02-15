@@ -458,6 +458,24 @@ class TestVirtualenv(GenericEnvironmentTests):
         pyjokes_version = self.get_example_version(environment, connection_key)
         assert pyjokes_version == "0.5.0"
 
+    def test_cli_run_stderr_captured_in_error(self, tmp_path, monkeypatch):
+        """When virtualenv.cli_run() prints to stderr before raising SystemExit,
+        the stderr content should appear in EnvironmentCreationError."""
+
+        class FakeVirtualenv:
+            @staticmethod
+            def cli_run(args):
+                print("error: unrecognized arguments: --bogus", file=sys.stderr)
+                raise SystemExit(2)
+
+        monkeypatch.setattr(
+            "isolate.backends.virtualenv.optional_import", lambda _: FakeVirtualenv
+        )
+
+        environment = self.get_environment(tmp_path, {"requirements": []})
+        with pytest.raises(EnvironmentCreationError, match="unrecognized arguments"):
+            environment.create()
+
 
 class TestRequirements:
     def test_from_raw_single_layer(self):
