@@ -201,7 +201,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             original_stderr = sys.stderr
 
             def log_stderr(s: str) -> None:
-                self.log(s, level=LogLevel.INFO)
+                self.log(s, level=LogLevel.ERROR)
                 print(s, file=original_stderr)
 
             # Capture stderr so we can include it in error messages.
