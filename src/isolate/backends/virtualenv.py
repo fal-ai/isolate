@@ -211,7 +211,7 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                 stderr_output = stderr_capture.getvalue().strip()
                 # Strip the verbose argparse usage banner
                 stderr_output = re.sub(
-                    r"^usage:.*\n(?:\s.*\n)*", "", stderr_output
+                    r"usage: virtualenv .*\n(?:\s.*\n)*", "", stderr_output
                 ).strip()
                 ellipsed_stderr = (
                     f"...{stderr_output[-_MAX_ERROR_MESSAGE_LENGTH:]}"
