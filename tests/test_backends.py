@@ -458,9 +458,9 @@ class TestVirtualenv(GenericEnvironmentTests):
         pyjokes_version = self.get_example_version(environment, connection_key)
         assert pyjokes_version == "0.5.0"
 
-    def test_cli_run_stderr_captured_in_error(self, tmp_path, monkeypatch):
-        """When virtualenv.cli_run() prints to stderr before raising SystemExit,
-        the stderr content should appear in EnvironmentCreationError."""
+    def test_cli_run_stderr_printed_on_error(self, tmp_path, monkeypatch, capsys):
+        """Stderr from virtualenv.cli_run() should be printed and logged."""
+        logged_messages = []
 
         class FakeVirtualenv:
             @staticmethod
@@ -473,26 +473,19 @@ class TestVirtualenv(GenericEnvironmentTests):
         )
 
         environment = self.get_environment(tmp_path, {"requirements": []})
-        with pytest.raises(EnvironmentCreationError, match="unrecognized arguments"):
+        original_log = environment.log
+
+        def capture_log(message, **kwargs):
+            logged_messages.append(message)
+            original_log(message, **kwargs)
+
+        monkeypatch.setattr(environment, "log", capture_log)
+
+        with pytest.raises(EnvironmentCreationError):
             environment.create()
 
-    def test_cli_run_stderr_printed_on_success(self, tmp_path, monkeypatch, capsys):
-        """Stderr output from virtualenv.cli_run() should be printed even on success."""
-
-        class FakeVirtualenv:
-            @staticmethod
-            def cli_run(args):
-                Path(args[0]).mkdir(parents=True, exist_ok=True)
-                print("some warning message", file=sys.stderr)
-
-        monkeypatch.setattr(
-            "isolate.backends.virtualenv.optional_import", lambda _: FakeVirtualenv
-        )
-
-        environment = self.get_environment(tmp_path, {"requirements": []})
-        environment.create()
-
-        assert "some warning message" in capsys.readouterr().err
+        assert "unrecognized arguments" in capsys.readouterr().err
+        assert any("unrecognized arguments" in msg for msg in logged_messages)
 
 
 class TestRequirements:

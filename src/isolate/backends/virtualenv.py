@@ -199,16 +199,19 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             # Grab a reference before redirect_stderr replaces sys.stderr,
             # otherwise printing to sys.stderr inside the callback would recurse.
             original_stderr = sys.stderr
+
+            def log_stderr(s: str) -> None:
+                self.log(s, level=LogLevel.INFO)
+                print(s, file=original_stderr)
+
             # Capture stderr so we can include it in error messages.
             # It also logs lines in real time.
-            stderr_capture = _LoggedStringIO(lambda s: print(s, file=original_stderr))
+            stderr_capture = _LoggedStringIO(log_stderr)
             try:
                 with contextlib.redirect_stderr(stderr_capture):
                     # This is not an official API, so it can throw anything at us.
                     virtualenv.cli_run(args)
             except (SystemExit, RuntimeError, OSError) as exc:
-                stderr_output = stderr_capture.getvalue().strip()
-                self.log(stderr_output, level=LogLevel.ERROR)
                 raise EnvironmentCreationError(
                     f"Failed to create the environment at '{venv_path}': {exc}"
                 )
