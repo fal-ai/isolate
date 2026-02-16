@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import io
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -209,18 +208,9 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
                     virtualenv.cli_run(args)
             except (SystemExit, RuntimeError, OSError) as exc:
                 stderr_output = stderr_capture.getvalue().strip()
-                # Strip the verbose argparse usage banner
-                stderr_output = re.sub(
-                    r"usage: virtualenv .*\n(?:\s.*\n)*", "", stderr_output
-                ).strip()
-                ellipsed_stderr = (
-                    f"...{stderr_output[-_MAX_ERROR_MESSAGE_LENGTH:]}"
-                    if len(stderr_output) > _MAX_ERROR_MESSAGE_LENGTH
-                    else stderr_output
-                )
+                self.log(stderr_output, level=LogLevel.ERROR)
                 raise EnvironmentCreationError(
                     f"Failed to create the environment at '{venv_path}': {exc}"
-                    f"\nstderr: {ellipsed_stderr}"
                 )
 
             for layer in self.requirements.layers:
