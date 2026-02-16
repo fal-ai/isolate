@@ -5,10 +5,11 @@ import io
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, Callable, ClassVar
 
 from isolate.backends import BaseEnvironment, EnvironmentCreationError
 from isolate.backends.common import (
@@ -27,6 +28,18 @@ from isolate.logs import LogLevel
 _UV_RESOLVER_EXECUTABLE = os.environ.get("ISOLATE_UV_EXE", "uv")
 _UV_RESOLVER_HOME = os.getenv("ISOLATE_UV_HOME")
 _MAX_ERROR_MESSAGE_LENGTH = 4096
+
+
+class _LoggedStringIO(io.StringIO):
+    """StringIO that also forwards each line to a log function as it's written."""
+
+    def __init__(self, log_fn: Callable[[str], None]) -> None:
+        super().__init__()
+        self._log_fn = log_fn
+
+    def write(self, s: str) -> int:
+        self._log_fn(s)
+        return super().write(s)
 
 
 @dataclass
@@ -183,10 +196,15 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             if self.python_version:
                 args.append(f"--python={self._decide_python()}")
 
+            # Grab a reference before redirect_stderr replaces sys.stderr,
+            # otherwise printing to sys.stderr inside the callback would recurse.
+            original_stderr = sys.stderr
+            # Capture stderr so we can include it in error messages.
+            # It also logs lines in real time.
+            stderr_capture = _LoggedStringIO(lambda s: print(s, file=original_stderr))
             try:
-                # This is not an official API, so it can throw anything at us.
-                stderr_capture = io.StringIO()
                 with contextlib.redirect_stderr(stderr_capture):
+                    # This is not an official API, so it can throw anything at us.
                     virtualenv.cli_run(args)
             except (SystemExit, RuntimeError, OSError) as exc:
                 stderr_output = stderr_capture.getvalue().strip()

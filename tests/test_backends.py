@@ -476,6 +476,24 @@ class TestVirtualenv(GenericEnvironmentTests):
         with pytest.raises(EnvironmentCreationError, match="unrecognized arguments"):
             environment.create()
 
+    def test_cli_run_stderr_printed_on_success(self, tmp_path, monkeypatch, capsys):
+        """Stderr output from virtualenv.cli_run() should be printed even on success."""
+
+        class FakeVirtualenv:
+            @staticmethod
+            def cli_run(args):
+                Path(args[0]).mkdir(parents=True, exist_ok=True)
+                print("some warning message", file=sys.stderr)
+
+        monkeypatch.setattr(
+            "isolate.backends.virtualenv.optional_import", lambda _: FakeVirtualenv
+        )
+
+        environment = self.get_environment(tmp_path, {"requirements": []})
+        environment.create()
+
+        assert "some warning message" in capsys.readouterr().err
+
 
 class TestRequirements:
     def test_from_raw_single_layer(self):
