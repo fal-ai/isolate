@@ -458,9 +458,10 @@ class TestVirtualenv(GenericEnvironmentTests):
         pyjokes_version = self.get_example_version(environment, connection_key)
         assert pyjokes_version == "0.5.0"
 
-    def test_cli_run_stderr_captured_in_error(self, tmp_path, monkeypatch):
+    def test_cli_run_stderr_captured_in_error(self, tmp_path, monkeypatch, capsys):
         """When virtualenv.cli_run() prints to stderr before raising SystemExit,
-        the stderr content should appear in EnvironmentCreationError."""
+        the stderr content should appear in EnvironmentCreationError and
+        also be forwarded to the real stderr."""
 
         class FakeVirtualenv:
             @staticmethod
@@ -475,6 +476,30 @@ class TestVirtualenv(GenericEnvironmentTests):
         environment = self.get_environment(tmp_path, {"requirements": []})
         with pytest.raises(EnvironmentCreationError, match="unrecognized arguments"):
             environment.create()
+
+        captured = capsys.readouterr()
+        assert "unrecognized arguments" in captured.err
+
+    def test_cli_run_stderr_forwarded_on_success(self, tmp_path, monkeypatch, capsys):
+        """When virtualenv.cli_run() prints to stderr without raising,
+        the output should still appear on stderr."""
+
+        class FakeVirtualenv:
+            @staticmethod
+            def cli_run(args):
+                # Create the venv directory so completion_marker.touch() works
+                Path(args[0]).mkdir(parents=True, exist_ok=True)
+                print("some warning message", file=sys.stderr)
+
+        monkeypatch.setattr(
+            "isolate.backends.virtualenv.optional_import", lambda _: FakeVirtualenv
+        )
+
+        environment = self.get_environment(tmp_path, {"requirements": []})
+        environment.create()
+
+        captured = capsys.readouterr()
+        assert "some warning message" in captured.err
 
 
 class TestRequirements:

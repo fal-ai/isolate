@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import contextlib
 import io
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -27,6 +27,22 @@ from isolate.logs import LogLevel
 _UV_RESOLVER_EXECUTABLE = os.environ.get("ISOLATE_UV_EXE", "uv")
 _UV_RESOLVER_HOME = os.getenv("ISOLATE_UV_HOME")
 _MAX_ERROR_MESSAGE_LENGTH = 4096
+
+
+class _TeeStream(io.TextIOBase):
+    """A stream that writes to both the original stream and a capture buffer."""
+
+    def __init__(self, original: io.TextIOBase, capture: io.StringIO) -> None:
+        self._original = original
+        self._capture = capture
+
+    def write(self, s: str) -> int:
+        self._original.write(s)
+        return self._capture.write(s)
+
+    def flush(self) -> None:
+        self._original.flush()
+        self._capture.flush()
 
 
 @dataclass
@@ -186,8 +202,13 @@ class VirtualPythonEnvironment(BaseEnvironment[Path]):
             try:
                 # This is not an official API, so it can throw anything at us.
                 stderr_capture = io.StringIO()
-                with contextlib.redirect_stderr(stderr_capture):
+                tee = _TeeStream(sys.stderr, stderr_capture)
+                old_stderr = sys.stderr
+                sys.stderr = tee  # type: ignore[assignment]
+                try:
                     virtualenv.cli_run(args)
+                finally:
+                    sys.stderr = old_stderr
             except (SystemExit, RuntimeError, OSError) as exc:
                 stderr_output = stderr_capture.getvalue().strip()
                 ellipsed_stderr = (
