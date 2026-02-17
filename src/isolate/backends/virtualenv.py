@@ -27,7 +27,6 @@ from isolate.logs import LogLevel
 
 _UV_RESOLVER_EXECUTABLE = os.environ.get("ISOLATE_UV_EXE", "uv")
 _UV_RESOLVER_HOME = os.getenv("ISOLATE_UV_HOME")
-_MAX_ERROR_MESSAGE_LENGTH = 4096
 
 
 class _LoggedStringIO(io.StringIO):
