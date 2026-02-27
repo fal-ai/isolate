@@ -597,7 +597,6 @@ class ServerBoundInterceptor(grpc.ServerInterceptor):
         return self._servicer
 
 
-@dataclass
 class SingleTaskInterceptor(ServerBoundInterceptor):
     """Sets server to terminate after the first Submit/Run task."""
 
@@ -686,6 +685,25 @@ class SingleTaskInterceptor(ServerBoundInterceptor):
         return wrap_server_method_handler(wrapper, handler)
 
 
+class ControllerAuthInterceptor(ServerBoundInterceptor):
+    def __init__(self, controller_auth_key: str) -> None:
+        super().__init__()
+        self.controller_auth_key = controller_auth_key
+        self._terminator = grpc.unary_unary_rpc_method_handler(
+            lambda request, context: context.abort(
+                grpc.StatusCode.UNAUTHENTICATED, "Unauthorized"
+            )
+        )
+
+    def intercept_service(self, continuation, handler_call_details):
+        metadata = dict(handler_call_details.invocation_metadata)
+        controller_token = metadata.get("controller-token")
+        if controller_token != self.controller_auth_key:
+            return self._terminator
+
+        return continuation(handler_call_details)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = ArgumentParser()
     parser.add_argument("--host", default="0.0.0.0")
@@ -709,6 +727,15 @@ def main(argv: list[str] | None = None) -> None:
     interceptors: list[ServerBoundInterceptor] = []
     if options.single_use:
         interceptors.append(SingleTaskInterceptor())
+
+    if controller_auth_key := os.getenv("ISOLATE_CONTROLLER_AUTH_KEY"):
+        # Set an interceptor to only accept requests with the correct auth key
+        interceptors.append(ControllerAuthInterceptor(controller_auth_key))
+    else:
+        print(
+            "[WARN] ISOLATE_CONTROLLER_AUTH_KEY is not set, all requests will be "
+            "accepted without authentication."
+        )
 
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=options.num_workers),
