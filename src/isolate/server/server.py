@@ -728,7 +728,12 @@ def main(argv: list[str] | None = None) -> None:
     if options.single_use:
         interceptors.append(SingleTaskInterceptor())
 
-    if controller_auth_key := os.getenv("ISOLATE_CONTROLLER_AUTH_KEY"):
+    controller_auth_key = os.getenv("ISOLATE_CONTROLLER_AUTH_KEY")
+    if not controller_auth_key:
+        # DEPRECATED: remove this after rolling new version of controller
+        controller_auth_key = os.getenv("CONTROLLER_KEY")
+
+    if controller_auth_key:
         # Set an interceptor to only accept requests with the correct auth key
         interceptors.append(ControllerAuthInterceptor(controller_auth_key))
     else:
