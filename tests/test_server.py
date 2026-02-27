@@ -19,6 +19,7 @@ from isolate.server.health_server import HealthServicer
 from isolate.server.interface import from_grpc, to_serialized_object
 from isolate.server.server import (
     BridgeManager,
+    ControllerAuthInterceptor,
     IsolateServicer,
     ServerBoundInterceptor,
     SingleTaskInterceptor,
@@ -600,6 +601,46 @@ def test_health_check(health_stub: health.HealthStub) -> None:
         health.HealthCheckRequest(service="")
     )
     assert resp.status == health.HealthCheckResponse.SERVING
+
+
+@pytest.mark.parametrize(
+    "interceptors",
+    [[ControllerAuthInterceptor(controller_auth_key="test-secret")]],
+)
+def test_controller_auth_rejects_without_token(
+    stub: definitions.IsolateStub,
+) -> None:
+    with pytest.raises(grpc.RpcError) as exc_info:
+        stub.List(definitions.ListRequest())
+    assert exc_info.value.code() == grpc.StatusCode.UNAUTHENTICATED
+
+
+@pytest.mark.parametrize(
+    "interceptors",
+    [[ControllerAuthInterceptor(controller_auth_key="test-secret")]],
+)
+def test_controller_auth_rejects_wrong_token(
+    stub: definitions.IsolateStub,
+) -> None:
+    with pytest.raises(grpc.RpcError) as exc_info:
+        stub.List(
+            definitions.ListRequest(),
+            metadata=[("controller-token", "wrong")],
+        )
+    assert exc_info.value.code() == grpc.StatusCode.UNAUTHENTICATED
+
+
+@pytest.mark.parametrize(
+    "interceptors",
+    [[ControllerAuthInterceptor(controller_auth_key="test-secret")]],
+)
+def test_controller_auth_accepts_correct_token(
+    stub: health.HealthStub,
+) -> None:
+    stub.List(
+        definitions.ListRequest(),
+        metadata=[("controller-token", "test-secret")],
+    )
 
 
 def check_machine():
