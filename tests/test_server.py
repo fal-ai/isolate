@@ -635,7 +635,7 @@ def test_controller_auth_rejects_wrong_token(
     [[ControllerAuthInterceptor(controller_auth_key="test-secret")]],
 )
 def test_controller_auth_accepts_correct_token(
-    stub: health.HealthStub,
+    stub: definitions.IsolateStub,
 ) -> None:
     stub.List(
         definitions.ListRequest(),
