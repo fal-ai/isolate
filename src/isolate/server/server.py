@@ -696,7 +696,6 @@ class ControllerAuthInterceptor(ServerBoundInterceptor):
         )
 
     def intercept_service(self, continuation, handler_call_details):
-        print(f"Controller auth interceptor: {handler_call_details.invocation_metadata}")
         metadata = dict(handler_call_details.invocation_metadata)
         controller_token = metadata.get("controller-token")
         if controller_token != self.controller_auth_key:
