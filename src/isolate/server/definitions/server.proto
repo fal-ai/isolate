@@ -10,6 +10,9 @@ service Isolate {
 
     // Submit a function to be run without waiting for results.
     rpc Submit (SubmitRequest) returns (SubmitResponse) {}
+    
+    // Subscribe to a submitted function.
+    rpc Subscribe (SubscribeRequest) returns (stream PartialRunResult) {}
 
     // Set the metadata for a task.
     rpc SetMetadata (SetMetadataRequest) returns (SetMetadataResponse) {}
@@ -42,6 +45,10 @@ message SubmitRequest {
     BoundFunction function = 1;
     // Task metadata.
     TaskMetadata metadata = 2;
+}
+
+message SubscribeRequest {
+    string task_id = 1;
 }
 
 message TaskMetadata {
