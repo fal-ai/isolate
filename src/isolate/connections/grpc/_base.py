@@ -145,14 +145,28 @@ class LocalPythonGRPC(PythonExecutionBase[str], GRPCExecutionBase):
 
     def abort_agent(self) -> None:
         if self._process is not None:
+            return_code: int | None = None
             try:
-                print("Terminating the agent process...")
-                self._process.terminate()
-                self._process.wait(timeout=PROCESS_SHUTDOWN_TIMEOUT_SECONDS)
-                print("Agent process shutdown gracefully")
+                if self._process.poll() is not None:
+                    # already finished
+                    return_code = self._process.returncode
+                else:
+                    print("Terminating the agent process...")
+                    self._process.terminate()
+                    return_code = self._process.wait(
+                        timeout=PROCESS_SHUTDOWN_TIMEOUT_SECONDS
+                    )
+                    print("Agent process shutdown gracefully")
             except Exception as exc:
                 print(f"Failed to shutdown the agent process gracefully: {exc}")
                 self._process.kill()
+                return_code = self._process.wait()
+
+            self.log(
+                f"Isolate agent finished (exit code: {return_code})",
+                level=LogLevel.INFO,
+                source=LogSource.BRIDGE,
+            )
             self._process = None
 
     def is_alive(self) -> bool:
