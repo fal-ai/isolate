@@ -398,9 +398,10 @@ class IsolateServicer(definitions.IsolateServicer):
         context: ServicerContext,
     ) -> definitions.SetMetadataResponse:
         if request.task_id not in self.background_tasks:
-            raise GRPCException(
+            self.abort_with_msg(
                 f"Task {request.task_id} not found.",
-                StatusCode.NOT_FOUND,
+                context,
+                code=StatusCode.NOT_FOUND,
             )
 
         self.set_metadata(self.background_tasks[request.task_id], request.metadata)
@@ -423,7 +424,7 @@ class IsolateServicer(definitions.IsolateServicer):
             self.background_tasks["RUN"] = task
             yield from self._run_task(task)
         except GRPCException as exc:
-            return self.abort_with_msg(
+            self.abort_with_msg(
                 exc.message,
                 context,
                 code=exc.code,
@@ -696,6 +697,17 @@ class ControllerAuthInterceptor(ServerBoundInterceptor):
         )
 
     def intercept_service(self, continuation, handler_call_details):
+        skipped_auth_methods = [
+            # Already used in deployed apps without authentication, so open it up
+            # for now and then close it again after rolling new version for all users.
+            "/Isolate/SetMetadata",
+        ]
+
+        if handler_call_details.method in skipped_auth_methods:
+            print(f"[debug] Skipping authentication for {handler_call_details.method}")
+            # Let these requests pass through without authentication
+            return continuation(handler_call_details)
+
         metadata = dict(handler_call_details.invocation_metadata)
         controller_token = metadata.get("controller-token")
         if controller_token != self.controller_auth_key:
