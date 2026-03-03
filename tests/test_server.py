@@ -614,6 +614,16 @@ def test_controller_auth_rejects_without_token(
         stub.List(definitions.ListRequest())
     assert exc_info.value.code() == grpc.StatusCode.UNAUTHENTICATED
 
+    with pytest.raises(grpc.RpcError) as exc_info:
+        stub.SetMetadata(
+            definitions.SetMetadataRequest(
+                task_id="task-id",
+                metadata=definitions.TaskMetadata(logger_labels={"test": "test"}),
+            )
+        )
+    # there is no task, so it should return NOT_FOUND
+    assert exc_info.value.code() == grpc.StatusCode.NOT_FOUND
+
 
 @pytest.mark.parametrize(
     "interceptors",
